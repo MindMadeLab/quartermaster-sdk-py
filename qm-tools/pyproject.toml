@@ -26,6 +26,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
+llm = ["qm-providers>=0.1.0"]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",

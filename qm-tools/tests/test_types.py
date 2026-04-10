@@ -98,3 +98,89 @@ class TestToolResult:
         assert r.data == {}
         assert r.error == ""
         assert r.metadata == {}
+
+
+class TestToolParameterJsonSchema:
+    def test_basic_schema(self):
+        p = ToolParameter(name="query", description="Search query", type="string")
+        schema = p.to_json_schema()
+        assert schema == {"type": "string", "description": "Search query"}
+
+    def test_schema_with_default(self):
+        p = ToolParameter(name="limit", description="Max results", type="integer", default=10)
+        schema = p.to_json_schema()
+        assert schema["default"] == 10
+
+    def test_schema_with_options(self):
+        opts = [
+            ToolParameterOption(label="Add", value="add"),
+            ToolParameterOption(label="Sub", value="sub"),
+        ]
+        p = ToolParameter(name="op", description="Operation", type="string", options=opts)
+        schema = p.to_json_schema()
+        assert schema["enum"] == ["add", "sub"]
+
+
+class TestToolDescriptorBridge:
+    def _make_descriptor(self):
+        params = [
+            ToolParameter(name="query", description="Search query", type="string", required=True),
+            ToolParameter(name="limit", description="Max results", type="integer", default=10),
+        ]
+        return ToolDescriptor(
+            name="search",
+            short_description="Search the web",
+            long_description="Full web search tool",
+            version="1.0.0",
+            parameters=params,
+        )
+
+    def test_to_input_schema(self):
+        d = self._make_descriptor()
+        schema = d.to_input_schema()
+        assert schema["type"] == "object"
+        assert "query" in schema["properties"]
+        assert "limit" in schema["properties"]
+        assert schema["required"] == ["query"]
+        assert schema["properties"]["query"]["type"] == "string"
+        assert schema["properties"]["limit"]["default"] == 10
+
+    def test_to_input_schema_no_required(self):
+        d = ToolDescriptor(
+            name="noop",
+            short_description="No-op",
+            long_description="Does nothing",
+            version="0.1.0",
+        )
+        schema = d.to_input_schema()
+        assert "required" not in schema
+
+    def test_to_openai_tools(self):
+        d = self._make_descriptor()
+        result = d.to_openai_tools()
+        assert result["type"] == "function"
+        assert result["function"]["name"] == "search"
+        assert result["function"]["description"] == "Search the web"
+        assert result["function"]["parameters"]["type"] == "object"
+        assert "query" in result["function"]["parameters"]["properties"]
+
+    def test_to_anthropic_tools(self):
+        d = self._make_descriptor()
+        result = d.to_anthropic_tools()
+        assert result["name"] == "search"
+        assert result["description"] == "Search the web"
+        assert result["input_schema"]["type"] == "object"
+        assert "query" in result["input_schema"]["properties"]
+
+    def test_to_tool_definition_import_error(self):
+        """to_tool_definition raises ImportError when qm-providers is not installed."""
+        import sys
+        import unittest.mock
+
+        d = self._make_descriptor()
+        # Temporarily block qm_providers import
+        with unittest.mock.patch.dict(sys.modules, {"qm_providers": None, "qm_providers.types": None}):
+            import pytest
+
+            with pytest.raises(ImportError, match="qm-providers is required"):
+                d.to_tool_definition()

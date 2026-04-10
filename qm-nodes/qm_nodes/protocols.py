@@ -6,6 +6,9 @@ from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, runtime_checkable
 from uuid import UUID
 
+# Re-export LLMConfig from qm-providers (canonical definition)
+from qm_providers.config import LLMConfig
+
 
 @runtime_checkable
 class ThoughtHandle(Protocol):
@@ -158,23 +161,6 @@ class ExpressionResult:
     result: Any = None
     error: Optional[str] = None
     success: bool = True
-
-
-@dataclass
-class LLMConfig:
-    """Configuration for LLM calls."""
-
-    model: str = "gpt-4o-mini"
-    provider: str = "openai"
-    vision: bool = False
-    stream: bool = True
-    system_message: Optional[str] = "You are helpful agent, try being precise and helpful."
-    temperature: Optional[float] = 0.5
-    max_input_tokens: Optional[int] = 16385
-    max_output_tokens: Optional[int] = 2048
-    max_messages: Optional[int] = None
-    thinking_enabled: bool = False
-    thinking_budget: Optional[int] = None
 
 
 @dataclass

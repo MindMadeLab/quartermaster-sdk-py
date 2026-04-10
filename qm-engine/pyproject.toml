@@ -24,7 +24,9 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Application Frameworks",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-dependencies = []
+dependencies = [
+    "qm-graph>=0.1.0",
+]
 
 [project.optional-dependencies]
 sqlite = ["aiosqlite>=0.19"]

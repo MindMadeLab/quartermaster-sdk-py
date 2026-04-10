@@ -33,7 +33,7 @@ class TestValidateMemoryID:
 
 class TestPrepareMessages:
     def test_adds_system_message(self):
-        config = LLMConfig(system_message="You are helpful.")
+        config = LLMConfig(model="gpt-4o-mini", provider="openai", system_message="You are helpful.")
         handler = PrepareMessages(client=None, llm_config=config)
         result = handler.handle({"messages": []})
 
@@ -42,7 +42,7 @@ class TestPrepareMessages:
         assert result["messages"][0]["content"] == "You are helpful."
 
     def test_adds_additional_message(self):
-        config = LLMConfig(system_message=None)
+        config = LLMConfig(model="gpt-4o-mini", provider="openai", system_message=None)
         handler = PrepareMessages(
             client=None,
             llm_config=config,
@@ -56,7 +56,7 @@ class TestPrepareMessages:
         assert result["messages"][0]["content"] == "Choose a path"
 
     def test_preserves_existing_messages(self):
-        config = LLMConfig(system_message=None)
+        config = LLMConfig(model="gpt-4o-mini", provider="openai", system_message=None)
         handler = PrepareMessages(client=None, llm_config=config)
         existing = [{"role": "user", "content": "Hello"}]
         result = handler.handle({"messages": existing})
@@ -65,7 +65,7 @@ class TestPrepareMessages:
         assert result["messages"][0]["content"] == "Hello"
 
     def test_system_message_added_first(self):
-        config = LLMConfig(system_message="System prompt")
+        config = LLMConfig(model="gpt-4o-mini", provider="openai", system_message="System prompt")
         handler = PrepareMessages(client=None, llm_config=config)
         result = handler.handle({"messages": [{"role": "user", "content": "Hi"}]})
 
@@ -73,7 +73,7 @@ class TestPrepareMessages:
         assert result["messages"][1]["role"] == "user"
 
     def test_no_system_message_when_none(self):
-        config = LLMConfig(system_message=None)
+        config = LLMConfig(model="gpt-4o-mini", provider="openai", system_message=None)
         handler = PrepareMessages(client=None, llm_config=config)
         result = handler.handle({"messages": []})
         assert len(result["messages"]) == 0
@@ -81,7 +81,7 @@ class TestPrepareMessages:
 
 class TestContextManager:
     def test_no_truncation_when_under_limit(self):
-        config = LLMConfig()
+        config = LLMConfig(model="gpt-4o-mini", provider="openai")
         ctx_config = ContextManagerConfig(max_messages=10)
         handler = ContextManager(client=None, llm_config=config, context_config=ctx_config)
 
@@ -90,7 +90,7 @@ class TestContextManager:
         assert len(result["messages"]) == 5
 
     def test_truncates_to_max_messages(self):
-        config = LLMConfig()
+        config = LLMConfig(model="gpt-4o-mini", provider="openai")
         ctx_config = ContextManagerConfig(max_messages=3)
         handler = ContextManager(client=None, llm_config=config, context_config=ctx_config)
 
@@ -99,7 +99,7 @@ class TestContextManager:
         assert len(result["messages"]) == 3
 
     def test_preserves_system_message_during_truncation(self):
-        config = LLMConfig()
+        config = LLMConfig(model="gpt-4o-mini", provider="openai")
         ctx_config = ContextManagerConfig(max_messages=2)
         handler = ContextManager(client=None, llm_config=config, context_config=ctx_config)
 
@@ -114,7 +114,7 @@ class TestContextManager:
         assert len(result["messages"]) == 3  # system + 2 most recent
 
     def test_no_truncation_when_max_messages_zero(self):
-        config = LLMConfig()
+        config = LLMConfig(model="gpt-4o-mini", provider="openai")
         ctx_config = ContextManagerConfig(max_messages=0)
         handler = ContextManager(client=None, llm_config=config, context_config=ctx_config)
 

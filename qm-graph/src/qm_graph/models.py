@@ -44,6 +44,11 @@ class GraphNode(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     position: NodePosition | None = None
 
+    # Error handling configuration
+    max_retries: int = 3
+    retry_delay: float = 1.0
+    timeout: float | None = None
+
 
 class GraphEdge(BaseModel):
     """A directed connection between two nodes."""
@@ -69,6 +74,35 @@ class AgentVersion(BaseModel):
     is_published: bool = False
     forked_from: UUID | None = None
     created_at: datetime = Field(default_factory=_utcnow)
+
+    def get_node(self, node_id: UUID) -> GraphNode | None:
+        """Find a node by ID."""
+        for node in self.nodes:
+            if node.id == node_id:
+                return node
+        return None
+
+    def get_start_node(self) -> GraphNode | None:
+        """Get the start node of the graph."""
+        return self.get_node(self.start_node_id)
+
+    def get_successors(self, node_id: UUID) -> list[GraphNode]:
+        """Get all successor nodes of a given node."""
+        successor_ids = [e.target_id for e in self.edges if e.source_id == node_id]
+        return [n for n in self.nodes if n.id in successor_ids]
+
+    def get_predecessors(self, node_id: UUID) -> list[GraphNode]:
+        """Get all predecessor nodes of a given node."""
+        predecessor_ids = [e.source_id for e in self.edges if e.target_id == node_id]
+        return [n for n in self.nodes if n.id in predecessor_ids]
+
+    def get_edges_from(self, node_id: UUID) -> list[GraphEdge]:
+        """Get all edges originating from a node."""
+        return [e for e in self.edges if e.source_id == node_id]
+
+    def get_edges_to(self, node_id: UUID) -> list[GraphEdge]:
+        """Get all edges targeting a node."""
+        return [e for e in self.edges if e.target_id == node_id]
 
 
 class Agent(BaseModel):

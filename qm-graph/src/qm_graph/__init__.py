@@ -3,6 +3,7 @@
 from qm_graph.builder import GraphBuilder
 from qm_graph.enums import (
     ErrorStrategy,
+    ExceptionResolution,
     MessageType,
     NodeType,
     ThoughtType,
@@ -47,6 +48,7 @@ __version__ = "0.1.0"
 __all__ = [
     # Enums
     "ErrorStrategy",
+    "ExceptionResolution",
     "MessageType",
     "NodeType",
     "ThoughtType",

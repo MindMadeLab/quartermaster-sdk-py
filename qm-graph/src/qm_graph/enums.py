@@ -6,27 +6,47 @@ from enum import Enum
 class NodeType(str, Enum):
     """All available node types in the agent graph."""
 
-    INSTRUCTION = "Instruction1"
-    DECISION = "Decision1"
-    REASONING = "Reasoning1"
     AGENT = "Agent1"
-    START = "Start1"
-    END = "End1"
-    MERGE = "Merge1"
-    IF = "If1"
-    SWITCH = "Switch1"
+    BLANK = "Blank1"
     BREAK = "Break1"
+    CODE = "Code1"
+    COMMENT = "Comment1"
+    DECISION = "Decision1"
+    END = "End1"
+    FLOW_MEMORY = "FlowMemory1"
+    IF = "If1"
+    INSTRUCTION = "Instruction1"
+    INSTRUCTION_IMAGE_VISION = "InstructionImageVision1"
+    INSTRUCTION_PARAMETERS = "InstructionParameters1"
+    INSTRUCTION_PROGRAM = "InstructionProgram1"
+    INSTRUCTION_PROGRAM_PARAMETERS = "InstructionProgramParameters1"
+    MERGE = "Merge1"
+    PROGRAM_RUNNER = "ProgramRunner1"
+    READ_MEMORY = "ReadMemory1"
+    REASONING = "Reasoning1"
+    START = "Start1"
+    STATIC = "Static1"
+    STATIC_DECISION = "StaticDecision1"
+    STATIC_MERGE = "StaticMerge1"
+    STATIC_PROGRAM_PARAMETERS = "StaticProgramParameters1"
+    SUB_ASSISTANT = "SubAssistant1"
+    SUMMARIZE = "Summarize1"
+    SWITCH = "Switch1"
+    TEXT = "Text1"
+    TEXT_TO_VARIABLE = "TextToVariable1"
+    UNSELECT_ENVIRONMENT = "UnselectEnvironment1"
+    UPDATE_MEMORY = "UpdateMemory1"
+    USE_ENVIRONMENT = "UseEnvironment1"
+    USE_FILE = "UseFile1"
     USER = "User1"
     USER_DECISION = "UserDecision1"
     USER_FORM = "UserForm1"
-    STATIC = "Static1"
+    USER_MEMORY = "UserMemory1"
+    USER_PROGRAM_FORM = "UserProgramForm1"
     VAR = "Var1"
-    TEXT = "Text1"
-    CODE = "Code1"
-    PROGRAM_RUNNER = "ProgramRunner1"
-    FLOW_MEMORY = "FlowMemory1"
-    READ_MEMORY = "ReadMemory1"
+    VIEW_METADATA = "ViewMetadata1"
     WRITE_MEMORY = "WriteMemory1"
+    # Graph-schema-only types (not yet implemented as nodes)
     TOOL = "Tool1"
     API_CALL = "ApiCall1"
     WEBHOOK = "Webhook1"
@@ -44,7 +64,6 @@ class NodeType(str, Enum):
     LOG = "Log1"
     NOTIFICATION = "Notification1"
     CUSTOM = "Custom1"
-    COMMENT = "Comment1"
 
 
 class TraverseIn(str, Enum):
@@ -69,10 +88,16 @@ class ThoughtType(str, Enum):
     SKIP = "SkipThought1"
     NEW = "NewThought1"
     NEW_HIDDEN = "NewHiddenThought1"
+    INHERIT = "InheritThought1"
+    CONTINUE = "ContinueThought1"
     NEW_COLLAPSED = "NewCollapsedThought1"
     EDIT_OR_NEW = "EditSameOrAddNew1"
     EDIT_SAME = "EditSame1"
     APPEND = "AppendThought1"
+    NEW_HIDDEN_AND_NORMAL = "NewHiddenAndNormalThought1"
+    HIDDEN_USER = "HiddenUserThought1"
+    HIDDEN_AGENT = "HiddenAgentThought1"
+    USE_PREVIOUS = "UsePreviousThought1"
 
 
 class MessageType(str, Enum):
@@ -83,6 +108,7 @@ class MessageType(str, Enum):
     VARIABLE = "Variable"
     ASSISTANT = "Assistant"
     SYSTEM = "System"
+    TOOL = "Tool"
 
 
 class ErrorStrategy(str, Enum):
@@ -92,3 +118,12 @@ class ErrorStrategy(str, Enum):
     RETRY = "Retry"
     SKIP = "Skip"
     CUSTOM = "Custom"
+    CONTINUE = "Continue"
+
+
+class ExceptionResolution(str, Enum):
+    """Exception resolution strategies."""
+
+    RETRY = "Retry"
+    BREAK = "Break"
+    CONTINUE = "Continue"
