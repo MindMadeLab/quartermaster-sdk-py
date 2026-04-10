@@ -65,11 +65,11 @@ from qm_mcp_client import McpClient
 # Connect to an MCP server
 with McpClient("http://localhost:8000/mcp") as client:
     # List available tools
-    tools = client.list_tools()
+    tools = client.list_tools_sync()
     print(f"Available tools: {[t.name for t in tools]}")
     
     # Call a tool
-    result = client.call_tool("weather", {"location": "San Francisco"})
+    result = client.call_tool_sync("weather", {"location": "San Francisco"})
     print(f"Result: {result}")
 ```
 

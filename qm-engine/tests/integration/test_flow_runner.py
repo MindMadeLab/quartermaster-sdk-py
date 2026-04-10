@@ -2,6 +2,7 @@
 
 from uuid import uuid4
 
+from qm_engine.context.execution_context import ExecutionContext
 from qm_engine.events import (
     FlowError,
     FlowEvent,
@@ -19,11 +20,15 @@ from qm_engine.types import (
     TraverseOut,
 )
 from tests.conftest import (
+    CountingExecutor,
     DecisionExecutor,
     EchoExecutor,
     FailingExecutor,
+    IfCounterExecutor,
     MemoryReadExecutor,
     MemoryWriteExecutor,
+    SlowExecutor,
+    SubAgentExecutor,
     UpperCaseExecutor,
     UserWaitExecutor,
     make_edge,
@@ -457,3 +462,220 @@ class TestNoExecutorRegistered:
             "executor" in error_events[0].error.lower()
             or "no executor" in error_events[0].error.lower()
         )
+
+
+class TestLoopFlow:
+    """Start → Counter (Instruction) → If (counter < 3) → loop back or End."""
+
+    def test_loop_executes_correct_iterations(self):
+        """The If node increments a counter and loops back until counter >= 3."""
+        start = make_node(NodeType.START, name="Start")
+        counter = make_node(
+            NodeType.INSTRUCTION, name="Counter", traverse_in=TraverseIn.AWAIT_FIRST
+        )
+        if_node = make_node(
+            NodeType.IF,
+            name="Check",
+            traverse_out=TraverseOut.SPAWN_PICKED,
+        )
+        end = make_node(NodeType.END, name="End", traverse_out=TraverseOut.SPAWN_NONE)
+
+        graph = make_graph(
+            [start, counter, if_node, end],
+            [
+                make_edge(start, counter),
+                make_edge(counter, if_node),
+                make_edge(if_node, counter, label="Counter"),  # loop-back edge
+                make_edge(if_node, end, label="End"),  # exit edge
+            ],
+            start,
+        )
+
+        registry = SimpleNodeRegistry()
+        counting_exec = CountingExecutor()
+        registry.register(NodeType.INSTRUCTION.value, counting_exec)
+        registry.register(
+            NodeType.IF.value,
+            IfCounterExecutor(
+                counter_key="__counter__",
+                threshold=3,
+                loop_target="Counter",
+                exit_target="End",
+            ),
+        )
+
+        events: list[FlowEvent] = []
+        runner = FlowRunner(graph=graph, node_registry=registry, on_event=events.append)
+        result = runner.run("loop test")
+
+        assert result.success
+        # The counter executor should have been called 3 times
+        # (iterations 1, 2, 3 — at iteration 3 the If exits)
+        assert counting_exec.call_count == 3
+
+        # Verify we saw NodeStarted events for the Counter node multiple times
+        counter_starts = [
+            e
+            for e in events
+            if isinstance(e, NodeStarted) and e.node_name == "Counter"
+        ]
+        assert len(counter_starts) == 3
+
+    def test_loop_with_threshold_1_no_loop(self):
+        """When threshold=1, the first check exits immediately — no looping."""
+        start = make_node(NodeType.START, name="Start")
+        counter = make_node(
+            NodeType.INSTRUCTION, name="Counter", traverse_in=TraverseIn.AWAIT_FIRST
+        )
+        if_node = make_node(
+            NodeType.IF,
+            name="Check",
+            traverse_out=TraverseOut.SPAWN_PICKED,
+        )
+        end = make_node(NodeType.END, name="End", traverse_out=TraverseOut.SPAWN_NONE)
+
+        graph = make_graph(
+            [start, counter, if_node, end],
+            [
+                make_edge(start, counter),
+                make_edge(counter, if_node),
+                make_edge(if_node, counter, label="Counter"),
+                make_edge(if_node, end, label="End"),
+            ],
+            start,
+        )
+
+        registry = SimpleNodeRegistry()
+        counting_exec = CountingExecutor()
+        registry.register(NodeType.INSTRUCTION.value, counting_exec)
+        registry.register(
+            NodeType.IF.value,
+            IfCounterExecutor(threshold=1, loop_target="Counter", exit_target="End"),
+        )
+
+        runner = FlowRunner(graph=graph, node_registry=registry)
+        result = runner.run("no loop")
+
+        assert result.success
+        # Counter runs once, If checks (count=1 >= threshold=1), exits
+        assert counting_exec.call_count == 1
+
+
+class TestSubAgentFlow:
+    """Start → Agent (nested flow) → End."""
+
+    def test_sub_agent_runs_nested_flow(self):
+        """The Agent node runs a sub-flow and returns its output."""
+        start = make_node(NodeType.START, name="Start")
+        agent = make_node(NodeType.AGENT, name="SubAgent")
+        end = make_node(NodeType.END, name="End", traverse_out=TraverseOut.SPAWN_NONE)
+
+        graph = make_graph(
+            [start, agent, end],
+            [make_edge(start, agent), make_edge(agent, end)],
+            start,
+        )
+
+        # Build a sub-flow: Start → Instruction(uppercase) → End
+        sub_start = make_node(NodeType.START, name="SubStart")
+        sub_inst = make_node(NodeType.INSTRUCTION, name="SubWork")
+        sub_end = make_node(NodeType.END, name="SubEnd", traverse_out=TraverseOut.SPAWN_NONE)
+        sub_graph = make_graph(
+            [sub_start, sub_inst, sub_end],
+            [make_edge(sub_start, sub_inst), make_edge(sub_inst, sub_end)],
+            sub_start,
+        )
+
+        def run_sub_flow(context: ExecutionContext) -> str:
+            """Run the inner flow and return its output."""
+            sub_registry = SimpleNodeRegistry()
+            sub_registry.register(NodeType.INSTRUCTION.value, EchoExecutor())
+            sub_runner = FlowRunner(graph=sub_graph, node_registry=sub_registry)
+            user_input = context.messages[-1].content if context.messages else "sub-input"
+            sub_result = sub_runner.run(user_input)
+            return sub_result.final_output
+
+        registry = SimpleNodeRegistry()
+        registry.register(NodeType.AGENT.value, SubAgentExecutor(sub_runner_factory=run_sub_flow))
+
+        runner = FlowRunner(graph=graph, node_registry=registry)
+        result = runner.run("nested hello")
+
+        assert result.success
+        assert "nested hello" in result.final_output
+
+    def test_sub_agent_default_output(self):
+        """When no sub-runner factory is provided, uses default output."""
+        start = make_node(NodeType.START, name="Start")
+        agent = make_node(NodeType.AGENT, name="SubAgent")
+        end = make_node(NodeType.END, name="End", traverse_out=TraverseOut.SPAWN_NONE)
+
+        graph = make_graph(
+            [start, agent, end],
+            [make_edge(start, agent), make_edge(agent, end)],
+            start,
+        )
+
+        registry = SimpleNodeRegistry()
+        registry.register(NodeType.AGENT.value, SubAgentExecutor())
+
+        runner = FlowRunner(graph=graph, node_registry=registry)
+        result = runner.run("test")
+
+        assert result.success
+        assert "sub-agent-default-output" in result.final_output
+
+
+class TestPerNodeTimeout:
+    """Test that per-node timeout enforcement works."""
+
+    def test_timeout_triggers_error(self):
+        """A node with a short timeout should fail when execution is slow."""
+        start = make_node(NodeType.START, name="Start")
+        slow = make_node(
+            NodeType.INSTRUCTION,
+            name="Slow",
+            error_handling=ErrorStrategy.STOP,
+        )
+        # Set a very short timeout
+        slow.timeout = 0.05  # 50ms
+        end = make_node(NodeType.END, name="End", traverse_out=TraverseOut.SPAWN_NONE)
+
+        graph = make_graph(
+            [start, slow, end],
+            [make_edge(start, slow), make_edge(slow, end)],
+            start,
+        )
+
+        registry = SimpleNodeRegistry()
+        # SlowExecutor sleeps for 0.5s, which exceeds the 50ms timeout
+        registry.register(NodeType.INSTRUCTION.value, SlowExecutor(delay=0.5))
+
+        events: list[FlowEvent] = []
+        runner = FlowRunner(graph=graph, node_registry=registry, on_event=events.append)
+        result = runner.run("timeout test")
+
+        # The flow should have failed due to timeout
+        error_events = [e for e in events if isinstance(e, FlowError)]
+        assert len(error_events) >= 1
+
+    def test_no_timeout_allows_completion(self):
+        """A node without a timeout should complete normally."""
+        start = make_node(NodeType.START, name="Start")
+        slow = make_node(NodeType.INSTRUCTION, name="Slow")
+        # No timeout set (defaults to None)
+        end = make_node(NodeType.END, name="End", traverse_out=TraverseOut.SPAWN_NONE)
+
+        graph = make_graph(
+            [start, slow, end],
+            [make_edge(start, slow), make_edge(slow, end)],
+            start,
+        )
+
+        registry = SimpleNodeRegistry()
+        registry.register(NodeType.INSTRUCTION.value, SlowExecutor(delay=0.05))
+
+        runner = FlowRunner(graph=graph, node_registry=registry)
+        result = runner.run("no timeout")
+
+        assert result.success

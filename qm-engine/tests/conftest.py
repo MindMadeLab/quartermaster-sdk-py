@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -126,6 +128,63 @@ class UserWaitExecutor:
             wait_for_user=True,
             user_prompt="Please provide input:",
             user_options=["Option A", "Option B"],
+        )
+
+
+class IfCounterExecutor:
+    """Simulates an If node that checks a counter in flow memory.
+
+    Each call increments the counter. If the counter is below *threshold*,
+    it picks *loop_target* (the node name to loop back to). Otherwise it
+    picks *exit_target* (usually the End node).
+    """
+
+    def __init__(
+        self,
+        counter_key: str = "__counter__",
+        threshold: int = 3,
+        loop_target: str = "Counter",
+        exit_target: str = "End",
+    ) -> None:
+        self._counter_key = counter_key
+        self._threshold = threshold
+        self._loop_target = loop_target
+        self._exit_target = exit_target
+
+    async def execute(self, context: ExecutionContext) -> NodeResult:
+        count = int(context.memory.get(self._counter_key, 0))
+        count += 1
+        if count < self._threshold:
+            picked = self._loop_target
+        else:
+            picked = self._exit_target
+        return NodeResult(
+            success=True,
+            data={"memory_updates": {self._counter_key: str(count)}},
+            output_text=f"counter={count}, picked={picked}",
+            picked_node=picked,
+        )
+
+
+class SubAgentExecutor:
+    """Simulates an Agent node that runs a nested sub-flow.
+
+    Accepts a *sub_runner_factory* callable that builds and runs the
+    inner flow, returning the sub-flow's final output.
+    """
+
+    def __init__(self, sub_runner_factory: Callable[..., str] | None = None) -> None:
+        self._factory = sub_runner_factory
+
+    async def execute(self, context: ExecutionContext) -> NodeResult:
+        if self._factory:
+            sub_output = self._factory(context)
+        else:
+            sub_output = "sub-agent-default-output"
+        return NodeResult(
+            success=True,
+            data={"sub_agent_output": sub_output},
+            output_text=sub_output,
         )
 
 

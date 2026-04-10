@@ -66,7 +66,7 @@ The hardest extraction. The flow engine is deeply coupled to Django ORM (FlowNod
 - [x] `TaskDispatcher` protocol
 - [x] `SyncDispatcher` — execute immediately (single-threaded)
 - [x] `ThreadDispatcher` — use threading for parallel branches
-- [ ] `AsyncDispatcher` — use asyncio for parallel branches
+- [x] `AsyncDispatcher` — use asyncio for parallel branches
 - [ ] Platform can plug in `CeleryDispatcher` (proprietary)
 
 ## Phase 3: Flow Runner ✅
@@ -86,7 +86,7 @@ The hardest extraction. The flow engine is deeply coupled to Django ORM (FlowNod
 - [x] `Retry` — retry node execution (configurable max retries)
 - [x] `Skip` — skip this node, continue to successors
 - [ ] `Custom` — invoke error handling sub-flow
-- [ ] Timeout enforcement per node
+- [x] Timeout enforcement per node
 
 ## Phase 4: Memory System ✅
 
@@ -134,8 +134,8 @@ The hardest extraction. The flow engine is deeply coupled to Django ORM (FlowNod
 - [x] User input: Start → Instruction → User (waits) → resume → End
 - [x] Event streaming verification
 - [x] Flow stop
-- [ ] Loop: Start → Instruction → If (condition) → loop back or End
-- [ ] Sub-agent: Start → Agent (calls sub-flow) → End
+- [x] Loop: Start → Instruction → If (condition) → loop back or End
+- [x] Sub-agent: Start → Agent (calls sub-flow) → End
 
 ### 6.3 Benchmark Tests
 - [x] 10/50/100-node linear chain execution time
@@ -196,7 +196,7 @@ For open-source, we implemented:
 
 ## Current Stats
 
-- **126 tests**, all passing
+- **132 tests**, all passing
 - **90% code coverage**
 - **Zero lint errors** (ruff)
 - **Zero type errors** (mypy strict)

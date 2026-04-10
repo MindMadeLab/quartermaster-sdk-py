@@ -32,14 +32,17 @@ typecheck: ## Run type checker
 # Testing
 # =============================================================================
 
-test: ## Run all tests
+test: ## Run all tests (excluding integration by default)
+	pytest tests/ -v -m "not integration"
+
+test-all: ## Run all tests including integration (requires Docker)
 	pytest tests/ -v
 
 test-unit: ## Run unit tests only
 	pytest tests/unit/ -v
 
 test-integration: ## Run integration tests (requires Docker)
-	pytest tests/integration/ -v
+	pytest tests/ -v -m integration
 
 test-cov: ## Run tests with coverage
 	pytest tests/ -v --cov=qm_code_runner --cov-report=term-missing --cov-report=html

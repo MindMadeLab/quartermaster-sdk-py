@@ -394,8 +394,18 @@ class FlowRunner:
     def _run_executor(
         self, executor: NodeExecutor, context: ExecutionContext, node: GraphNode
     ) -> NodeResult:
-        """Run a node executor, handling sync/async transparently."""
+        """Run a node executor, handling sync/async transparently.
+
+        If the node has a ``timeout`` set (in seconds), execution is wrapped
+        in ``asyncio.wait_for`` so that a ``TimeoutError`` is raised when the
+        node exceeds its time budget.
+        """
         coro = executor.execute(context)
+
+        # Wrap with timeout if configured
+        if node.timeout is not None and node.timeout > 0:
+            coro = asyncio.wait_for(coro, timeout=node.timeout)
+
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -523,13 +533,29 @@ class FlowRunner:
         return result
 
     def _is_loop_target(self, flow_id: UUID, node_id: UUID) -> bool:
-        """Check if a node is being re-executed as part of a loop (SpawnStart)."""
-        # Find if any node with SpawnStart traverse_out points to this node
+        """Check if a node is being re-executed as part of a loop.
+
+        Returns True when *any* already-finished predecessor dispatches back
+        to this node — covers both ``SPAWN_START`` (explicit loop-to-start)
+        and conditional loops where ``SPAWN_PICKED`` selects a back-edge.
+        """
+        executions = self.store.get_all_node_executions(flow_id)
+
+        # SpawnStart → start node
         for node in self.graph.nodes:
             if node.traverse_out == TraverseOut.SPAWN_START:
                 start = self.graph.get_start_node()
                 if start and start.id == node_id:
                     return True
+
+        # Any predecessor that has already completed and has an edge to this
+        # node is a back-edge (the node finished, but it dispatched us again).
+        predecessors = self.graph.get_predecessors(node_id)
+        for pred in predecessors:
+            pred_exec = executions.get(pred.id)
+            if pred_exec and pred_exec.status.is_terminal:
+                return True
+
         return False
 
     def _emit(self, event: FlowEvent) -> None:

@@ -31,10 +31,13 @@ try:
 except Exception:
     pass
 
-pytestmark = pytest.mark.skipif(
-    not _docker_available,
-    reason="Docker is not available",
-)
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not _docker_available,
+        reason="Docker is not available",
+    ),
+]
 
 
 @pytest.fixture(scope="session", autouse=True)

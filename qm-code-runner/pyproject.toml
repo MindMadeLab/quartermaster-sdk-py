@@ -68,3 +68,6 @@ exclude = ["src/qm_code_runner/runtime/"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "integration: marks tests as integration tests requiring Docker (deselect with '-m \"not integration\"')",
+]
