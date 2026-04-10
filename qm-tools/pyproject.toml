@@ -8,9 +8,9 @@ version = "0.1.0"
 description = "Tool abstraction framework and chain-of-responsibility handler pattern for AI agent orchestration"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
 authors = [
-    { name = "MindMade", email = "dev@mindmade.ai" }
+    { name = "MindMade", email = "info@mindmade.io" },
 ]
 keywords = ["ai-agents", "tools", "chain", "handler", "orchestration"]
 classifiers = [
@@ -37,10 +37,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/mindmade-ai/quartermaster-opensource"
-Documentation = "https://github.com/mindmade-ai/quartermaster-opensource/tree/main/packages/qm-tools"
-Repository = "https://github.com/mindmade-ai/quartermaster-opensource.git"
-Issues = "https://github.com/mindmade-ai/quartermaster-opensource/issues"
+Homepage = "https://github.com/quartermaster-ai/quartermaster"
+Repository = "https://github.com/quartermaster-ai/quartermaster"
+Issues = "https://github.com/quartermaster-ai/quartermaster/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/qm_tools"]

@@ -7,7 +7,9 @@ Unified multi-LLM provider abstraction for Python. Write once, run against OpenA
 `qm-providers` provides a single, consistent interface to interact with multiple Large Language Models. Instead of learning each provider's SDK, you define your request once and swap providers without code changes.
 
 ```python
-from qm_providers import LLMConfig, OpenAIProvider
+import asyncio
+from qm_providers import LLMConfig
+from qm_providers.providers import OpenAIProvider
 
 # Configure once
 config = LLMConfig(
@@ -18,12 +20,15 @@ config = LLMConfig(
 )
 
 # Use any provider with the same code
-provider = OpenAIProvider(api_key="sk-...")
-response = provider.generate_text_response(
-    prompt="What is AI?",
-    config=config,
-)
-print(response.content)
+async def main():
+    provider = OpenAIProvider(api_key="sk-...")
+    response = await provider.generate_text_response(
+        prompt="What is AI?",
+        config=config,
+    )
+    print(response.content)
+
+asyncio.run(main())
 ```
 
 ## Installation
@@ -55,7 +60,7 @@ pip install qm-providers[all]
 | Anthropic | ✓ | `anthropic>=0.30` | claude-3-opus, claude-3-sonnet, claude-3-haiku |
 | Google | ✓ | `google-generativeai>=0.5` | gemini-pro, gemini-1.5-pro |
 | Groq | ✓ | `groq>=0.5` | mixtral-8x7b, llama-2-70b |
-| xAI | Planned | `xai>=0.1` | grok-1 (when available) |
+| xAI | ✓ | `xai>=0.1` | grok-1 |
 | Custom | ✓ | - | Implement `AbstractLLMProvider` |
 
 ## Features
@@ -74,7 +79,9 @@ pip install qm-providers[all]
 ### Text Generation
 
 ```python
-from qm_providers import LLMConfig, AnthropicProvider
+import asyncio
+from qm_providers import LLMConfig
+from qm_providers.providers import AnthropicProvider
 
 config = LLMConfig(
     model="claude-3-sonnet-20240229",
@@ -82,12 +89,15 @@ config = LLMConfig(
     temperature=0.5,
 )
 
-provider = AnthropicProvider(api_key="sk-ant-...")
-response = provider.generate_text_response(
-    prompt="Explain machine learning",
-    config=config,
-)
-print(response.content)
+async def main():
+    provider = AnthropicProvider(api_key="sk-ant-...")
+    response = await provider.generate_text_response(
+        prompt="Explain machine learning",
+        config=config,
+    )
+    print(response.content)
+
+asyncio.run(main())
 ```
 
 ### Tool Calling
@@ -111,7 +121,7 @@ tools = [
 ]
 
 # Generate with tool use
-response = provider.generate_tool_parameters(
+response = await provider.generate_tool_parameters(
     prompt="What's the weather in San Francisco?",
     tools=tools,
     config=config,
@@ -126,7 +136,7 @@ for tool_call in response.tool_calls:
 ```python
 config = LLMConfig(model="gpt-4", provider="openai", stream=True)
 
-async for token_response in provider.generate_text_response(
+async for token_response in await provider.generate_text_response(
     prompt="Write a short story",
     config=config,
 ):
@@ -143,13 +153,13 @@ class Article(TypedDict):
     summary: str
     topics: list[str]
 
-response = provider.generate_structured_response(
+response = await provider.generate_structured_response(
     prompt="Analyze this article...",
     response_schema=Article,
     config=config,
 )
 
-print(response.structured_output.title)
+print(response.structured_output["title"])
 ```
 
 ## Configuration
@@ -254,7 +264,7 @@ async for chunk in await provider.generate_text_response(prompt, config):
 Estimate tokens and cost before making requests:
 
 ```python
-from qm_providers import OpenAIProvider
+from qm_providers.providers import OpenAIProvider
 
 provider = OpenAIProvider(api_key="sk-...")
 
@@ -280,7 +290,7 @@ from qm_providers.exceptions import (
 )
 
 try:
-    response = provider.generate_text_response(prompt, config)
+    response = await provider.generate_text_response(prompt, config)
 except AuthenticationError:
     print("Check API keys")
 except RateLimitError:

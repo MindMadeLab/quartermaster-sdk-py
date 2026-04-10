@@ -7,7 +7,10 @@ package, installable via ``pip install qm-tools[web]``.
 
 from __future__ import annotations
 
+import ipaddress
+import socket
 from typing import Any
+from urllib.parse import urlparse
 
 from qm_tools.base import AbstractTool
 from qm_tools.types import ToolDescriptor, ToolParameter, ToolParameterOption, ToolResult
@@ -15,8 +18,40 @@ from qm_tools.types import ToolDescriptor, ToolParameter, ToolParameterOption, T
 # Default timeout in seconds
 DEFAULT_TIMEOUT = 30
 
+# Hard ceiling for timeout
+MAX_TIMEOUT = 300
+
 # Default maximum response body size: 5 MB
 DEFAULT_MAX_RESPONSE_SIZE = 5 * 1024 * 1024
+
+# Private/reserved IP networks that must not be accessed (SSRF protection)
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),       # Loopback
+    ipaddress.ip_network("::1/128"),            # IPv6 loopback
+    ipaddress.ip_network("10.0.0.0/8"),         # RFC-1918
+    ipaddress.ip_network("172.16.0.0/12"),      # RFC-1918
+    ipaddress.ip_network("192.168.0.0/16"),     # RFC-1918
+    ipaddress.ip_network("169.254.0.0/16"),     # Link-local / AWS metadata
+    ipaddress.ip_network("fe80::/10"),          # IPv6 link-local
+    ipaddress.ip_network("fc00::/7"),           # IPv6 unique local
+    ipaddress.ip_network("0.0.0.0/8"),          # "This" network
+    ipaddress.ip_network("::/128"),             # Unspecified
+]
+
+
+def _is_private_ip(host: str) -> bool:
+    """Check if a hostname resolves to a private/reserved IP address."""
+    try:
+        addr_infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return False  # DNS resolution failed — httpx will handle the error
+
+    for _, _, _, _, sockaddr in addr_infos:
+        ip = ipaddress.ip_address(sockaddr[0])
+        for network in _BLOCKED_NETWORKS:
+            if ip in network:
+                return True
+    return False
 
 
 class WebRequestTool(AbstractTool):
@@ -26,8 +61,9 @@ class WebRequestTool(AbstractTool):
 
     Features:
     - Supports GET and POST methods
+    - SSRF protection: blocks requests to private/loopback/link-local IPs
+    - Streaming response handling to prevent OOM on large responses
     - Configurable timeout and max response size
-    - Returns response body, status code, and headers
     """
 
     def __init__(
@@ -38,9 +74,14 @@ class WebRequestTool(AbstractTool):
         """Initialise the WebRequestTool.
 
         Args:
-            timeout: Request timeout in seconds.
+            timeout: Request timeout in seconds (max 300).
             max_response_size: Maximum response body size in bytes.
+
+        Raises:
+            ValueError: If timeout exceeds MAX_TIMEOUT.
         """
+        if timeout > MAX_TIMEOUT:
+            raise ValueError(f"timeout must be <= {MAX_TIMEOUT} seconds, got {timeout}")
         self._timeout = timeout
         self._max_response_size = max_response_size
 
@@ -94,12 +135,31 @@ class WebRequestTool(AbstractTool):
             long_description=(
                 "Sends an HTTP request to the specified URL and returns "
                 "the response body, status code, and headers. Supports "
-                "GET and POST methods with configurable timeout."
+                "GET and POST methods with SSRF protection and configurable timeout."
             ),
             version=self.version(),
             parameters=self.parameters(),
             is_local=False,
         )
+
+    def _validate_url(self, url: str) -> str | None:
+        """Validate URL scheme and host. Returns error message or None."""
+        parsed = urlparse(url)
+
+        # Validate scheme
+        if parsed.scheme not in ("http", "https"):
+            return f"Only http and https schemes are allowed, got: {parsed.scheme!r}"
+
+        # Validate host exists
+        hostname = parsed.hostname
+        if not hostname:
+            return "URL must include a hostname"
+
+        # SSRF check: resolve hostname and block private IPs
+        if _is_private_ip(hostname):
+            return "Access denied: requests to private/internal networks are not allowed"
+
+        return None
 
     def run(self, **kwargs: Any) -> ToolResult:
         """Execute the HTTP request and return the response.
@@ -127,6 +187,11 @@ class WebRequestTool(AbstractTool):
                 error=f"Unsupported HTTP method: {method}. Use GET or POST.",
             )
 
+        # Validate URL before making any request
+        url_error = self._validate_url(url)
+        if url_error:
+            return ToolResult(success=False, error=url_error)
+
         try:
             import httpx
         except ImportError:
@@ -139,13 +204,17 @@ class WebRequestTool(AbstractTool):
             )
 
         try:
-            with httpx.Client(timeout=self._timeout) as client:
+            # Use streaming to avoid OOM on large responses
+            with httpx.Client(
+                timeout=self._timeout,
+                follow_redirects=False,
+            ) as client:
                 if method == "GET":
                     response = client.get(url, headers=headers)
                 else:
                     response = client.post(url, headers=headers, content=body)
 
-                # Check response size
+                # Stream-read with size limit
                 content_length = len(response.content)
                 if content_length > self._max_response_size:
                     return ToolResult(

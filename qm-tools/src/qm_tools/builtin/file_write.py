@@ -16,6 +16,11 @@ from qm_tools.types import ToolDescriptor, ToolParameter, ToolResult
 # Default maximum content size: 10 MB
 DEFAULT_MAX_CONTENT_SIZE = 10 * 1024 * 1024
 
+# Allowed encodings
+_ALLOWED_ENCODINGS = frozenset({
+    "utf-8", "utf-16", "utf-32", "ascii", "latin-1", "iso-8859-1",
+})
+
 # Paths that are never allowed to be written to
 _BLOCKED_PREFIXES = (
     "/etc/",
@@ -27,6 +32,7 @@ _BLOCKED_PREFIXES = (
     "/sbin/",
     "/usr/bin/",
     "/usr/sbin/",
+    "/var/run/secrets/",
 )
 
 
@@ -36,15 +42,16 @@ class WriteFileTool(AbstractTool):
     Security features:
     - Blocks writes to sensitive system directories
     - Enforces a configurable maximum content size
+    - Checks cumulative file size in append mode
     - Optionally restricts writes to an allowed base directory
-    - Creates parent directories if they do not exist
+    - Validates encoding against an allowlist
     """
 
     def __init__(
         self,
         max_content_size: int = DEFAULT_MAX_CONTENT_SIZE,
         allowed_base_dir: str | None = None,
-        create_dirs: bool = True,
+        create_dirs: bool = False,
     ) -> None:
         """Initialise the WriteFileTool.
 
@@ -52,11 +59,18 @@ class WriteFileTool(AbstractTool):
             max_content_size: Maximum content size in bytes that can be written.
             allowed_base_dir: If set, only files under this directory may be written.
             create_dirs: Whether to create parent directories automatically.
+
+        Raises:
+            ValueError: If allowed_base_dir is set but is not a directory.
         """
         self._max_content_size = max_content_size
-        self._allowed_base_dir = (
-            os.path.realpath(allowed_base_dir) if allowed_base_dir else None
-        )
+        if allowed_base_dir is not None:
+            resolved = os.path.realpath(allowed_base_dir)
+            if os.path.exists(resolved) and not os.path.isdir(resolved):
+                raise ValueError(f"allowed_base_dir must be a directory: {allowed_base_dir}")
+            self._allowed_base_dir: str | None = resolved
+        else:
+            self._allowed_base_dir = None
         self._create_dirs = create_dirs
 
     def name(self) -> str:
@@ -113,21 +127,26 @@ class WriteFileTool(AbstractTool):
             is_local=True,
         )
 
-    def _validate_path(self, path: str) -> str | None:
-        """Validate the file path and return an error message if invalid, else None."""
+    def _validate_path(self, path: str) -> tuple[str | None, str]:
+        """Validate the file path.
+
+        Returns:
+            Tuple of (error_message_or_None, resolved_real_path).
+        """
         real_path = os.path.realpath(path)
 
         for prefix in _BLOCKED_PREFIXES:
             if real_path.startswith(prefix):
-                return f"Access denied: writing to '{prefix}' is not allowed"
+                return f"Access denied: writing to '{prefix}' is not allowed", real_path
 
         if self._allowed_base_dir is not None:
             if not real_path.startswith(self._allowed_base_dir + os.sep) and real_path != self._allowed_base_dir:
                 return (
-                    f"Access denied: path must be under '{self._allowed_base_dir}'"
+                    f"Access denied: path must be under '{self._allowed_base_dir}'",
+                    real_path,
                 )
 
-        return None
+        return None, real_path
 
     def run(self, **kwargs: Any) -> ToolResult:
         """Write content to the specified file.
@@ -149,6 +168,15 @@ class WriteFileTool(AbstractTool):
         if not path:
             return ToolResult(success=False, error="Parameter 'path' is required")
 
+        # Validate encoding
+        if encoding.lower().replace("-", "") not in {
+            e.lower().replace("-", "") for e in _ALLOWED_ENCODINGS
+        }:
+            return ToolResult(
+                success=False,
+                error=f"Unsupported encoding: {encoding!r}. Allowed: {sorted(_ALLOWED_ENCODINGS)}",
+            )
+
         # Check content size
         content_bytes = len(content.encode(encoding, errors="replace"))
         if content_bytes > self._max_content_size:
@@ -160,12 +188,27 @@ class WriteFileTool(AbstractTool):
                 ),
             )
 
-        # Validate path security
-        error = self._validate_path(path)
+        # Validate path security — get resolved path once
+        error, real_path = self._validate_path(path)
         if error:
             return ToolResult(success=False, error=error)
 
-        real_path = os.path.realpath(path)
+        # In append mode, check cumulative file size
+        if append and os.path.exists(real_path):
+            try:
+                existing_size = os.path.getsize(real_path)
+                if existing_size + content_bytes > self._max_content_size:
+                    return ToolResult(
+                        success=False,
+                        error=(
+                            f"Cumulative file size would exceed limit: "
+                            f"{existing_size} existing + {content_bytes} new = "
+                            f"{existing_size + content_bytes} bytes "
+                            f"(limit: {self._max_content_size} bytes)"
+                        ),
+                    )
+            except OSError:
+                pass  # File may not exist yet, proceed
 
         # Create parent directories if needed
         parent_dir = os.path.dirname(real_path)
@@ -187,7 +230,7 @@ class WriteFileTool(AbstractTool):
         return ToolResult(
             success=True,
             data={
-                "path": real_path,
+                "path": path,
                 "bytes_written": content_bytes,
                 "mode": "append" if append else "overwrite",
             },

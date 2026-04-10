@@ -8,9 +8,9 @@ version = "0.1.0"
 description = "Unified multi-LLM provider abstraction supporting OpenAI, Anthropic, Google, Groq, xAI and more"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "Apache-2.0"}
+license = "Apache-2.0"
 authors = [
-    {name = "Quartermaster AI", email = "team@quartermaster.ai"},
+    { name = "MindMade", email = "info@mindmade.io" },
 ]
 keywords = ["llm", "ai", "openai", "anthropic", "google", "groq", "multi-provider", "abstraction"]
 classifiers = [
@@ -46,9 +46,9 @@ dev = [
 ]
 
 [project.urls]
+Homepage = "https://github.com/quartermaster-ai/quartermaster"
 Repository = "https://github.com/quartermaster-ai/quartermaster"
 Issues = "https://github.com/quartermaster-ai/quartermaster/issues"
-Documentation = "https://quartermaster.ai/docs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/qm_providers"]

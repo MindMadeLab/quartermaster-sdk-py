@@ -179,7 +179,7 @@ class TestWriteFileTool:
     def test_creates_parent_directories(self, tmp_path: str) -> None:
         file = tmp_path / "a" / "b" / "c" / "deep.txt"
 
-        tool = WriteFileTool()
+        tool = WriteFileTool(create_dirs=True)
         result = tool.run(path=str(file), content="deep")
 
         assert result.success is True

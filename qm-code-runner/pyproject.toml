@@ -45,10 +45,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/mindmade-ai/qm-code-runner"
-Documentation = "https://github.com/mindmade-ai/qm-code-runner#readme"
-Repository = "https://github.com/mindmade-ai/qm-code-runner"
-Issues = "https://github.com/mindmade-ai/qm-code-runner/issues"
+Homepage = "https://github.com/quartermaster-ai/quartermaster"
+Repository = "https://github.com/quartermaster-ai/quartermaster"
+Issues = "https://github.com/quartermaster-ai/quartermaster/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/qm_code_runner"]
