@@ -1,8 +1,9 @@
 """
-WebRequestTool: HTTP GET/POST requests using httpx.
+WebRequestTool: HTTP requests using httpx.
 
-Provides a simple HTTP client tool for AI agents. Requires the ``httpx``
-package, installable via ``pip install quartermaster-tools[web]``.
+Provides a simple HTTP client tool for AI agents supporting GET, POST, PUT,
+DELETE, and PATCH methods. Requires the ``httpx`` package, installable via
+``pip install quartermaster-tools[web]``.
 """
 
 from __future__ import annotations
@@ -54,13 +55,16 @@ def _is_private_ip(host: str) -> bool:
     return False
 
 
+_SUPPORTED_METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH")
+
+
 class WebRequestTool(AbstractTool):
-    """Make HTTP GET or POST requests and return the response body.
+    """Make HTTP requests and return the response body.
 
     Requires httpx to be installed (``pip install quartermaster-tools[web]``).
 
     Features:
-    - Supports GET and POST methods
+    - Supports GET, POST, PUT, DELETE, and PATCH methods
     - SSRF protection: blocks requests to private/loopback/link-local IPs
     - Streaming response handling to prevent OOM on large responses
     - Configurable timeout and max response size
@@ -104,13 +108,12 @@ class WebRequestTool(AbstractTool):
             ),
             ToolParameter(
                 name="method",
-                description="HTTP method: GET or POST.",
+                description="HTTP method: GET, POST, PUT, DELETE, or PATCH.",
                 type="string",
                 required=False,
                 default="GET",
                 options=[
-                    ToolParameterOption(label="GET", value="GET"),
-                    ToolParameterOption(label="POST", value="POST"),
+                    ToolParameterOption(label=m, value=m) for m in _SUPPORTED_METHODS
                 ],
             ),
             ToolParameter(
@@ -121,7 +124,7 @@ class WebRequestTool(AbstractTool):
             ),
             ToolParameter(
                 name="body",
-                description="Request body for POST requests (string or JSON object).",
+                description="Request body for POST/PUT/PATCH requests (string or JSON object).",
                 type="string",
                 required=False,
             ),
@@ -131,11 +134,12 @@ class WebRequestTool(AbstractTool):
         """Return metadata describing this tool."""
         return ToolDescriptor(
             name=self.name(),
-            short_description="Make an HTTP GET or POST request.",
+            short_description="Make an HTTP request (GET, POST, PUT, DELETE, PATCH).",
             long_description=(
                 "Sends an HTTP request to the specified URL and returns "
                 "the response body, status code, and headers. Supports "
-                "GET and POST methods with SSRF protection and configurable timeout."
+                "GET, POST, PUT, DELETE, and PATCH methods with SSRF protection "
+                "and configurable timeout."
             ),
             version=self.version(),
             parameters=self.parameters(),
@@ -166,9 +170,9 @@ class WebRequestTool(AbstractTool):
 
         Args:
             url: The target URL.
-            method: HTTP method (GET or POST, default GET).
+            method: HTTP method (GET, POST, PUT, DELETE, or PATCH; default GET).
             headers: Optional request headers dict.
-            body: Optional request body for POST.
+            body: Optional request body for POST/PUT/PATCH.
 
         Returns:
             ToolResult with response data including body, status_code, and headers.
@@ -181,10 +185,10 @@ class WebRequestTool(AbstractTool):
         if not url:
             return ToolResult(success=False, error="Parameter 'url' is required")
 
-        if method not in ("GET", "POST"):
+        if method not in _SUPPORTED_METHODS:
             return ToolResult(
                 success=False,
-                error=f"Unsupported HTTP method: {method}. Use GET or POST.",
+                error=f"Unsupported HTTP method: {method}. Use one of: {', '.join(_SUPPORTED_METHODS)}.",
             )
 
         # Validate URL before making any request
@@ -211,8 +215,14 @@ class WebRequestTool(AbstractTool):
             ) as client:
                 if method == "GET":
                     response = client.get(url, headers=headers)
-                else:
+                elif method == "POST":
                     response = client.post(url, headers=headers, content=body)
+                elif method == "PUT":
+                    response = client.put(url, headers=headers, content=body)
+                elif method == "DELETE":
+                    response = client.delete(url, headers=headers)
+                else:  # PATCH
+                    response = client.patch(url, headers=headers, content=body)
 
                 # Stream-read with size limit
                 content_length = len(response.content)
