@@ -28,6 +28,15 @@ dependencies = []
 [project.optional-dependencies]
 web = ["httpx>=0.25.0"]
 llm = ["quartermaster-providers>=0.1.0"]
+database = ["sqlalchemy>=2.0"]
+vector = ["chromadb>=0.4", "sentence-transformers>=2.2"]
+privacy = ["presidio-analyzer>=2.2"]
+observability = ["opentelemetry-sdk>=1.20"]
+browser = ["playwright>=1.40"]
+google = ["google-api-python-client>=2.100"]
+all = [
+    "quartermaster-tools[web,llm,database,vector,privacy,observability,browser,google]",
+]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
