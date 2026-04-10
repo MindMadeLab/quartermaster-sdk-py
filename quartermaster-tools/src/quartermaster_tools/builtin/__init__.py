@@ -13,6 +13,9 @@ Provides ready-to-use tool implementations:
 - Data tools: CSV, JSON, YAML, XML parsing, format conversion, filtering
 - Memory tools: Set, Get, List in-memory variables
 - Database tools: SQLite query, write, and schema introspection
+- Vector/RAG tools: Embed, Store, Search, Index, Hybrid Search
+- Email tools: Send, Read, Search via SMTP/IMAP
+- Messaging tools: Slack, Discord, Webhooks
 """
 
 from quartermaster_tools.builtin.database import (
@@ -34,6 +37,11 @@ from quartermaster_tools.builtin.code import (
     PythonExecutorTool,
     ShellExecutorTool,
 )
+from quartermaster_tools.builtin.email import (
+    ReadEmailTool,
+    SearchEmailTool,
+    SendEmailTool,
+)
 from quartermaster_tools.builtin.file_read import ReadFileTool
 from quartermaster_tools.builtin.file_write import WriteFileTool
 from quartermaster_tools.builtin.filesystem import (
@@ -51,25 +59,46 @@ from quartermaster_tools.builtin.memory import (
     ListVariablesTool,
     SetVariableTool,
 )
+from quartermaster_tools.builtin.messaging import (
+    DiscordMessageTool,
+    SlackMessageTool,
+    SlackReadTool,
+    WebhookNotifyTool,
+)
 from quartermaster_tools.builtin.web_request import WebRequestTool
+from quartermaster_tools.builtin.vector import (
+    DocumentIndexTool,
+    EmbedTextTool,
+    HybridSearchTool,
+    VectorSearchTool,
+    VectorStoreTool,
+)
 from quartermaster_tools.builtin.web_search import (
+    BraveSearchTool,
     DuckDuckGoSearchTool,
+    GoogleSearchTool,
     JsonApiTool,
     WebScraperTool,
 )
 
 __all__ = [
+    "BraveSearchTool",
     "ConvertFormatTool",
     "CopyFileTool",
     "CreateDirectoryTool",
     "DataFilterTool",
     "DeleteFileTool",
+    "DiscordMessageTool",
+    "DocumentIndexTool",
     "DuckDuckGoSearchTool",
+    "EmbedTextTool",
     "EvalMathTool",
     "FileInfoTool",
     "FindFilesTool",
     "GetVariableTool",
+    "GoogleSearchTool",
     "GrepTool",
+    "HybridSearchTool",
     "JavaScriptExecutorTool",
     "JsonApiTool",
     "ListDirectoryTool",
@@ -80,13 +109,21 @@ __all__ = [
     "ParseXMLTool",
     "ParseYAMLTool",
     "PythonExecutorTool",
+    "ReadEmailTool",
     "ReadFileTool",
     "SQLiteQueryTool",
     "SQLiteSchemaTool",
     "SQLiteWriteTool",
+    "SearchEmailTool",
+    "SendEmailTool",
     "SetVariableTool",
     "ShellExecutorTool",
+    "SlackMessageTool",
+    "SlackReadTool",
+    "VectorSearchTool",
+    "VectorStoreTool",
     "WebRequestTool",
     "WebScraperTool",
+    "WebhookNotifyTool",
     "WriteFileTool",
 ]
