@@ -1,78 +1,50 @@
 # qm-providers
 
-Unified multi-LLM provider abstraction for Python. Write once, run against OpenAI, Anthropic, Google, Groq, xAI, and custom providers.
+[![PyPI version](https://img.shields.io/pypi/v/qm-providers.svg)](https://pypi.org/project/qm-providers/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
 
-## What It Does
+Unified multi-LLM provider abstraction for Python. Write once, run against OpenAI, Anthropic, Google, Groq, xAI, or any OpenAI-compatible endpoint.
 
-`qm-providers` provides a single, consistent interface to interact with multiple Large Language Models. Instead of learning each provider's SDK, you define your request once and swap providers without code changes.
+## Features
 
-```python
-import asyncio
-from qm_providers import LLMConfig
-from qm_providers.providers import OpenAIProvider
-
-# Configure once
-config = LLMConfig(
-    model="gpt-4",
-    provider="openai",
-    temperature=0.7,
-    max_output_tokens=2048,
-)
-
-# Use any provider with the same code
-async def main():
-    provider = OpenAIProvider(api_key="sk-...")
-    response = await provider.generate_text_response(
-        prompt="What is AI?",
-        config=config,
-    )
-    print(response.content)
-
-asyncio.run(main())
-```
+- **6 Providers**: OpenAI, Anthropic, Google, Groq, xAI, plus a generic OpenAI-compatible adapter
+- **Streaming**: Async generators for token-by-token responses
+- **Tool Calling**: Unified interface for function/tool invocation across all providers
+- **Structured Output**: JSON-schema-constrained response generation
+- **Extended Thinking**: Claude and o-series reasoning chains
+- **Vision**: Image understanding on supported models
+- **Transcription**: Audio-to-text via OpenAI Whisper
+- **Token Counting**: Estimate tokens and cost before making requests
+- **Provider Registry**: Register providers once, resolve by name or model pattern
+- **Testing Utilities**: `MockProvider` and `InMemoryHistory` for unit tests
+- **Type-Safe**: Dataclass responses with full type hints
 
 ## Installation
-
-Install the core library:
 
 ```bash
 pip install qm-providers
 ```
 
-Then add support for the providers you need:
+Install with provider-specific extras:
 
 ```bash
-# Single provider
 pip install qm-providers[openai]
-
-# Multiple providers
+pip install qm-providers[anthropic]
 pip install qm-providers[openai,anthropic,google]
-
-# All providers
 pip install qm-providers[all]
 ```
 
 ## Supported Providers
 
-| Provider | Status | Optional Dependency | Notes |
-|----------|--------|---------------------|-------|
-| OpenAI | ✓ | `openai>=1.0` | gpt-4, gpt-4-turbo, gpt-3.5-turbo |
-| Anthropic | ✓ | `anthropic>=0.30` | claude-3-opus, claude-3-sonnet, claude-3-haiku |
-| Google | ✓ | `google-generativeai>=0.5` | gemini-pro, gemini-1.5-pro |
-| Groq | ✓ | `groq>=0.5` | mixtral-8x7b, llama-2-70b |
-| xAI | ✓ | `xai>=0.1` | grok-1 |
-| Custom | ✓ | - | Implement `AbstractLLMProvider` |
-
-## Features
-
-- **Streaming**: Async generators for streaming responses
-- **Tool Calling**: Unified interface for function/tool invocation
-- **Structured Output**: JSON schema-based response generation
-- **Vision**: Image understanding across supported providers
-- **Extended Thinking**: Longer reasoning chains (Claude, OpenAI)
-- **Transcription**: Audio-to-text (OpenAI Whisper integration)
-- **Token Counting**: Estimate costs before making requests
-- **Type Safe**: Full type hints with dataclass responses
+| Provider | Class | Models (examples) | Import |
+|----------|-------|-------------------|--------|
+| OpenAI | `OpenAIProvider` | gpt-4o, gpt-4-turbo, o1, o3-mini | `from qm_providers.providers import OpenAIProvider` |
+| Anthropic | `AnthropicProvider` | claude-sonnet-4-20250514, claude-3-haiku | `from qm_providers.providers import AnthropicProvider` |
+| Google | `GoogleProvider` | gemini-1.5-pro, gemini-pro | `from qm_providers.providers import GoogleProvider` |
+| Groq | `GroqProvider` | llama-3-70b, mixtral-8x7b | `from qm_providers.providers import GroqProvider` |
+| xAI | `XAIProvider` | grok-2, grok-2-mini | `from qm_providers.providers import XAIProvider` |
+| Custom | `OpenAICompatibleProvider` | Any OpenAI-compatible API | `from qm_providers.providers import OpenAICompatibleProvider` |
 
 ## Quick Start
 
@@ -81,21 +53,23 @@ pip install qm-providers[all]
 ```python
 import asyncio
 from qm_providers import LLMConfig
-from qm_providers.providers import AnthropicProvider
-
-config = LLMConfig(
-    model="claude-3-sonnet-20240229",
-    provider="anthropic",
-    temperature=0.5,
-)
+from qm_providers.providers import OpenAIProvider
 
 async def main():
-    provider = AnthropicProvider(api_key="sk-ant-...")
+    provider = OpenAIProvider(api_key="sk-...")
+    config = LLMConfig(
+        model="gpt-4o",
+        provider="openai",
+        temperature=0.7,
+        max_output_tokens=1024,
+    )
+
     response = await provider.generate_text_response(
-        prompt="Explain machine learning",
+        prompt="Explain gradient descent in two sentences.",
         config=config,
     )
-    print(response.content)
+    print(response.content)  # str
+    print(response.stop_reason)  # "end_turn", "max_tokens", etc.
 
 asyncio.run(main())
 ```
@@ -103,230 +77,282 @@ asyncio.run(main())
 ### Tool Calling
 
 ```python
-from qm_providers import ToolDefinition
+import asyncio
+from qm_providers import LLMConfig, ToolDefinition
+from qm_providers.providers import AnthropicProvider
 
-# Define available tools
-tools = [
-    ToolDefinition(
-        name="get_weather",
-        description="Get weather for a location",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "location": {"type": "string"},
+async def main():
+    provider = AnthropicProvider(api_key="sk-ant-...")
+    config = LLMConfig(model="claude-sonnet-4-20250514", provider="anthropic")
+
+    tools = [
+        ToolDefinition(
+            name="get_weather",
+            description="Get current weather for a location",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "City name"},
+                },
+                "required": ["location"],
             },
-            "required": ["location"],
-        },
-    ),
-]
+        ),
+    ]
 
-# Generate with tool use
-response = await provider.generate_tool_parameters(
-    prompt="What's the weather in San Francisco?",
-    tools=tools,
-    config=config,
-)
+    response = await provider.generate_tool_parameters(
+        prompt="What is the weather in Tokyo?",
+        tools=tools,
+        config=config,
+    )
 
-for tool_call in response.tool_calls:
-    print(f"Call {tool_call.tool_name} with {tool_call.parameters}")
+    for call in response.tool_calls:
+        print(f"{call.tool_name}({call.parameters})")
+        # get_weather({'location': 'Tokyo'})
+
+    print(f"Usage: {response.usage.total_tokens} tokens")
+
+asyncio.run(main())
 ```
 
-### Streaming Responses
+### Streaming
 
 ```python
-config = LLMConfig(model="gpt-4", provider="openai", stream=True)
+import asyncio
+from qm_providers import LLMConfig
+from qm_providers.providers import OpenAIProvider
 
-async for token_response in await provider.generate_text_response(
-    prompt="Write a short story",
-    config=config,
-):
-    print(token_response.content, end="", flush=True)
+async def main():
+    provider = OpenAIProvider(api_key="sk-...")
+    config = LLMConfig(model="gpt-4o", provider="openai", stream=True)
+
+    async for chunk in await provider.generate_text_response(
+        prompt="Write a haiku about Python.",
+        config=config,
+    ):
+        print(chunk.content, end="", flush=True)
+
+asyncio.run(main())
 ```
 
 ### Structured Output
 
 ```python
-from typing import TypedDict
+import asyncio
+from qm_providers import LLMConfig
+from qm_providers.providers import OpenAIProvider
 
-class Article(TypedDict):
-    title: str
-    summary: str
-    topics: list[str]
+async def main():
+    provider = OpenAIProvider(api_key="sk-...")
+    config = LLMConfig(model="gpt-4o", provider="openai")
 
-response = await provider.generate_structured_response(
-    prompt="Analyze this article...",
-    response_schema=Article,
-    config=config,
-)
+    schema = {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "summary": {"type": "string"},
+            "topics": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["title", "summary", "topics"],
+    }
 
-print(response.structured_output["title"])
+    response = await provider.generate_structured_response(
+        prompt="Analyze the concept of reinforcement learning.",
+        response_schema=schema,
+        config=config,
+    )
+
+    print(response.structured_output["title"])
+    print(response.structured_output["topics"])
+
+asyncio.run(main())
 ```
 
-## Configuration
+## API Reference
 
-`LLMConfig` controls behavior across all providers:
+### LLMConfig
+
+Controls request behavior across all providers.
 
 ```python
 from qm_providers import LLMConfig
 
 config = LLMConfig(
-    model="gpt-4",  # Provider's model name
-    provider="openai",  # 'openai', 'anthropic', 'google', 'groq', etc.
-    stream=False,  # Enable streaming responses
-    temperature=0.7,  # 0.0 (deterministic) to 2.0 (creative)
-    system_message="You are a helpful assistant",
-    max_input_tokens=8000,  # Limit input length
-    max_output_tokens=2048,  # Limit output length
-    max_messages=10,  # For conversation context
-    vision=False,  # Enable image understanding
-    thinking_enabled=False,  # Extended thinking (claude, o1)
-    thinking_budget=10000,  # Max thinking tokens
+    model="gpt-4o",             # Provider model identifier
+    provider="openai",          # Provider name
+    stream=False,               # Stream token-by-token
+    temperature=0.7,            # 0.0 (deterministic) to 2.0 (creative)
+    system_message=None,        # System prompt
+    max_input_tokens=None,      # Input token limit
+    max_output_tokens=None,     # Output token limit
+    max_messages=None,          # Conversation context limit
+    vision=False,               # Enable image understanding
+    thinking_enabled=False,     # Extended thinking (Claude, o-series)
+    thinking_budget=None,       # Max thinking tokens
+    top_p=None,                 # Nucleus sampling
+    top_k=None,                 # Top-k sampling
+    frequency_penalty=None,     # Frequency penalty (OpenAI)
+    presence_penalty=None,      # Presence penalty (OpenAI)
 )
 ```
 
-## Creating Custom Providers
+### AbstractLLMProvider Methods
 
-Extend `AbstractLLMProvider` to add a new provider:
+Every provider implements these methods:
 
-```python
-from qm_providers import AbstractLLMProvider, TokenResponse, LLMConfig
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `await list_models()` | `list[str]` | Available model identifiers |
+| `estimate_token_count(text, model)` | `int` | Token estimate without API call |
+| `prepare_tool(tool)` | `Any` | Convert `ToolDefinition` to provider format |
+| `await generate_text_response(prompt, config)` | `TokenResponse` or `AsyncIterator[TokenResponse]` | Text generation (streaming when `config.stream=True`) |
+| `await generate_tool_parameters(prompt, tools, config)` | `ToolCallResponse` | Function/tool calling |
+| `await generate_native_response(prompt, tools, config)` | `NativeResponse` | Text + thinking + tool calls combined |
+| `await generate_structured_response(prompt, schema, config)` | `StructuredResponse` | JSON-schema-constrained output |
+| `await transcribe(audio_path)` | `str` | Audio-to-text transcription |
 
-class MyProvider(AbstractLLMProvider):
-    def __init__(self, api_key: str):
-        self.api_key = api_key
+Cost estimation (non-abstract, returns `None` if pricing unavailable):
 
-    def list_models(self) -> list[str]:
-        return ["my-model-1", "my-model-2"]
+| Method | Returns |
+|--------|---------|
+| `get_cost_per_1k_input_tokens(model)` | `float \| None` |
+| `get_cost_per_1k_output_tokens(model)` | `float \| None` |
+| `estimate_cost(text, model, output_tokens)` | `float \| None` |
 
-    async def generate_text_response(
-        self,
-        prompt: str,
-        config: LLMConfig,
-    ) -> TokenResponse | AsyncIterator[TokenResponse]:
-        # Call your API
-        response = await self._call_api(prompt, config)
-        return TokenResponse(
-            content=response.text,
-            stop_reason="end_turn",
-        )
+### Response Types
 
-    # Implement remaining abstract methods...
-    def estimate_token_count(self, text: str, model: str) -> int:
-        return len(text.split())
-
-    async def generate_tool_parameters(self, ...): ...
-    async def generate_structured_response(self, ...): ...
-    async def generate_native_response(self, ...): ...
-    async def transcribe(self, audio_path: str) -> str: ...
-```
-
-## Architecture
-
-### Core Types
-
-- **LLMConfig** — Request configuration (model, temperature, max_tokens, etc.)
-- **TokenResponse** — Single response unit with content and stop_reason
-- **ToolCallResponse** — Tool invocation results
-- **StructuredResponse** — Validated JSON output
-- **NativeResponse** — Hybrid response with text, tool calls, and thinking
-- **ToolDefinition** — Tool/function schema
-- **MessageHistory** — Conversation protocol for multi-turn
-
-### Provider Pattern
-
-All providers inherit from `AbstractLLMProvider` and implement 8 methods:
-
-1. `list_models()` — Available models
-2. `estimate_token_count()` — Pre-request token estimation
-3. `prepare_tool()` — Transform tool definitions to provider format
-4. `generate_text_response()` — Plain text generation
-5. `generate_tool_parameters()` — Function calling
-6. `generate_native_response()` — Text + tools + thinking
-7. `generate_structured_response()` — JSON schema compliance
-8. `transcribe()` — Audio-to-text
-
-### Streaming
-
-Streaming is implicit via async generators:
+**TokenResponse** -- single response or streaming chunk:
 
 ```python
-# Non-streaming returns a single TokenResponse
-response = await provider.generate_text_response(prompt, config)
-
-# Streaming returns AsyncIterator[TokenResponse]
-config.stream = True
-async for chunk in await provider.generate_text_response(prompt, config):
-    print(chunk.content)
+response.content      # str -- text content
+response.stop_reason  # str | None -- "end_turn", "max_tokens", "tool_use"
 ```
 
-## Token Counting & Cost Estimation
+**ToolCallResponse** -- tool invocation results:
 
-Estimate tokens and cost before making requests:
+```python
+response.text_content  # str -- any text alongside tool calls
+response.tool_calls    # list[ToolCall] -- each has .tool_name, .tool_id, .parameters
+response.stop_reason   # str | None
+response.usage         # TokenUsage | None
+```
+
+**StructuredResponse** -- JSON-schema-constrained output:
+
+```python
+response.structured_output  # dict[str, Any] -- parsed JSON
+response.raw_output         # str -- raw model text
+response.usage              # TokenUsage | None
+```
+
+**NativeResponse** -- complete model output:
+
+```python
+response.text_content  # str
+response.thinking      # list[ThinkingResponse] -- reasoning blocks
+response.tool_calls    # list[ToolCall]
+response.usage         # TokenUsage | None
+```
+
+**TokenUsage** -- token accounting:
+
+```python
+usage.input_tokens                  # int
+usage.output_tokens                 # int
+usage.cache_creation_input_tokens   # int (Anthropic prompt caching)
+usage.cache_read_input_tokens       # int
+usage.total_tokens                  # property: input + output
+```
+
+### ProviderRegistry
+
+Register providers once and resolve by name or model pattern:
+
+```python
+from qm_providers import ProviderRegistry
+from qm_providers.providers import OpenAIProvider, AnthropicProvider
+
+registry = ProviderRegistry()
+registry.register("openai", OpenAIProvider, api_key="sk-...")
+registry.register("anthropic", AnthropicProvider, api_key="sk-ant-...")
+
+# Get by name
+provider = registry.get("openai")
+
+# Auto-resolve from model name (gpt-* -> openai, claude-* -> anthropic, etc.)
+provider = registry.get_for_model("gpt-4o")
+provider = registry.get_for_model("claude-sonnet-4-20250514")
+
+# List registered providers
+registry.list_providers()  # ["anthropic", "openai"]
+```
+
+Model-to-provider inference patterns: `gpt-*`/`o1-*`/`o3-*` -> openai, `claude-*` -> anthropic, `gemini-*` -> google, `llama-*`/`mixtral-*` -> groq, `grok-*` -> xai.
+
+### Token Counting and Cost Estimation
 
 ```python
 from qm_providers.providers import OpenAIProvider
 
 provider = OpenAIProvider(api_key="sk-...")
 
-# Token count
-tokens = provider.estimate_token_count("Hello world", "gpt-4")
-print(f"Tokens: {tokens}")
+tokens = provider.estimate_token_count("Hello, world!", "gpt-4o")
+print(f"Estimated tokens: {tokens}")
 
-# Cost estimation (requires pricing configuration)
-cost_usd = provider.estimate_cost("Hello world", "gpt-4")
-print(f"Cost: ${cost_usd:.4f}")
+cost = provider.estimate_cost("Hello, world!", "gpt-4o", output_tokens=100)
+if cost is not None:
+    print(f"Estimated cost: ${cost:.6f}")
 ```
 
 ## Error Handling
 
-All providers raise consistent exceptions:
+All providers raise consistent exceptions from `qm_providers.exceptions`:
 
 ```python
 from qm_providers.exceptions import (
-    ProviderError,
-    AuthenticationError,
-    RateLimitError,
-    InvalidModelError,
+    ProviderError,          # Base exception (has .provider, .status_code)
+    AuthenticationError,    # Invalid/missing API key (401)
+    RateLimitError,         # Rate limited (429, has .retry_after)
+    InvalidModelError,      # Model not available (404, has .model)
+    InvalidRequestError,    # Malformed request (400)
+    ContentFilterError,     # Blocked by safety filter (400)
+    ContextLengthError,     # Input exceeds context window (400)
+    ServiceUnavailableError,  # Provider temporarily down (503)
 )
-
-try:
-    response = await provider.generate_text_response(prompt, config)
-except AuthenticationError:
-    print("Check API keys")
-except RateLimitError:
-    print("Rate limited, retry with backoff")
-except InvalidModelError:
-    print("Model not available for this provider")
-except ProviderError as e:
-    print(f"Provider error: {e}")
 ```
 
 ## Testing
 
-Mock providers for unit testing:
+Use `MockProvider` for unit tests without real API calls:
 
 ```python
+from qm_providers import LLMConfig, TokenResponse
 from qm_providers.testing import MockProvider
 
 mock = MockProvider(responses=[
-    TokenResponse(content="Test response 1"),
-    TokenResponse(content="Test response 2"),
+    TokenResponse(content="Paris", stop_reason="end_turn"),
+    TokenResponse(content="Berlin", stop_reason="end_turn"),
 ])
 
-response = await mock.generate_text_response("test", config)
-assert response.content == "Test response 1"
+config = LLMConfig(model="mock", provider="mock")
+
+response = await mock.generate_text_response("Capital of France?", config)
+assert response.content == "Paris"
+assert mock.call_count == 1
+assert mock.last_prompt == "Capital of France?"
+
+# InMemoryHistory for conversation testing
+from qm_providers.testing import InMemoryHistory
+
+history = InMemoryHistory()
+history.add_message("user", "Hello")
+history.add_message("assistant", "Hi there!")
+assert len(history) == 2
 ```
-
-## License
-
-Apache License 2.0 — see LICENSE file for details
 
 ## Contributing
 
-Contributions welcome! Please see CONTRIBUTING.md
+Contributions welcome. See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
 
-## Support
+## License
 
-- Documentation: https://quartermaster.ai/docs/providers
-- Issues: https://github.com/quartermaster-ai/quartermaster/issues
-- Discussions: https://github.com/quartermaster-ai/quartermaster/discussions
+Apache License 2.0. See [LICENSE](../LICENSE) for details.
