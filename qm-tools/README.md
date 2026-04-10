@@ -1,35 +1,43 @@
 # qm-tools
 
-Tool abstraction framework and chain-of-responsibility handler pattern for AI agent orchestration.
+Lightweight tool abstraction framework for AI agent orchestration.
 
-`qm-tools` provides a lightweight, dependency-free foundation for building composable AI agent tools and processing pipelines. Define tool capabilities, chain handlers together, and build sophisticated agent workflows.
+[![PyPI version](https://img.shields.io/pypi/v/qm-tools)](https://pypi.org/project/qm-tools/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green)](../LICENSE)
 
 ## Features
 
-- **AbstractTool**: Base class for defining AI agent capabilities with parameters and results
-- **Chain-of-Responsibility Pattern**: Composable handler pipelines for data processing
-- **Parameter System**: Type-safe tool parameter definitions with validation support
-- **Tool Registry**: Lazy-loaded, version-aware tool management
-- **Zero Dependencies**: Pure Python, no external dependencies required
+- **AbstractTool** base class with parameter validation, safe execution, and JSON Schema export
+- **AbstractLocalTool** for subprocess-based tools with timeout and output parsing
+- **Built-in tools**: ReadFileTool, WriteFileTool, WebRequestTool with security hardening
+- **ToolRegistry** with version-aware lookup, plugin discovery via entry points, and decorator registration
+- **Chain-of-Responsibility** pattern for composable data processing pipelines
+- **LLM bridge methods**: `to_openai_tools()`, `to_anthropic_tools()`, `to_mcp_tools()` on both ToolDescriptor and ToolRegistry
+- **Zero required dependencies** (httpx optional for WebRequestTool)
 
 ## Installation
 
 ```bash
 pip install qm-tools
+
+# With optional HTTP support for WebRequestTool
+pip install qm-tools[web]
+
+# With qm-providers bridge for to_tool_definition()
+pip install qm-tools[llm]
 ```
 
 ## Quick Start
 
-### Creating a Tool
+### Creating a Custom Tool
 
 ```python
 from qm_tools import AbstractTool, ToolDescriptor, ToolParameter, ToolResult
 
-class CalculatorTool(AbstractTool):
-    """A simple calculator tool."""
-
+class SentimentTool(AbstractTool):
     def name(self) -> str:
-        return "calculator"
+        return "analyze_sentiment"
 
     def version(self) -> str:
         return "1.0.0"
@@ -37,27 +45,9 @@ class CalculatorTool(AbstractTool):
     def parameters(self) -> list[ToolParameter]:
         return [
             ToolParameter(
-                name="operation",
-                description="Operation to perform: add, subtract, multiply, divide",
+                name="text",
+                description="Text to analyze for sentiment",
                 type="string",
-                required=True,
-                options=[
-                    ToolParameterOption(label="Add", value="add"),
-                    ToolParameterOption(label="Subtract", value="subtract"),
-                    ToolParameterOption(label="Multiply", value="multiply"),
-                    ToolParameterOption(label="Divide", value="divide"),
-                ],
-            ),
-            ToolParameter(
-                name="a",
-                description="First operand",
-                type="number",
-                required=True,
-            ),
-            ToolParameter(
-                name="b",
-                description="Second operand",
-                type="number",
                 required=True,
             ),
         ]
@@ -65,40 +55,45 @@ class CalculatorTool(AbstractTool):
     def info(self) -> ToolDescriptor:
         return ToolDescriptor(
             name=self.name(),
-            short_description="Perform basic arithmetic operations",
-            long_description="A tool that can add, subtract, multiply, or divide two numbers",
+            short_description="Analyze text sentiment",
+            long_description="Returns positive, negative, or neutral sentiment.",
             version=self.version(),
             parameters=self.parameters(),
         )
 
     def run(self, **kwargs) -> ToolResult:
-        operation = kwargs.get("operation")
-        a = kwargs.get("a")
-        b = kwargs.get("b")
+        text = kwargs.get("text", "")
+        # Your sentiment logic here
+        return ToolResult(success=True, data={"sentiment": "positive", "score": 0.92})
 
-        if operation == "add":
-            result = a + b
-        elif operation == "subtract":
-            result = a - b
-        elif operation == "multiply":
-            result = a * b
-        elif operation == "divide":
-            if b == 0:
-                return ToolResult(
-                    success=False,
-                    error="Division by zero",
-                )
-            result = a / b
-        else:
-            return ToolResult(
-                success=False,
-                error=f"Unknown operation: {operation}",
-            )
+# Execute the tool
+tool = SentimentTool()
+result = tool.safe_run(text="I love this product!")
+print(result.data)  # {"sentiment": "positive", "score": 0.92}
+```
 
-        return ToolResult(
-            success=True,
-            data={"result": result},
-        )
+### Using the Tool Registry
+
+```python
+from qm_tools import ToolRegistry, ReadFileTool, WriteFileTool, WebRequestTool
+
+registry = ToolRegistry()
+registry.register(ReadFileTool(allowed_base_dir="/tmp/sandbox"))
+registry.register(WriteFileTool(allowed_base_dir="/tmp/sandbox", create_dirs=True))
+registry.register(WebRequestTool(timeout=15))
+
+# Lookup by name (returns latest version)
+reader = registry.get("read_file")
+result = reader.run(path="/tmp/sandbox/data.txt")
+
+# List all registered tools
+for desc in registry.list_tools():
+    print(f"{desc.name} v{desc.version}: {desc.short_description}")
+
+# Export for LLM function calling
+openai_tools = registry.to_openai_tools()
+anthropic_tools = registry.to_anthropic_tools()
+mcp_tools = registry.to_mcp_tools()
 ```
 
 ### Building a Handler Chain
@@ -106,180 +101,157 @@ class CalculatorTool(AbstractTool):
 ```python
 from qm_tools import Chain, Handler
 
-class LoggingHandler(Handler):
-    """A handler that logs data."""
-
+class ValidateInput(Handler):
     def handle(self, data: dict) -> dict:
-        print(f"Processing: {data}")
+        if "query" not in data:
+            raise ValueError("Missing required field: query")
         return data
 
-class ValidationHandler(Handler):
-    """A handler that validates required fields."""
-
+class NormalizeText(Handler):
     def handle(self, data: dict) -> dict:
-        if "input" not in data:
-            raise ValueError("Missing required field: input")
+        data["query"] = data["query"].strip().lower()
         return data
 
-class TransformHandler(Handler):
-    """A handler that transforms data."""
-
+class AddTimestamp(Handler):
     def handle(self, data: dict) -> dict:
-        data["output"] = data["input"].upper()
+        from datetime import datetime
+        data["timestamp"] = datetime.now().isoformat()
         return data
 
-# Build the chain
 chain = (
     Chain()
-    .add_handler(LoggingHandler())
-    .add_handler(ValidationHandler())
-    .add_handler(TransformHandler())
+    .add_handler(ValidateInput())
+    .add_handler(NormalizeText())
+    .add_handler(AddTimestamp())
 )
 
-# Execute
-result = chain.run({"input": "hello"})
-print(result)  # {'input': 'hello', 'output': 'HELLO'}
+result = chain.run({"query": "  Hello World  "})
+# {"query": "hello world", "timestamp": "2025-01-15T10:30:00"}
 ```
 
-## Architecture
+## API Reference
 
-### Tool Abstraction
+### AbstractTool
 
-Tools are the primary abstraction for AI agent capabilities. Each tool:
+The base class all tools must implement.
 
-1. Declares its **name** and **version**
-2. Exposes **parameters** that define inputs (with types, descriptions, validation options)
-3. Implements **run()** to execute the tool logic
-4. Returns a **ToolResult** with success/error status and data
+| Method | Description |
+|--------|-------------|
+| `name() -> str` | Unique tool identifier |
+| `version() -> str` | Semantic version string |
+| `parameters() -> list[ToolParameter]` | Parameter definitions |
+| `info() -> ToolDescriptor` | Tool metadata |
+| `run(**kwargs) -> ToolResult` | Execute the tool |
+| `validate_params(**kwargs) -> list[str]` | Validate parameters, returns error list |
+| `safe_run(**kwargs) -> ToolResult` | Validate then run; returns error result on validation failure |
 
-Tools are composable — agents can reference tools internally, creating tool hierarchies.
+### AbstractLocalTool
 
-### Chain-of-Responsibility Pattern
+Extends AbstractTool for subprocess-based tools.
 
-Handlers form a processing pipeline where each handler:
+| Method | Description |
+|--------|-------------|
+| `prepare_command(**kwargs) -> list[str]` | Build the command-line arguments |
+| `parse_output(stdout, stderr, returncode) -> ToolResult` | Convert subprocess output to result |
+| `timeout() -> int` | Max execution time in seconds (default: 30) |
+| `working_directory() -> str \| None` | Working directory for the subprocess |
 
-1. Receives input data
-2. Processes or modifies it
-3. Passes it to the next handler
-4. Or halts the chain (by raising an exception)
+### ToolDescriptor
 
-Chains are reusable, composable, and testable in isolation.
+Metadata describing a tool, with LLM bridge methods.
 
-### Parameter System
+| Method | Description |
+|--------|-------------|
+| `to_input_schema() -> dict` | JSON Schema for the tool's parameters |
+| `to_openai_tools() -> dict` | OpenAI function-calling format |
+| `to_anthropic_tools() -> dict` | Anthropic tool-use format |
+| `to_tool_definition() -> ToolDefinition` | qm-providers ToolDefinition (requires `qm-tools[llm]`) |
 
-Tool parameters are declarative:
+### ToolRegistry
 
-- **name**: Parameter identifier
-- **type**: Type constraint (string, number, boolean, array, object)
-- **description**: Human-readable description
-- **required**: Is this parameter mandatory?
-- **options**: Pre-defined choices (for UI dropdowns, etc.)
-- **validation**: Custom validation rules (optional, extensible)
+Central registry with version-aware lookup and plugin discovery.
 
-## Advanced Usage
+| Method | Description |
+|--------|-------------|
+| `register(tool)` | Register a tool instance |
+| `get(name, version=None)` | Look up by name (latest if no version) |
+| `list_tools() -> list[ToolDescriptor]` | All registered tool descriptors |
+| `list_names() -> list[str]` | All registered tool names |
+| `unregister(name, version=None)` | Remove a tool |
+| `load_plugins()` | Discover tools from `qm_tools` entry points |
+| `to_json_schema()` | Export all tools as JSON Schema |
+| `to_openai_tools()` | Export in OpenAI function-calling format |
+| `to_anthropic_tools()` | Export in Anthropic tool-use format |
+| `to_mcp_tools()` | Export in MCP (Model Context Protocol) format |
 
-### Custom Parameter Validation
+### Built-in Tools
+
+| Tool | Name | Description |
+|------|------|-------------|
+| `ReadFileTool` | `read_file` | Read file content with path validation, size limits, and SSRF protection |
+| `WriteFileTool` | `write_file` | Write/append to files with blocked paths and size enforcement |
+| `WebRequestTool` | `web_request` | HTTP GET/POST with SSRF protection and streaming response limits |
+
+### Decorator Registration
 
 ```python
-from qm_tools import ToolParameter
+from qm_tools import register_tool, get_default_registry, AbstractTool
 
-def validate_positive(value):
-    if value <= 0:
-        raise ValueError("Value must be positive")
-    return value
+@register_tool
+class MyTool(AbstractTool):
+    ...
 
-param = ToolParameter(
-    name="count",
-    description="Number of items",
-    type="number",
-    required=True,
-    validation=validate_positive,
-)
+# The tool is automatically registered in the default registry
+registry = get_default_registry()
+tool = registry.get("my_tool")
 ```
 
-### Error Handling in Handlers
+### Plugin Discovery
 
-```python
-class SafeHandler(Handler):
-    """A handler with error recovery."""
+Register tools as entry points in your `pyproject.toml`:
 
-    def handle(self, data: dict) -> dict:
-        try:
-            # Risky operation
-            return self._process(data)
-        except Exception as e:
-            print(f"Handler error: {e}")
-            # Either recover or re-raise
-            data["error"] = str(e)
-            return data
-
-    def _process(self, data: dict) -> dict:
-        raise NotImplementedError()
+```toml
+[project.entry-points.qm_tools]
+my_tool = "my_package.tools:MyTool"
 ```
 
-### Tool Registry
+The registry discovers and loads these automatically on first access.
+
+## Integration with Sibling Packages
+
+### With qm-nodes (tool execution in agent graphs)
 
 ```python
-from qm_tools import ToolRegistry
+from qm_tools import ToolRegistry, ReadFileTool
+from qm_nodes.protocols import ProgramContainer, ParameterContainer
 
 registry = ToolRegistry()
-registry.register(CalculatorTool())
-registry.register(StringTool())
+registry.register(ReadFileTool())
 
-# Lookup by name and version
-tool = registry.get("calculator", "1.0.0")
-
-# List all tools
-all_tools = registry.list_tools()
+# Convert tool descriptors to node-compatible format
+for desc in registry.list_tools():
+    openai_format = desc.to_openai_tools()
+    # Pass to agent nodes for LLM function calling
 ```
 
-## Testing Tools
+### With qm-providers (LLM provider integration)
 
 ```python
-import pytest
-from qm_tools import ToolResult
+from qm_tools import ToolRegistry, ReadFileTool, WriteFileTool
 
-def test_calculator_add():
-    tool = CalculatorTool()
-    result = tool.run(operation="add", a=2, b=3)
+registry = ToolRegistry()
+registry.register(ReadFileTool())
+registry.register(WriteFileTool())
 
-    assert result.success
-    assert result.data["result"] == 5
-
-def test_calculator_divide_by_zero():
-    tool = CalculatorTool()
-    result = tool.run(operation="divide", a=5, b=0)
-
-    assert not result.success
-    assert "Division by zero" in result.error
+# Export tools in the format your LLM provider expects
+anthropic_tools = registry.to_anthropic_tools()
+openai_tools = registry.to_openai_tools()
 ```
-
-## Best Practices
-
-1. **Single Responsibility**: Each tool should do one thing well
-2. **Clear Parameters**: Document what each parameter does and what values it accepts
-3. **Graceful Errors**: Return ToolResult with error message instead of raising exceptions (unless fatal)
-4. **Versioning**: Follow semantic versioning for tool versions
-5. **Composability**: Design tools to work together; avoid tight coupling
-6. **Testing**: Test tools in isolation before integrating into chains
-7. **Immutability**: Avoid side effects in handler chains; return new data instead of mutating input
 
 ## Contributing
 
-Contributions welcome! Please ensure:
-
-- All tests pass: `pytest`
-- Code is formatted: `ruff format`
-- Types check: `mypy`
-- No lint errors: `ruff check`
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
 
 ## License
 
-Apache License 2.0 — see LICENSE file for details.
-
-## Related Projects
-
-- **qm-graph** — Agent graph definition and serialization
-- **qm-engine** — DAG-based flow execution engine
-- **qm-providers** — LLM provider abstractions
-- **Quartermaster** — Full AI agent ecosystem platform
+Apache License 2.0 -- see [LICENSE](../LICENSE) for details.
