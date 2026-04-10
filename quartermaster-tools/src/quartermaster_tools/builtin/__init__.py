@@ -11,8 +11,15 @@ Provides ready-to-use tool implementations:
 - Filesystem tools: list, find, grep, info, move, delete, copy, mkdir
 - Code execution tools: Python, Shell, JavaScript, Math evaluation
 - Data tools: CSV, JSON, YAML, XML parsing, format conversion, filtering
+- Memory tools: Set, Get, List in-memory variables
+- Database tools: SQLite query, write, and schema introspection
 """
 
+from quartermaster_tools.builtin.database import (
+    SQLiteQueryTool,
+    SQLiteSchemaTool,
+    SQLiteWriteTool,
+)
 from quartermaster_tools.builtin.data import (
     ConvertFormatTool,
     DataFilterTool,
@@ -39,6 +46,11 @@ from quartermaster_tools.builtin.filesystem import (
     ListDirectoryTool,
     MoveFileTool,
 )
+from quartermaster_tools.builtin.memory import (
+    GetVariableTool,
+    ListVariablesTool,
+    SetVariableTool,
+)
 from quartermaster_tools.builtin.web_request import WebRequestTool
 from quartermaster_tools.builtin.web_search import (
     DuckDuckGoSearchTool,
@@ -49,17 +61,19 @@ from quartermaster_tools.builtin.web_search import (
 __all__ = [
     "ConvertFormatTool",
     "CopyFileTool",
-    "DuckDuckGoSearchTool",
-    "DataFilterTool",
-    "EvalMathTool",
     "CreateDirectoryTool",
+    "DataFilterTool",
     "DeleteFileTool",
+    "DuckDuckGoSearchTool",
+    "EvalMathTool",
     "FileInfoTool",
     "FindFilesTool",
+    "GetVariableTool",
     "GrepTool",
     "JavaScriptExecutorTool",
     "JsonApiTool",
     "ListDirectoryTool",
+    "ListVariablesTool",
     "MoveFileTool",
     "ParseCSVTool",
     "ParseJSONTool",
@@ -67,6 +81,10 @@ __all__ = [
     "ParseYAMLTool",
     "PythonExecutorTool",
     "ReadFileTool",
+    "SQLiteQueryTool",
+    "SQLiteSchemaTool",
+    "SQLiteWriteTool",
+    "SetVariableTool",
     "ShellExecutorTool",
     "WebRequestTool",
     "WebScraperTool",
