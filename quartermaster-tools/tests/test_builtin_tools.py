@@ -266,7 +266,7 @@ class TestWebRequestTool:
 
     def test_unsupported_method(self) -> None:
         tool = WebRequestTool()
-        result = tool.run(url="https://example.com", method="DELETE")
+        result = tool.run(url="https://example.com", method="OPTIONS")
 
         assert result.success is False
         assert "unsupported" in result.error.lower()
