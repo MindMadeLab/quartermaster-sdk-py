@@ -1,0 +1,29 @@
+services:
+  code-runner:
+    build: .
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DEFAULT_TIMEOUT=${DEFAULT_TIMEOUT:-30}
+      - MAX_TIMEOUT=${MAX_TIMEOUT:-300}
+      - DEFAULT_MEMORY=${DEFAULT_MEMORY:-256m}
+      - MAX_MEMORY_MB=${MAX_MEMORY_MB:-2048}
+      - DEFAULT_CPU_SHARES=${DEFAULT_CPU_SHARES:-512}
+      - MAX_CPU_CORES=${MAX_CPU_CORES:-4.0}
+      - DEFAULT_DISK=${DEFAULT_DISK:-512m}
+      - MAX_DISK_MB=${MAX_DISK_MB:-5000}
+      - CLEANUP_INTERVAL_HOURS=${CLEANUP_INTERVAL_HOURS:-24}
+      - CLEANUP_MAX_AGE_DAYS=${CLEANUP_MAX_AGE_DAYS:-7}
+      # Authentication (uncomment to enable):
+      # - CODE_RUNNER_API_KEYS=your-secret-key-1,your-secret-key-2
+      # - AUTH_TOKEN=your-bearer-token
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
