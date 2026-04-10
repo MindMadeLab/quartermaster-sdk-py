@@ -7,10 +7,10 @@ and building a validated AgentVersion object.
 from __future__ import annotations
 
 try:
-    from qm_graph.builder import GraphBuilder
-    from qm_graph.enums import NodeType
+    from quartermaster_graph.builder import GraphBuilder
+    from quartermaster_graph.enums import NodeType
 except ImportError:
-    raise SystemExit("Install qm-graph first:  pip install -e qm-graph")
+    raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
 
 
 def main() -> None:

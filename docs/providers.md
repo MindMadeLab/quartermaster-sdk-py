@@ -1,6 +1,6 @@
 # LLM Providers
 
-The `qm-providers` package provides a unified abstraction over multiple LLM providers. All providers implement the same `AbstractLLMProvider` interface, so switching between OpenAI, Anthropic, Google, Groq, or xAI requires only a configuration change.
+The `quartermaster-providers` package provides a unified abstraction over multiple LLM providers. All providers implement the same `AbstractLLMProvider` interface, so switching between OpenAI, Anthropic, Google, Groq, or xAI requires only a configuration change.
 
 ## Supported Providers
 
@@ -20,9 +20,9 @@ The `ProviderRegistry` manages provider instances with lazy initialization and a
 ### Registration
 
 ```python
-from qm_providers import ProviderRegistry
-from qm_providers.providers.openai import OpenAIProvider
-from qm_providers.providers.anthropic import AnthropicProvider
+from quartermaster_providers import ProviderRegistry
+from quartermaster_providers.providers.openai import OpenAIProvider
+from quartermaster_providers.providers.anthropic import AnthropicProvider
 
 registry = ProviderRegistry()
 
@@ -69,7 +69,7 @@ The registry uses regex patterns to map model names to providers:
 A module-level default registry is available for convenience:
 
 ```python
-from qm_providers.registry import get_default_registry
+from quartermaster_providers.registry import get_default_registry
 
 registry = get_default_registry()
 registry.register("openai", OpenAIProvider, api_key="sk-...")
@@ -80,7 +80,7 @@ registry.register("openai", OpenAIProvider, api_key="sk-...")
 The `LLMConfig` dataclass unifies configuration across all providers:
 
 ```python
-from qm_providers.config import LLMConfig
+from quartermaster_providers.config import LLMConfig
 
 config = LLMConfig(
     model="gpt-4o",
@@ -228,9 +228,9 @@ output_price = provider.get_cost_per_1k_output_tokens("gpt-4o")
 Implement `AbstractLLMProvider` and register it:
 
 ```python
-from qm_providers.base import AbstractLLMProvider
-from qm_providers.config import LLMConfig
-from qm_providers.types import TokenResponse, NativeResponse
+from quartermaster_providers.base import AbstractLLMProvider
+from quartermaster_providers.config import LLMConfig
+from quartermaster_providers.types import TokenResponse, NativeResponse
 
 class MyCustomProvider(AbstractLLMProvider):
     def __init__(self, api_key: str, base_url: str):

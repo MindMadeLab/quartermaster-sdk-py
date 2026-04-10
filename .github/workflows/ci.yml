@@ -14,13 +14,13 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
         package:
-          - qm-mcp-client
-          - qm-code-runner
-          - qm-providers
-          - qm-nodes
-          - qm-tools
-          - qm-graph
-          - qm-engine
+          - quartermaster-mcp-client
+          - quartermaster-code-runner
+          - quartermaster-providers
+          - quartermaster-nodes
+          - quartermaster-tools
+          - quartermaster-graph
+          - quartermaster-engine
 
     steps:
       - uses: actions/checkout@v4

@@ -4,7 +4,7 @@ This document covers security features built into Quartermaster and best practic
 
 ## Code Runner Sandboxing
 
-The `qm-code-runner` package executes user-provided code inside Docker containers with multiple layers of isolation.
+The `quartermaster-code-runner` package executes user-provided code inside Docker containers with multiple layers of isolation.
 
 ### Container Isolation
 
@@ -34,7 +34,7 @@ The code runner supports multiple language runtimes, each using a purpose-built 
 The code runner exposes a FastAPI HTTP API that supports two authentication modes:
 
 ```python
-from qm_code_runner.security import configure_auth
+from quartermaster_code_runner.security import configure_auth
 
 # API key authentication (X-API-Key header)
 configure_auth(api_keys=["key-1", "key-2"])
@@ -56,8 +56,8 @@ Never hardcode API keys in source code. Use environment variables:
 
 ```python
 import os
-from qm_providers import ProviderRegistry
-from qm_providers.providers.openai import OpenAIProvider
+from quartermaster_providers import ProviderRegistry
+from quartermaster_providers.providers.openai import OpenAIProvider
 
 registry = ProviderRegistry()
 registry.register("openai", OpenAIProvider, api_key=os.environ["OPENAI_API_KEY"])
@@ -99,7 +99,7 @@ if not result:
 Add custom validation functions to `ToolParameter` for domain-specific checks:
 
 ```python
-from qm_tools.types import ToolParameter
+from quartermaster_tools.types import ToolParameter
 
 def validate_path(value):
     import os
@@ -136,8 +136,8 @@ Timed-out processes return a `ToolResult` with `success=False`.
 When using `ErrorStrategy.RETRY`, always set a reasonable `max_retries` limit:
 
 ```python
-from qm_graph.models import GraphNode
-from qm_graph.enums import NodeType, ErrorStrategy
+from quartermaster_graph.models import GraphNode
+from quartermaster_graph.enums import NodeType, ErrorStrategy
 
 node = GraphNode(
     type=NodeType.INSTRUCTION,
@@ -164,7 +164,7 @@ node = GraphNode(
 
 ## Graph Validation
 
-The `validate_graph()` function in `qm-graph` catches structural issues that could cause runtime problems:
+The `validate_graph()` function in `quartermaster-graph` catches structural issues that could cause runtime problems:
 
 - **Cycles** -- Unintended cycles could cause infinite execution loops. The validator detects cycles and raises an error (cycles involving `Loop` nodes produce a warning instead).
 - **Orphan nodes** -- Unreachable nodes are flagged, which may indicate a broken graph.
@@ -173,7 +173,7 @@ The `validate_graph()` function in `qm-graph` catches structural issues that cou
 Always validate graphs before deploying them to production:
 
 ```python
-from qm_graph.validation import validate_graph
+from quartermaster_graph.validation import validate_graph
 
 errors = validate_graph(agent_version)
 for error in errors:

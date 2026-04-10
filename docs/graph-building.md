@@ -1,6 +1,6 @@
 # Graph Building
 
-Agent workflows in Quartermaster are represented as directed graphs. The `qm-graph` package provides a fluent builder API, Pydantic-based models, and a validation system for constructing and verifying these graphs.
+Agent workflows in Quartermaster are represented as directed graphs. The `quartermaster-graph` package provides a fluent builder API, Pydantic-based models, and a validation system for constructing and verifying these graphs.
 
 ## Core Concepts
 
@@ -16,7 +16,7 @@ The `GraphBuilder` class provides a fluent (chainable) interface for constructin
 ### Creating a Builder
 
 ```python
-from qm_graph import GraphBuilder
+from quartermaster_graph import GraphBuilder
 
 builder = GraphBuilder("My Agent", description="Processes user queries")
 ```
@@ -145,7 +145,7 @@ builder.sub_agent("Delegate", agent_id="agent-uuid-here")
 builder.loop("Retry loop", max_iterations=5, break_condition="success == True")
 
 # Generic node (any NodeType)
-from qm_graph.enums import NodeType
+from quartermaster_graph.enums import NodeType
 builder.node(NodeType.SUMMARIZE, name="Summarize conversation")
 ```
 
@@ -304,8 +304,8 @@ The `validate_graph()` function checks these rules before execution:
 Each `GraphNode` carries configuration beyond its type:
 
 ```python
-from qm_graph.models import GraphNode
-from qm_graph.enums import NodeType, ErrorStrategy, ThoughtType, TraverseIn, TraverseOut
+from quartermaster_graph.models import GraphNode
+from quartermaster_graph.enums import NodeType, ErrorStrategy, ThoughtType, TraverseIn, TraverseOut
 
 node = GraphNode(
     type=NodeType.INSTRUCTION,

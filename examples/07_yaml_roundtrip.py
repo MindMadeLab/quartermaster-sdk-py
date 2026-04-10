@@ -7,10 +7,10 @@ persistence, and to_json / from_json for programmatic use.
 from __future__ import annotations
 
 try:
-    from qm_graph.builder import GraphBuilder
-    from qm_graph.serialization import to_yaml, from_yaml, to_json, from_json
+    from quartermaster_graph.builder import GraphBuilder
+    from quartermaster_graph.serialization import to_yaml, from_yaml, to_json, from_json
 except ImportError:
-    raise SystemExit("Install qm-graph first:  pip install -e qm-graph")
+    raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
 
 
 def main() -> None:

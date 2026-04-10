@@ -8,10 +8,10 @@ and more.
 from __future__ import annotations
 
 try:
-    from qm_graph.templates import Templates
-    from qm_graph.enums import NodeType
+    from quartermaster_graph.templates import Templates
+    from quartermaster_graph.enums import NodeType
 except ImportError:
-    raise SystemExit("Install qm-graph first:  pip install -e qm-graph")
+    raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
 
 
 def _print_graph(name: str, graph) -> None:

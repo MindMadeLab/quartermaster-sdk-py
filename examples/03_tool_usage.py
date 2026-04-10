@@ -9,11 +9,11 @@ from __future__ import annotations
 from typing import Any
 
 try:
-    from qm_tools.base import AbstractTool
-    from qm_tools.registry import ToolRegistry
-    from qm_tools.types import ToolDescriptor, ToolParameter, ToolResult
+    from quartermaster_tools.base import AbstractTool
+    from quartermaster_tools.registry import ToolRegistry
+    from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
 except ImportError:
-    raise SystemExit("Install qm-tools first:  pip install -e qm-tools")
+    raise SystemExit("Install quartermaster-tools first:  pip install -e quartermaster-tools")
 
 
 class CalculatorTool(AbstractTool):

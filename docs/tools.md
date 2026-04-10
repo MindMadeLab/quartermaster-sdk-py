@@ -1,6 +1,6 @@
 # Tool System
 
-The `qm-tools` package provides a framework for defining, registering, and executing tools that AI agents can invoke. Tools are units of functionality -- file operations, web requests, calculations, or any custom logic -- that extend what an agent can do beyond LLM text generation.
+The `quartermaster-tools` package provides a framework for defining, registering, and executing tools that AI agents can invoke. Tools are units of functionality -- file operations, web requests, calculations, or any custom logic -- that extend what an agent can do beyond LLM text generation.
 
 ## Core Types
 
@@ -9,8 +9,8 @@ The `qm-tools` package provides a framework for defining, registering, and execu
 All tools inherit from `AbstractTool` and implement five methods:
 
 ```python
-from qm_tools.base import AbstractTool
-from qm_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.base import AbstractTool
+from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
 
 class MyTool(AbstractTool):
     def name(self) -> str:
@@ -71,7 +71,7 @@ Defines a single input parameter for a tool:
 Defines a selectable option for a parameter:
 
 ```python
-from qm_tools.types import ToolParameter, ToolParameterOption
+from quartermaster_tools.types import ToolParameter, ToolParameterOption
 
 param = ToolParameter(
     name="format",
@@ -118,7 +118,7 @@ The `ToolRegistry` manages tool instances with version-aware lookup, decorator r
 ### Basic Usage
 
 ```python
-from qm_tools.registry import ToolRegistry
+from quartermaster_tools.registry import ToolRegistry
 
 registry = ToolRegistry()
 
@@ -151,7 +151,7 @@ registry.clear()  # remove all
 Use the `@register_tool` decorator to auto-register with the module-level default registry:
 
 ```python
-from qm_tools.registry import register_tool, get_default_registry
+from quartermaster_tools.registry import register_tool, get_default_registry
 
 @register_tool
 class WebSearchTool(AbstractTool):
@@ -170,13 +170,13 @@ The registry can auto-discover tools from installed packages using Python entry 
 
 ```toml
 # In your package's pyproject.toml
-[project.entry-points.qm_tools]
+[project.entry-points.quartermaster_tools]
 my_tool = "my_package.tools:MyTool"
 ```
 
 ```python
 registry = ToolRegistry()
-registry.load_plugins()  # discovers and registers all qm_tools entry points
+registry.load_plugins()  # discovers and registers all quartermaster_tools entry points
 
 # Or let it happen lazily on first access
 tool = registry.get("my_tool")  # triggers load_plugins() if not yet called
@@ -215,7 +215,7 @@ result = tool.safe_run()               # ToolResult(success=False, error="Missin
 For tools that execute local subprocess commands, extend `AbstractLocalTool`:
 
 ```python
-from qm_tools.base import AbstractLocalTool
+from quartermaster_tools.base import AbstractLocalTool
 
 class GitStatusTool(AbstractLocalTool):
     def name(self) -> str:
@@ -296,16 +296,16 @@ openai_tool = descriptor.to_openai_tools()
 # Anthropic format
 anthropic_tool = descriptor.to_anthropic_tools()
 
-# qm-providers ToolDefinition (requires qm-providers installed)
+# quartermaster-providers ToolDefinition (requires quartermaster-providers installed)
 tool_def = descriptor.to_tool_definition()
 ```
 
-## Bridging to qm-providers
+## Bridging to quartermaster-providers
 
-The `ToolDescriptor.to_tool_definition()` method converts a tool descriptor to a `qm_providers.types.ToolDefinition`, which can be passed directly to any `AbstractLLMProvider.generate_tool_parameters()` call:
+The `ToolDescriptor.to_tool_definition()` method converts a tool descriptor to a `quartermaster_providers.types.ToolDefinition`, which can be passed directly to any `AbstractLLMProvider.generate_tool_parameters()` call:
 
 ```python
-from qm_providers.types import ToolDefinition
+from quartermaster_providers.types import ToolDefinition
 
 # Convert tool descriptors for use with providers
 tool_defs = [tool.info().to_tool_definition() for tool in my_tools]
@@ -323,7 +323,7 @@ for call in response.tool_calls:
     result = tool.safe_run(**call.parameters)
 ```
 
-This bridge requires the optional `qm-providers` dependency. Install with `pip install qm-tools[llm]`.
+This bridge requires the optional `quartermaster-providers` dependency. Install with `pip install quartermaster-tools[llm]`.
 
 ## See Also
 

@@ -2,7 +2,7 @@
 
 ## Repo Housekeeping (Do First)
 
-- [ ] Delete duplicate root-level `qm-*` folders (keep only `packages/` subfolder)
+- [ ] Delete duplicate root-level `quartermaster-*` folders (keep only `packages/` subfolder)
 - [ ] Move all packages under `packages/` if not already
 - [ ] Add root `LICENSE` file (Apache 2.0)
 - [ ] Add root `.gitignore`
@@ -15,26 +15,26 @@
 
 Packages currently define their own types independently. Before v1.0:
 
-- `qm-graph` should be THE source of truth for: `NodeType`, `TraverseIn`, `TraverseOut`, `ThoughtType`, `MessageType`, `ErrorStrategy`, `GraphNode`, `GraphEdge`, `AgentVersion`
-- `qm-providers` should be THE source of truth for: `Message`, `MessageRole`, `LLMConfig`, `TokenResponse`, `ToolDefinition`
-- `qm-engine` should IMPORT from `qm-graph` and `qm-providers` instead of redefining types in its own `types.py`
-- `qm-nodes` should IMPORT enums from `qm-graph` instead of its own `enums.py`
-- `qm-tools` should IMPORT `ToolDefinition` from `qm-providers` for JSON Schema bridge
+- `quartermaster-graph` should be THE source of truth for: `NodeType`, `TraverseIn`, `TraverseOut`, `ThoughtType`, `MessageType`, `ErrorStrategy`, `GraphNode`, `GraphEdge`, `AgentVersion`
+- `quartermaster-providers` should be THE source of truth for: `Message`, `MessageRole`, `LLMConfig`, `TokenResponse`, `ToolDefinition`
+- `quartermaster-engine` should IMPORT from `quartermaster-graph` and `quartermaster-providers` instead of redefining types in its own `types.py`
+- `quartermaster-nodes` should IMPORT enums from `quartermaster-graph` instead of its own `enums.py`
+- `quartermaster-tools` should IMPORT `ToolDefinition` from `quartermaster-providers` for JSON Schema bridge
 
 This is the #1 architectural task after cleanup.
 
 ## Per-Package Priority (What Agents Should Focus On)
 
-### qm-mcp-client — READY TO PUBLISH
+### quartermaster-mcp-client — READY TO PUBLISH
 Status: 100% implemented, 98 tests, 96.5% coverage
 
 Next steps:
 - [ ] Final review of README examples (make sure they actually run)
-- [ ] Test on PyPI Test: `pip install --index-url https://test.pypi.org/simple/ qm-mcp-client`
+- [ ] Test on PyPI Test: `pip install --index-url https://test.pypi.org/simple/ quartermaster-mcp-client`
 - [ ] Publish to PyPI
 - [ ] Create GitHub release v0.1.0
 
-### qm-providers — READY TO PUBLISH
+### quartermaster-providers — READY TO PUBLISH
 Status: 100% implemented, full test suite
 
 Next steps:
@@ -43,7 +43,7 @@ Next steps:
 - [ ] Publish to PyPI
 - [ ] Create GitHub release v0.1.0
 
-### qm-code-runner — NEEDS RUNTIME BUILDS
+### quartermaster-code-runner — NEEDS RUNTIME BUILDS
 Status: ~85% implemented, API complete
 
 Next steps:
@@ -54,11 +54,11 @@ Next steps:
 - [ ] Publish Python package to PyPI
 - [ ] Create GitHub release v0.1.0
 
-### qm-engine — NEARLY READY
+### quartermaster-engine — NEARLY READY
 Status: ~90% implemented, 126 tests
 
 Next steps:
-- [ ] Wire up imports from `qm-graph` types (replace internal `types.py` duplication)
+- [ ] Wire up imports from `quartermaster-graph` types (replace internal `types.py` duplication)
 - [ ] Implement `AsyncDispatcher`
 - [ ] Add loop test (Start → If → loop back or End)
 - [ ] Add sub-agent test (nested flow execution)
@@ -66,12 +66,12 @@ Next steps:
 - [ ] Write architecture guide (how traverse_in → think → traverse_out works)
 - [ ] Publish to PyPI as v0.1.0-alpha
 
-### qm-nodes — NEEDS MORE TESTING
+### quartermaster-nodes — NEEDS MORE TESTING
 Status: ~75% implemented, 38 node types extracted
 
 Next steps:
-- [ ] Import enums from `qm-graph` instead of own `enums.py`
-- [ ] Import `LLMConfig`, `Message` from `qm-providers` instead of own protocols
+- [ ] Import enums from `quartermaster-graph` instead of own `enums.py`
+- [ ] Import `LLMConfig`, `Message` from `quartermaster-providers` instead of own protocols
 - [ ] Write unit tests for top 10 most-used nodes:
   1. InstructionNodeV1
   2. Decision1
@@ -86,20 +86,20 @@ Next steps:
 - [ ] Write custom node creation guide
 - [ ] Publish to PyPI as v0.1.0-alpha
 
-### qm-tools — NEEDS BUILT-IN TOOLS
+### quartermaster-tools — NEEDS BUILT-IN TOOLS
 Status: ~80% implemented, core abstraction done
 
 Next steps:
-- [ ] Import `ToolDefinition` from `qm-providers` for JSON Schema bridge
+- [ ] Import `ToolDefinition` from `quartermaster-providers` for JSON Schema bridge
 - [ ] Implement at least 3 built-in tools as examples:
   1. `WebRequestTool` — HTTP GET/POST
   2. `ReadFileTool` — Read file content
-  3. `RunPythonTool` — Execute Python via qm-code-runner
+  3. `RunPythonTool` — Execute Python via quartermaster-code-runner
 - [ ] Add `to_openai_tools()`, `to_anthropic_tools()` format converters
 - [ ] Write tests for registry, parameter validation, tool execution
 - [ ] Publish to PyPI as v0.1.0-alpha
 
-### qm-graph — NEEDS INTEGRATION TESTING
+### quartermaster-graph — NEEDS INTEGRATION TESTING
 Status: ~80% implemented, schema + builder done
 
 Next steps:
@@ -112,11 +112,11 @@ Next steps:
 
 ## Publication Order
 
-1. **Week 1:** `qm-mcp-client` + `qm-providers` (standalone, no deps on each other)
-2. **Week 2:** `qm-code-runner` + `qm-tools` (standalone)
-3. **Week 3:** `qm-graph` (standalone, Pydantic only)
-4. **Week 4:** `qm-nodes` (depends on qm-graph, qm-providers, qm-tools)
-5. **Week 5:** `qm-engine` (depends on all above)
+1. **Week 1:** `quartermaster-mcp-client` + `quartermaster-providers` (standalone, no deps on each other)
+2. **Week 2:** `quartermaster-code-runner` + `quartermaster-tools` (standalone)
+3. **Week 3:** `quartermaster-graph` (standalone, Pydantic only)
+4. **Week 4:** `quartermaster-nodes` (depends on quartermaster-graph, quartermaster-providers, quartermaster-tools)
+5. **Week 5:** `quartermaster-engine` (depends on all above)
 6. **Week 6:** `quartermaster` meta-package (installs everything)
 
 ## Open-Core Alignment Check
@@ -124,13 +124,13 @@ Next steps:
 Everything aligns with the strategy:
 
 OPEN (framework/SDK):
-- qm-mcp-client ✅
-- qm-code-runner ✅
-- qm-providers ✅
-- qm-tools ✅
-- qm-nodes ✅
-- qm-graph ✅
-- qm-engine ✅
+- quartermaster-mcp-client ✅
+- quartermaster-code-runner ✅
+- quartermaster-providers ✅
+- quartermaster-tools ✅
+- quartermaster-nodes ✅
+- quartermaster-graph ✅
+- quartermaster-engine ✅
 
 PROPRIETARY (platform/revenue):
 - Visual Agent Graph Editor (React/Electron) — NOT in this repo ✅

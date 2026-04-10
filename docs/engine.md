@@ -1,16 +1,16 @@
 # Execution Engine
 
-The `qm-engine` package is the runtime that executes agent graphs. It handles traversal, branching, merging, memory management, message routing, error handling, and streaming. The central class is `FlowRunner`.
+The `quartermaster-engine` package is the runtime that executes agent graphs. It handles traversal, branching, merging, memory management, message routing, error handling, and streaming. The central class is `FlowRunner`.
 
 ## FlowRunner
 
 ### Construction
 
 ```python
-from qm_engine import FlowRunner
-from qm_engine.nodes import SimpleNodeRegistry
-from qm_engine.stores.memory_store import InMemoryStore
-from qm_engine.dispatchers.sync_dispatcher import SyncDispatcher
+from quartermaster_engine import FlowRunner
+from quartermaster_engine.nodes import SimpleNodeRegistry
+from quartermaster_engine.stores.memory_store import InMemoryStore
+from quartermaster_engine.dispatchers.sync_dispatcher import SyncDispatcher
 
 runner = FlowRunner(
     graph=graph,                          # AgentVersion from GraphBuilder
@@ -37,7 +37,7 @@ print(result.node_results)       # Dict[UUID, NodeResult] for each node
 
 ```python
 import asyncio
-from qm_engine.events import (
+from quartermaster_engine.events import (
     NodeStarted, NodeFinished, TokenGenerated,
     FlowFinished, FlowError, UserInputRequired,
 )
@@ -122,7 +122,7 @@ class Dispatcher:
 Executes nodes immediately in the calling thread. No parallelism. Simple and predictable.
 
 ```python
-from qm_engine.dispatchers.sync_dispatcher import SyncDispatcher
+from quartermaster_engine.dispatchers.sync_dispatcher import SyncDispatcher
 
 runner = FlowRunner(graph=graph, node_registry=registry, dispatcher=SyncDispatcher())
 ```
@@ -134,7 +134,7 @@ Best for: testing, debugging, simple sequential flows.
 Executes nodes in parallel using a `ThreadPoolExecutor`. Ideal for I/O-bound workloads (LLM API calls).
 
 ```python
-from qm_engine.dispatchers.thread_dispatcher import ThreadDispatcher
+from quartermaster_engine.dispatchers.thread_dispatcher import ThreadDispatcher
 
 runner = FlowRunner(
     graph=graph,
@@ -152,7 +152,7 @@ Best for: production deployments with parallel branches, I/O-bound LLM calls.
 Executes nodes as `asyncio.Task` instances. For use in async web applications (FastAPI, aiohttp).
 
 ```python
-from qm_engine.dispatchers.async_dispatcher import AsyncDispatcher
+from quartermaster_engine.dispatchers.async_dispatcher import AsyncDispatcher
 
 runner = FlowRunner(
     graph=graph,
@@ -191,7 +191,7 @@ class ExecutionStore(Protocol):
 Default store. All state is held in Python dictionaries. Fast, but lost when the process exits.
 
 ```python
-from qm_engine.stores.memory_store import InMemoryStore
+from quartermaster_engine.stores.memory_store import InMemoryStore
 
 store = InMemoryStore()
 runner = FlowRunner(graph=graph, node_registry=registry, store=store)
@@ -204,7 +204,7 @@ Best for: testing, short-lived scripts, development.
 Persists state to a SQLite database file. Survives process restarts.
 
 ```python
-from qm_engine.stores.sqlite_store import SQLiteStore
+from quartermaster_engine.stores.sqlite_store import SQLiteStore
 
 store = SQLiteStore(db_path="./flow_state.db")
 runner = FlowRunner(graph=graph, node_registry=registry, store=store)
@@ -243,8 +243,8 @@ Each node has an `error_handling` strategy and related configuration:
 ### Retry Configuration
 
 ```python
-from qm_graph.models import GraphNode
-from qm_graph.enums import NodeType, ErrorStrategy
+from quartermaster_graph.models import GraphNode
+from quartermaster_graph.enums import NodeType, ErrorStrategy
 
 node = GraphNode(
     type=NodeType.INSTRUCTION,

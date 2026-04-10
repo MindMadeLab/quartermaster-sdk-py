@@ -8,12 +8,12 @@ monorepo.  Each script is self-contained and can be executed directly.
 Install the packages in development mode from the repository root:
 
 ```bash
-pip install -e qm-graph
-pip install -e qm-providers
-pip install -e qm-tools
-pip install -e qm-tools[web]    # for WebRequestTool (needs httpx)
-pip install -e qm-engine
-pip install -e qm-mcp-client    # for the MCP example (needs httpx)
+pip install -e quartermaster-graph
+pip install -e quartermaster-providers
+pip install -e quartermaster-tools
+pip install -e quartermaster-tools[web]    # for WebRequestTool (needs httpx)
+pip install -e quartermaster-engine
+pip install -e quartermaster-mcp-client    # for the MCP example (needs httpx)
 ```
 
 ## Examples

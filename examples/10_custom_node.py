@@ -9,18 +9,18 @@ from __future__ import annotations
 from typing import Any
 
 try:
-    from qm_graph.builder import GraphBuilder
-    from qm_graph.enums import NodeType
+    from quartermaster_graph.builder import GraphBuilder
+    from quartermaster_graph.enums import NodeType
 except ImportError:
-    raise SystemExit("Install qm-graph first:  pip install -e qm-graph")
+    raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
 
 try:
-    from qm_engine.nodes import NodeResult, SimpleNodeRegistry
-    from qm_engine.context.execution_context import ExecutionContext
-    from qm_engine.runner.flow_runner import FlowRunner
-    from qm_engine.events import NodeStarted, NodeFinished
+    from quartermaster_engine.nodes import NodeResult, SimpleNodeRegistry
+    from quartermaster_engine.context.execution_context import ExecutionContext
+    from quartermaster_engine.runner.flow_runner import FlowRunner
+    from quartermaster_engine.events import NodeStarted, NodeFinished
 except ImportError:
-    raise SystemExit("Install qm-engine first:  pip install -e qm-engine")
+    raise SystemExit("Install quartermaster-engine first:  pip install -e quartermaster-engine")
 
 
 class SentimentAnalyzer:

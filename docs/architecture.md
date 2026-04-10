@@ -6,16 +6,16 @@ Quartermaster is a modular AI agent orchestration framework composed of seven in
 
 ```mermaid
 graph TD
-    APP[Your Application] --> ENGINE[qm-engine]
-    ENGINE --> GRAPH[qm-graph]
-    ENGINE --> NODES[qm-nodes]
-    ENGINE --> TOOLS[qm-tools]
-    NODES --> PROVIDERS[qm-providers]
+    APP[Your Application] --> ENGINE[quartermaster-engine]
+    ENGINE --> GRAPH[quartermaster-graph]
+    ENGINE --> NODES[quartermaster-nodes]
+    ENGINE --> TOOLS[quartermaster-tools]
+    NODES --> PROVIDERS[quartermaster-providers]
     NODES --> GRAPH
     TOOLS -.->|optional| PROVIDERS
 
-    MCP[qm-mcp-client] -.->|standalone| APP
-    CODE[qm-code-runner] -.->|standalone| APP
+    MCP[quartermaster-mcp-client] -.->|standalone| APP
+    CODE[quartermaster-code-runner] -.->|standalone| APP
 
     style ENGINE fill:#e1f5fe
     style GRAPH fill:#f3e5f5
@@ -30,13 +30,13 @@ graph TD
 
 | Package | Responsibility | Key Types |
 |---------|---------------|-----------|
-| **qm-graph** | Graph schema, builder API, validation | `GraphBuilder`, `GraphNode`, `GraphEdge`, `AgentVersion`, `NodeType` |
-| **qm-providers** | LLM provider abstraction and registry | `AbstractLLMProvider`, `ProviderRegistry`, `LLMConfig`, `TokenResponse` |
-| **qm-tools** | Tool definition, registry, JSON schema export | `AbstractTool`, `ToolRegistry`, `ToolDescriptor`, `ToolParameter` |
-| **qm-nodes** | Node execution protocols and type contracts | `NodeContext`, `LLMProvider`, `ThoughtHandle`, `ExpressionEvaluator` |
-| **qm-engine** | Flow execution, traversal, memory, streaming | `FlowRunner`, `FlowResult`, `ExecutionStore`, `SyncDispatcher` |
-| **qm-mcp-client** | MCP protocol client (SSE + Streamable HTTP) | Standalone, no framework dependency |
-| **qm-code-runner** | Docker-based sandboxed code execution | Standalone FastAPI service |
+| **quartermaster-graph** | Graph schema, builder API, validation | `GraphBuilder`, `GraphNode`, `GraphEdge`, `AgentVersion`, `NodeType` |
+| **quartermaster-providers** | LLM provider abstraction and registry | `AbstractLLMProvider`, `ProviderRegistry`, `LLMConfig`, `TokenResponse` |
+| **quartermaster-tools** | Tool definition, registry, JSON schema export | `AbstractTool`, `ToolRegistry`, `ToolDescriptor`, `ToolParameter` |
+| **quartermaster-nodes** | Node execution protocols and type contracts | `NodeContext`, `LLMProvider`, `ThoughtHandle`, `ExpressionEvaluator` |
+| **quartermaster-engine** | Flow execution, traversal, memory, streaming | `FlowRunner`, `FlowResult`, `ExecutionStore`, `SyncDispatcher` |
+| **quartermaster-mcp-client** | MCP protocol client (SSE + Streamable HTTP) | Standalone, no framework dependency |
+| **quartermaster-code-runner** | Docker-based sandboxed code execution | Standalone FastAPI service |
 
 ## Data Flow
 
@@ -76,7 +76,7 @@ sequenceDiagram
 
 ### Step-by-Step Execution
 
-1. **Graph Definition** -- The application builds a graph using `GraphBuilder` from `qm-graph`. The builder produces an `AgentVersion` containing nodes, edges, and a start node reference.
+1. **Graph Definition** -- The application builds a graph using `GraphBuilder` from `quartermaster-graph`. The builder produces an `AgentVersion` containing nodes, edges, and a start node reference.
 
 2. **Runner Initialization** -- A `FlowRunner` is created with the graph, a `NodeRegistry` (maps node types to executors), an `ExecutionStore` (state persistence), and a dispatcher (sync, threaded, or async).
 
@@ -99,15 +99,15 @@ sequenceDiagram
 
 ### Framework-Agnostic
 
-Quartermaster has zero dependencies on web frameworks, task queues, or ORMs. The `qm-nodes` package defines pure Python protocols (`NodeContext`, `LLMProvider`, `ThoughtHandle`) that decouple node logic from any specific runtime. You can integrate Quartermaster with FastAPI, Flask, a CLI tool, or a Jupyter notebook.
+Quartermaster has zero dependencies on web frameworks, task queues, or ORMs. The `quartermaster-nodes` package defines pure Python protocols (`NodeContext`, `LLMProvider`, `ThoughtHandle`) that decouple node logic from any specific runtime. You can integrate Quartermaster with FastAPI, Flask, a CLI tool, or a Jupyter notebook.
 
 ### Pluggable Storage
 
-The `ExecutionStore` protocol in `qm-engine` defines the interface for persisting flow state. Built-in implementations include `InMemoryStore` (testing) and `SQLiteStore` (local persistence). Implementing a Redis, PostgreSQL, or DynamoDB store requires only satisfying the protocol.
+The `ExecutionStore` protocol in `quartermaster-engine` defines the interface for persisting flow state. Built-in implementations include `InMemoryStore` (testing) and `SQLiteStore` (local persistence). Implementing a Redis, PostgreSQL, or DynamoDB store requires only satisfying the protocol.
 
 ### Pluggable Providers
 
-The `ProviderRegistry` in `qm-providers` manages LLM connections. Providers are registered by name and lazily instantiated. Model-to-provider inference is automatic: passing `model="gpt-4o"` resolves to the `openai` provider, `model="claude-sonnet-4-20250514"` resolves to `anthropic`, and so on.
+The `ProviderRegistry` in `quartermaster-providers` manages LLM connections. Providers are registered by name and lazily instantiated. Model-to-provider inference is automatic: passing `model="gpt-4o"` resolves to the `openai` provider, `model="claude-sonnet-4-20250514"` resolves to `anthropic`, and so on.
 
 ### Pluggable Dispatchers
 
@@ -118,26 +118,26 @@ The engine supports three dispatcher strategies:
 
 ### Validated Graphs
 
-The `validate_graph()` function in `qm-graph` checks for structural correctness before execution: exactly one Start node, at least one End node, no orphan nodes, no unintended cycles, and proper edge labeling on Decision/If/Switch nodes.
+The `validate_graph()` function in `quartermaster-graph` checks for structural correctness before execution: exactly one Start node, at least one End node, no orphan nodes, no unintended cycles, and proper edge labeling on Decision/If/Switch nodes.
 
 ## Cross-Package Communication
 
 Packages communicate through well-defined types:
 
-- `qm-graph` defines `GraphNode`, `GraphEdge`, `AgentVersion`, and `NodeType` -- these are the shared schema.
-- `qm-engine` imports graph types to traverse the structure and engine-specific types (`Message`, `MessageRole`) for internal messaging.
-- `qm-nodes` imports `LLMConfig` from `qm-providers` and defines protocols that both `qm-engine` and custom runtimes can satisfy.
-- `qm-tools` optionally bridges to `qm-providers` via `ToolDescriptor.to_tool_definition()`, but works standalone for tool registration and JSON schema export.
+- `quartermaster-graph` defines `GraphNode`, `GraphEdge`, `AgentVersion`, and `NodeType` -- these are the shared schema.
+- `quartermaster-engine` imports graph types to traverse the structure and engine-specific types (`Message`, `MessageRole`) for internal messaging.
+- `quartermaster-nodes` imports `LLMConfig` from `quartermaster-providers` and defines protocols that both `quartermaster-engine` and custom runtimes can satisfy.
+- `quartermaster-tools` optionally bridges to `quartermaster-providers` via `ToolDescriptor.to_tool_definition()`, but works standalone for tool registration and JSON schema export.
 
 ## Standalone Packages
 
 Two packages operate independently of the core framework:
 
-### qm-mcp-client
+### quartermaster-mcp-client
 
 A pure-Python client for the Model Context Protocol (MCP). It supports both SSE (Server-Sent Events) and Streamable HTTP transport modes. This package has no dependency on any other Quartermaster package and can be used in any Python project that needs to communicate with MCP servers.
 
-### qm-code-runner
+### quartermaster-code-runner
 
 A Docker-based sandboxed code execution service. It runs user-submitted code (Python, Node.js, Go, Rust, Deno, Bun) inside ephemeral containers with configurable memory, CPU, disk, network, and timeout limits. The service exposes a FastAPI HTTP API with optional API key or Bearer token authentication.
 
@@ -145,7 +145,7 @@ A Docker-based sandboxed code execution service. It runs user-submitted code (Py
 
 ### Protocols Over Inheritance
 
-The `qm-nodes` package uses Python `Protocol` classes (structural subtyping) rather than abstract base classes. This means node implementations do not need to import or inherit from any Quartermaster type -- they only need to match the expected method signatures.
+The `quartermaster-nodes` package uses Python `Protocol` classes (structural subtyping) rather than abstract base classes. This means node implementations do not need to import or inherit from any Quartermaster type -- they only need to match the expected method signatures.
 
 Key protocols:
 - `NodeContext` -- The context passed to a node during execution, providing metadata, memory, and thought state.
@@ -155,11 +155,11 @@ Key protocols:
 
 ### Pydantic Models
 
-The `qm-graph` package uses Pydantic v2 models for all graph schema types. This provides automatic JSON serialization, validation, and OpenAPI schema generation. Graph definitions can be serialized to JSON/YAML for storage and loaded back without loss.
+The `quartermaster-graph` package uses Pydantic v2 models for all graph schema types. This provides automatic JSON serialization, validation, and OpenAPI schema generation. Graph definitions can be serialized to JSON/YAML for storage and loaded back without loss.
 
 ### Dataclasses for Lightweight Types
 
-The `qm-providers` and `qm-tools` packages use standard Python dataclasses for configuration and result types (`LLMConfig`, `ToolDescriptor`, `ToolResult`, `TokenResponse`). This avoids the Pydantic dependency in packages where validation overhead is unnecessary.
+The `quartermaster-providers` and `quartermaster-tools` packages use standard Python dataclasses for configuration and result types (`LLMConfig`, `ToolDescriptor`, `ToolResult`, `TokenResponse`). This avoids the Pydantic dependency in packages where validation overhead is unnecessary.
 
 ## See Also
 

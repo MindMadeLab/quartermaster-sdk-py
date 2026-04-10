@@ -8,7 +8,7 @@ Thank you for considering a contribution to Quartermaster! This document explain
 
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) or pip
-- Docker (required only for `qm-code-runner`)
+- Docker (required only for `quartermaster-code-runner`)
 - Git
 
 ### Clone the repository
@@ -23,7 +23,7 @@ cd quartermaster-opensource
 Each package is self-contained. To work on a specific package:
 
 ```bash
-cd qm-providers
+cd quartermaster-providers
 pip install -e ".[dev]"
 ```
 
@@ -34,7 +34,7 @@ The `[dev]` extra installs test and development dependencies (pytest, ruff, mypy
 To install every package in development mode:
 
 ```bash
-for pkg in qm-mcp-client qm-code-runner qm-providers qm-tools qm-nodes qm-graph qm-engine; do
+for pkg in quartermaster-mcp-client quartermaster-code-runner quartermaster-providers quartermaster-tools quartermaster-nodes quartermaster-graph quartermaster-engine; do
     cd "$pkg" && pip install -e ".[dev]" && cd ..
 done
 ```
@@ -44,7 +44,7 @@ done
 ### Per-package
 
 ```bash
-cd qm-providers
+cd quartermaster-providers
 pytest
 ```
 
@@ -99,13 +99,13 @@ The repository is a monorepo with 7 independent packages:
 
 ```
 quartermaster-opensource/
-    qm-mcp-client/       # MCP protocol client (standalone)
-    qm-code-runner/       # Docker code execution (standalone)
-    qm-providers/         # LLM provider abstraction
-    qm-tools/             # Tool definition and registry
-    qm-nodes/             # Node type implementations
-    qm-graph/             # Graph schema and builder
-    qm-engine/            # Flow execution engine
+    quartermaster-mcp-client/       # MCP protocol client (standalone)
+    quartermaster-code-runner/       # Docker code execution (standalone)
+    quartermaster-providers/         # LLM provider abstraction
+    quartermaster-tools/             # Tool definition and registry
+    quartermaster-nodes/             # Node type implementations
+    quartermaster-graph/             # Graph schema and builder
+    quartermaster-engine/            # Flow execution engine
     examples/             # Runnable example scripts
     Makefile              # Cross-package commands
 ```
@@ -113,8 +113,8 @@ quartermaster-opensource/
 Each package follows the same internal layout:
 
 ```
-qm-<name>/
-    src/qm_<name>/        # Source code (or qm_<name>/ directly)
+quartermaster-<name>/
+    src/quartermaster_<name>/        # Source code (or quartermaster_<name>/ directly)
         __init__.py
         ...
     tests/
@@ -127,10 +127,10 @@ qm-<name>/
 
 Packages have a layered dependency structure:
 
-- **Standalone**: `qm-mcp-client`, `qm-code-runner` (no internal dependencies)
-- **Foundation**: `qm-providers` (used by nodes for LLM calls)
-- **Middle layer**: `qm-tools`, `qm-nodes`, `qm-graph`
-- **Top layer**: `qm-engine` (orchestrates everything)
+- **Standalone**: `quartermaster-mcp-client`, `quartermaster-code-runner` (no internal dependencies)
+- **Foundation**: `quartermaster-providers` (used by nodes for LLM calls)
+- **Middle layer**: `quartermaster-tools`, `quartermaster-nodes`, `quartermaster-graph`
+- **Top layer**: `quartermaster-engine` (orchestrates everything)
 
 ## Pull Request Process
 

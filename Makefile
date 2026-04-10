@@ -1,6 +1,6 @@
 .PHONY: test-all lint-all typecheck-all
 
-PACKAGES = qm-mcp-client qm-code-runner qm-providers qm-nodes qm-tools qm-graph qm-engine
+PACKAGES = quartermaster-mcp-client quartermaster-code-runner quartermaster-providers quartermaster-nodes quartermaster-tools quartermaster-graph quartermaster-engine
 
 test-all:
 	@for pkg in $(PACKAGES); do \

@@ -1,6 +1,6 @@
 """End-to-end pipeline: build graph + configure providers + run engine.
 
-Ties together qm-graph, qm-providers, and qm-engine to show the full
+Ties together quartermaster-graph, quartermaster-providers, and quartermaster-engine to show the full
 Quartermaster execution flow.  Uses in-memory stores and a stub node
 registry so the example runs without external API keys.
 """
@@ -11,18 +11,18 @@ from typing import Any
 from uuid import uuid4
 
 try:
-    from qm_graph.builder import GraphBuilder
-    from qm_graph.enums import NodeType
+    from quartermaster_graph.builder import GraphBuilder
+    from quartermaster_graph.enums import NodeType
 except ImportError:
-    raise SystemExit("Install qm-graph first:  pip install -e qm-graph")
+    raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
 
 try:
-    from qm_engine.runner.flow_runner import FlowRunner, FlowResult
-    from qm_engine.nodes import NodeResult, SimpleNodeRegistry
-    from qm_engine.context.execution_context import ExecutionContext
-    from qm_engine.events import FlowEvent, NodeStarted, NodeFinished
+    from quartermaster_engine.runner.flow_runner import FlowRunner, FlowResult
+    from quartermaster_engine.nodes import NodeResult, SimpleNodeRegistry
+    from quartermaster_engine.context.execution_context import ExecutionContext
+    from quartermaster_engine.events import FlowEvent, NodeStarted, NodeFinished
 except ImportError:
-    raise SystemExit("Install qm-engine first:  pip install -e qm-engine")
+    raise SystemExit("Install quartermaster-engine first:  pip install -e quartermaster-engine")
 
 
 # -- Stub node executor for demonstration ------------------------------------

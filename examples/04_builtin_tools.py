@@ -1,6 +1,6 @@
 """Use the built-in tools: ReadFileTool, WriteFileTool, WebRequestTool.
 
-Demonstrates the ready-made tools that ship with qm-tools for file I/O
+Demonstrates the ready-made tools that ship with quartermaster-tools for file I/O
 and HTTP requests.  Each tool follows the same AbstractTool interface.
 """
 
@@ -10,10 +10,10 @@ import os
 import tempfile
 
 try:
-    from qm_tools.builtin.file_read import ReadFileTool
-    from qm_tools.builtin.file_write import WriteFileTool
+    from quartermaster_tools.builtin.file_read import ReadFileTool
+    from quartermaster_tools.builtin.file_write import WriteFileTool
 except ImportError:
-    raise SystemExit("Install qm-tools first:  pip install -e qm-tools")
+    raise SystemExit("Install quartermaster-tools first:  pip install -e quartermaster-tools")
 
 
 def main() -> None:
@@ -48,7 +48,7 @@ def main() -> None:
 
         # -- WebRequestTool (optional, needs httpx) ---------------------------
         try:
-            from qm_tools.builtin.web_request import WebRequestTool
+            from quartermaster_tools.builtin.web_request import WebRequestTool
 
             web = WebRequestTool(timeout=10)
             print(f"\nWebRequestTool name   : {web.name()}")
@@ -60,7 +60,7 @@ def main() -> None:
             print("(Skipping live HTTP request -- pass a URL to try it yourself)")
         except ImportError:
             print("\nhttpx not installed -- skipping WebRequestTool demo.")
-            print("Install with:  pip install qm-tools[web]")
+            print("Install with:  pip install quartermaster-tools[web]")
 
 
 if __name__ == "__main__":

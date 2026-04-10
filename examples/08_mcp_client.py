@@ -1,6 +1,6 @@
 """Connect to an MCP server, list tools, and call a tool.
 
-Demonstrates the McpClient from qm-mcp-client: both the sync context
+Demonstrates the McpClient from quartermaster-mcp-client: both the sync context
 manager interface and the async interface.  Requires an MCP server to
 be running (the example uses a placeholder URL).
 """
@@ -10,10 +10,10 @@ from __future__ import annotations
 import asyncio
 
 try:
-    from qm_mcp_client.client import McpClient
-    from qm_mcp_client.errors import McpConnectionError
+    from quartermaster_mcp_client.client import McpClient
+    from quartermaster_mcp_client.errors import McpConnectionError
 except ImportError:
-    raise SystemExit("Install qm-mcp-client first:  pip install -e qm-mcp-client")
+    raise SystemExit("Install quartermaster-mcp-client first:  pip install -e quartermaster-mcp-client")
 
 
 MCP_SERVER_URL = "http://localhost:3000"

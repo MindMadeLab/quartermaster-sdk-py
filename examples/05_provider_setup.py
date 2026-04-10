@@ -8,11 +8,11 @@ inference from model names.
 from __future__ import annotations
 
 try:
-    from qm_providers.config import LLMConfig
-    from qm_providers.base import AbstractLLMProvider
-    from qm_providers.registry import ProviderRegistry, infer_provider
+    from quartermaster_providers.config import LLMConfig
+    from quartermaster_providers.base import AbstractLLMProvider
+    from quartermaster_providers.registry import ProviderRegistry, infer_provider
 except ImportError:
-    raise SystemExit("Install qm-providers first:  pip install -e qm-providers")
+    raise SystemExit("Install quartermaster-providers first:  pip install -e quartermaster-providers")
 
 
 def main() -> None:
@@ -46,7 +46,7 @@ def main() -> None:
     print(f"\nEmpty registry providers: {registry.list_providers()}")
 
     # In a real application you would register actual provider classes:
-    #   from qm_providers_openai import OpenAIProvider
+    #   from quartermaster_providers_openai import OpenAIProvider
     #   registry.register("openai", OpenAIProvider, api_key="sk-...")
     #
     # For this demo we show the registry API without real providers.

@@ -9,7 +9,7 @@ This guide walks you through installing Quartermaster, building your first agent
 - An API key for at least one LLM provider (OpenAI, Anthropic, Google, Groq, or xAI)
 
 Optional:
-- **Docker** -- Required only if you use `qm-code-runner` for sandboxed code execution
+- **Docker** -- Required only if you use `quartermaster-code-runner` for sandboxed code execution
 
 ## Installation
 
@@ -19,16 +19,16 @@ Each package can be installed independently. Install only what you need:
 
 ```bash
 # LLM provider abstraction (OpenAI, Anthropic, Google, Groq, xAI)
-pip install qm-providers
+pip install quartermaster-providers
 
 # Tool framework (standalone, no LLM dependency)
-pip install qm-tools
+pip install quartermaster-tools
 
 # Graph schema and builder
-pip install qm-graph
+pip install quartermaster-graph
 
-# Full execution engine (pulls in qm-graph, qm-nodes, qm-tools)
-pip install qm-engine
+# Full execution engine (pulls in quartermaster-graph, quartermaster-nodes, quartermaster-tools)
+pip install quartermaster-engine
 ```
 
 ### Standalone Packages
@@ -37,10 +37,10 @@ These two packages have no dependency on the core framework:
 
 ```bash
 # MCP protocol client (SSE + Streamable HTTP)
-pip install qm-mcp-client
+pip install quartermaster-mcp-client
 
 # Docker-based sandboxed code execution
-pip install qm-code-runner
+pip install quartermaster-code-runner
 ```
 
 ### From Source
@@ -50,9 +50,9 @@ git clone https://github.com/MindMade/quartermaster-opensource.git
 cd quartermaster-opensource
 
 # Install a specific package in development mode
-pip install -e ./qm-graph
-pip install -e ./qm-providers
-pip install -e ./qm-engine
+pip install -e ./quartermaster-graph
+pip install -e ./quartermaster-providers
+pip install -e ./quartermaster-engine
 ```
 
 ## Your First Agent in 5 Minutes
@@ -62,8 +62,8 @@ pip install -e ./qm-engine
 Configure your LLM provider with an API key:
 
 ```python
-from qm_providers import ProviderRegistry
-from qm_providers.providers.openai import OpenAIProvider
+from quartermaster_providers import ProviderRegistry
+from quartermaster_providers.providers.openai import OpenAIProvider
 
 registry = ProviderRegistry()
 registry.register("openai", OpenAIProvider, api_key="sk-...")
@@ -76,7 +76,7 @@ The registry supports automatic model-to-provider inference. When the engine enc
 Use the `GraphBuilder` fluent API to define your agent's workflow:
 
 ```python
-from qm_graph import GraphBuilder
+from quartermaster_graph import GraphBuilder
 
 graph = (
     GraphBuilder("My First Agent")
@@ -92,8 +92,8 @@ This creates a minimal graph: Start -> Instruction (LLM call) -> End.
 ### Step 3: Run the Graph
 
 ```python
-from qm_engine import FlowRunner
-from qm_engine.nodes import SimpleNodeRegistry
+from quartermaster_engine import FlowRunner
+from quartermaster_engine.nodes import SimpleNodeRegistry
 
 node_registry = SimpleNodeRegistry()
 runner = FlowRunner(graph=graph, node_registry=node_registry)
@@ -163,7 +163,7 @@ my-agent/
         summarizer.py
     config.py            # Provider registry setup
     main.py              # FlowRunner execution
-    requirements.txt     # qm-engine (+ qm-providers, qm-graph, etc.)
+    requirements.txt     # quartermaster-engine (+ quartermaster-providers, quartermaster-graph, etc.)
 ```
 
 ## Environment Variables
@@ -177,9 +177,9 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 
 ```python
 import os
-from qm_providers import ProviderRegistry
-from qm_providers.providers.openai import OpenAIProvider
-from qm_providers.providers.anthropic import AnthropicProvider
+from quartermaster_providers import ProviderRegistry
+from quartermaster_providers.providers.openai import OpenAIProvider
+from quartermaster_providers.providers.anthropic import AnthropicProvider
 
 registry = ProviderRegistry()
 registry.register("openai", OpenAIProvider, api_key=os.environ["OPENAI_API_KEY"])

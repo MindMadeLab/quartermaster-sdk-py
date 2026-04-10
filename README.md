@@ -10,13 +10,13 @@ Built by [MindMade](https://mindmade.si) in Slovenia.
 
 | Package | Description | Status |
 |---|---|---|
-| [`qm-mcp-client`](./qm-mcp-client/) | MCP Protocol client (SSE + Streamable HTTP) | **Ready to publish** |
-| [`qm-providers`](./qm-providers/) | Multi-LLM provider abstraction (OpenAI, Anthropic, Google, Groq, xAI) | **Ready to publish** |
-| [`qm-code-runner`](./qm-code-runner/) | Docker-based sandboxed code execution (Python, Node, Go, Rust, Deno, Bun) | Alpha |
-| [`qm-tools`](./qm-tools/) | Tool definition, registry, and execution framework | Alpha |
-| [`qm-nodes`](./qm-nodes/) | 38+ composable node types (LLM, control flow, memory, user interaction) | Alpha |
-| [`qm-graph`](./qm-graph/) | Agent graph schema and builder (DAG-based flow definitions) | Alpha |
-| [`qm-engine`](./qm-engine/) | Flow execution engine (traversal, branching, memory, streaming) | Alpha |
+| [`quartermaster-mcp-client`](./quartermaster-mcp-client/) | MCP Protocol client (SSE + Streamable HTTP) | **Ready to publish** |
+| [`quartermaster-providers`](./quartermaster-providers/) | Multi-LLM provider abstraction (OpenAI, Anthropic, Google, Groq, xAI) | **Ready to publish** |
+| [`quartermaster-code-runner`](./quartermaster-code-runner/) | Docker-based sandboxed code execution (Python, Node, Go, Rust, Deno, Bun) | Alpha |
+| [`quartermaster-tools`](./quartermaster-tools/) | Tool definition, registry, and execution framework | Alpha |
+| [`quartermaster-nodes`](./quartermaster-nodes/) | 38+ composable node types (LLM, control flow, memory, user interaction) | Alpha |
+| [`quartermaster-graph`](./quartermaster-graph/) | Agent graph schema and builder (DAG-based flow definitions) | Alpha |
+| [`quartermaster-engine`](./quartermaster-engine/) | Flow execution engine (traversal, branching, memory, streaming) | Alpha |
 
 ## Architecture
 
@@ -26,23 +26,23 @@ Built by [MindMade](https://mindmade.si) in Slovenia.
                     +-------------------+---------------------+
                                         |
                     +-------------------v---------------------+
-                    |              qm-engine                  |
+                    |              quartermaster-engine                  |
                     |   Flow execution, traversal, streaming  |
                     +----+----------+---------------+---------+
                          |          |               |
             +------------v--+  +---v--------+  +---v-----------+
-            |   qm-graph    |  |  qm-nodes  |  |   qm-tools    |
+            |   quartermaster-graph    |  |  quartermaster-nodes  |  |   quartermaster-tools    |
             |   Schema &    |  |  38+ node  |  |   Registry &  |
             |   builder     |  |  types     |  |   execution   |
             +---------------+  +-----+------+  +-------+-------+
                                      |                 |
                     +----------------v-----------------v------+
-                    |             qm-providers                |
+                    |             quartermaster-providers                |
                     |   OpenAI, Anthropic, Google, Groq, xAI  |
                     +-----------------------------------------+
 
             +------------------+    +------------------+
-            |  qm-mcp-client   |    |  qm-code-runner  |
+            |  quartermaster-mcp-client   |    |  quartermaster-code-runner  |
             |  (Standalone)    |    |  (Standalone)     |
             +------------------+    +------------------+
 ```
@@ -53,23 +53,23 @@ Each package can be installed independently:
 
 ```bash
 # Standalone packages (no framework dependency)
-pip install qm-mcp-client
-pip install qm-code-runner
+pip install quartermaster-mcp-client
+pip install quartermaster-code-runner
 
 # LLM provider abstraction
-pip install qm-providers
+pip install quartermaster-providers
 
 # Tool framework
-pip install qm-tools
+pip install quartermaster-tools
 
 # Node types
-pip install qm-nodes
+pip install quartermaster-nodes
 
 # Graph schema and builder
-pip install qm-graph
+pip install quartermaster-graph
 
 # Full execution engine
-pip install qm-engine
+pip install quartermaster-engine
 ```
 
 ## Quick Start
@@ -77,9 +77,9 @@ pip install qm-engine
 Build and run a simple agent graph:
 
 ```python
-from qm_graph import GraphBuilder
-from qm_engine import FlowRunner
-from qm_engine.nodes import SimpleNodeRegistry
+from quartermaster_graph import GraphBuilder
+from quartermaster_engine import FlowRunner
+from quartermaster_engine.nodes import SimpleNodeRegistry
 
 # Build a simple agent graph
 graph = (
@@ -99,11 +99,11 @@ result = runner.run("Hello world")
 print(result.final_output)
 ```
 
-The `ProviderRegistry` from `qm-providers` manages LLM provider connections:
+The `ProviderRegistry` from `quartermaster-providers` manages LLM provider connections:
 
 ```python
-from qm_providers import ProviderRegistry
-from qm_providers.providers import OpenAIProvider
+from quartermaster_providers import ProviderRegistry
+from quartermaster_providers.providers import OpenAIProvider
 
 registry = ProviderRegistry()
 registry.register("openai", OpenAIProvider, api_key="sk-...")
@@ -118,13 +118,13 @@ For more examples, see the [`examples/`](./examples/) directory.
 
 Each package has its own README with detailed documentation:
 
-- [qm-mcp-client](./qm-mcp-client/README.md) -- MCP protocol client
-- [qm-code-runner](./qm-code-runner/README.md) -- Docker-based code execution
-- [qm-providers](./qm-providers/README.md) -- Multi-LLM provider abstraction
-- [qm-tools](./qm-tools/README.md) -- Tool definition and registry
-- [qm-nodes](./qm-nodes/README.md) -- Composable node types
-- [qm-graph](./qm-graph/README.md) -- Agent graph schema and builder
-- [qm-engine](./qm-engine/README.md) -- Flow execution engine
+- [quartermaster-mcp-client](./quartermaster-mcp-client/README.md) -- MCP protocol client
+- [quartermaster-code-runner](./quartermaster-code-runner/README.md) -- Docker-based code execution
+- [quartermaster-providers](./quartermaster-providers/README.md) -- Multi-LLM provider abstraction
+- [quartermaster-tools](./quartermaster-tools/README.md) -- Tool definition and registry
+- [quartermaster-nodes](./quartermaster-nodes/README.md) -- Composable node types
+- [quartermaster-graph](./quartermaster-graph/README.md) -- Agent graph schema and builder
+- [quartermaster-engine](./quartermaster-engine/README.md) -- Flow execution engine
 
 ## License
 
