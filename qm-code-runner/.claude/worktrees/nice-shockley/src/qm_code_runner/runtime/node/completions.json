@@ -1,0 +1,34 @@
+[
+    {
+        "caption": "const { setMetadata } = require('./sdk')",
+        "value": "const { setMetadata } = require('./sdk');",
+        "meta": "import",
+        "score": 1000
+    },
+    {
+        "caption": "const { getMetadata } = require('./sdk')",
+        "value": "const { getMetadata } = require('./sdk');",
+        "meta": "import",
+        "score": 1000
+    },
+    {
+        "caption": "const { setMetadata, getMetadata } = require('./sdk')",
+        "value": "const { setMetadata, getMetadata } = require('./sdk');",
+        "meta": "import",
+        "score": 1000
+    },
+    {
+        "caption": "setMetadata",
+        "snippet": "setMetadata($1)",
+        "meta": "sdk",
+        "score": 1000,
+        "docText": "Set structured result metadata to be returned to the backend. Accepts any JSON-serializable data."
+    },
+    {
+        "caption": "getMetadata",
+        "snippet": "getMetadata()",
+        "meta": "sdk",
+        "score": 1000,
+        "docText": "Get previously set metadata. Returns null if not set."
+    }
+]

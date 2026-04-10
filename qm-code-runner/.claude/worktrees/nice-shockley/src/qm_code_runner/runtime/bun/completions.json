@@ -1,0 +1,34 @@
+[
+    {
+        "caption": "import { setMetadata } from './sdk'",
+        "value": "import { setMetadata } from './sdk';",
+        "meta": "import",
+        "score": 1000
+    },
+    {
+        "caption": "import { getMetadata } from './sdk'",
+        "value": "import { getMetadata } from './sdk';",
+        "meta": "import",
+        "score": 1000
+    },
+    {
+        "caption": "import { setMetadata, getMetadata } from './sdk'",
+        "value": "import { setMetadata, getMetadata } from './sdk';",
+        "meta": "import",
+        "score": 1000
+    },
+    {
+        "caption": "setMetadata",
+        "snippet": "setMetadata($1)",
+        "meta": "sdk",
+        "score": 1000,
+        "docText": "Set structured result metadata to be returned to the backend. Accepts any JSON-serializable data."
+    },
+    {
+        "caption": "getMetadata",
+        "snippet": "getMetadata()",
+        "meta": "sdk",
+        "score": 1000,
+        "docText": "Get previously set metadata. Returns null if not set."
+    }
+]

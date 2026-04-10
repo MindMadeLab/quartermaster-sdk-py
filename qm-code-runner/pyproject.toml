@@ -1,0 +1,70 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "qm-code-runner"
+version = "0.1.0"
+description = "Secure sandboxed code execution service supporting Python, Node.js, Go, Rust, Deno, and Bun via Docker containers"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+authors = [
+    { name = "MindMade", email = "info@mindmade.io" },
+]
+keywords = ["code-execution", "sandbox", "docker", "ai", "agents", "code-runner", "security"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.20.0",
+    "docker>=7.0.0",
+    "pydantic>=2.0.0",
+    "httpx>=0.25.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "filelock>=3.0",
+    "ruff>=0.4.0",
+    "mypy>=1.8",
+    "types-docker>=7.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/mindmade-ai/qm-code-runner"
+Documentation = "https://github.com/mindmade-ai/qm-code-runner#readme"
+Repository = "https://github.com/mindmade-ai/qm-code-runner"
+Issues = "https://github.com/mindmade-ai/qm-code-runner/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qm_code_runner"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+extend-select = ["C4", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+exclude = ["src/qm_code_runner/runtime/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

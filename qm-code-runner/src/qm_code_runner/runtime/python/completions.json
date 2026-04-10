@@ -1,0 +1,34 @@
+[
+    {
+        "caption": "from sdk import set_metadata",
+        "value": "from sdk import set_metadata",
+        "meta": "import",
+        "score": 1000
+    },
+    {
+        "caption": "from sdk import get_metadata",
+        "value": "from sdk import get_metadata",
+        "meta": "import",
+        "score": 1000
+    },
+    {
+        "caption": "from sdk import set_metadata, get_metadata",
+        "value": "from sdk import set_metadata, get_metadata",
+        "meta": "import",
+        "score": 1000
+    },
+    {
+        "caption": "set_metadata",
+        "snippet": "set_metadata($1)",
+        "meta": "sdk",
+        "score": 1000,
+        "docText": "Set structured result metadata to be returned to the backend. Accepts any JSON-serializable data."
+    },
+    {
+        "caption": "get_metadata",
+        "snippet": "get_metadata()",
+        "meta": "sdk",
+        "score": 1000,
+        "docText": "Get previously set metadata. Returns None if not set."
+    }
+]

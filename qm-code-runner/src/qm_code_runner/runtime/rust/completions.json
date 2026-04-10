@@ -1,0 +1,34 @@
+[
+    {
+        "caption": "use sdk::set_metadata",
+        "value": "use sdk::set_metadata;",
+        "meta": "import",
+        "score": 1000
+    },
+    {
+        "caption": "use sdk::get_metadata",
+        "value": "use sdk::get_metadata;",
+        "meta": "import",
+        "score": 1000
+    },
+    {
+        "caption": "use sdk::{set_metadata, get_metadata}",
+        "value": "use sdk::{set_metadata, get_metadata};",
+        "meta": "import",
+        "score": 1000
+    },
+    {
+        "caption": "set_metadata",
+        "snippet": "set_metadata(&$1).unwrap()",
+        "meta": "sdk",
+        "score": 1000,
+        "docText": "Set structured result metadata to be returned to the backend. Accepts any Serialize type."
+    },
+    {
+        "caption": "get_metadata",
+        "snippet": "get_metadata::<$1>().unwrap()",
+        "meta": "sdk",
+        "score": 1000,
+        "docText": "Get previously set metadata, deserializing into the specified type. Returns None if not set."
+    }
+]

@@ -1,0 +1,22 @@
+[
+    {
+        "caption": "import \"sdk\"",
+        "value": "import \"sdk\"",
+        "meta": "import",
+        "score": 1000
+    },
+    {
+        "caption": "sdk.SetMetadata",
+        "snippet": "sdk.SetMetadata($1)",
+        "meta": "sdk",
+        "score": 1000,
+        "docText": "Set structured result metadata to be returned to the backend. Accepts any JSON-serializable data."
+    },
+    {
+        "caption": "sdk.GetMetadata",
+        "snippet": "sdk.GetMetadata(&$1)",
+        "meta": "sdk",
+        "score": 1000,
+        "docText": "Get previously set metadata into the provided destination. Returns nil if no metadata has been set."
+    }
+]
