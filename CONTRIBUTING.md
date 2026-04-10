@@ -14,7 +14,7 @@ Thank you for considering a contribution to Quartermaster! This document explain
 ### Clone the repository
 
 ```bash
-git clone https://github.com/nickmade/quartermaster-opensource.git
+git clone https://github.com/quartermaster-ai/quartermaster.git
 cd quartermaster-opensource
 ```
 
