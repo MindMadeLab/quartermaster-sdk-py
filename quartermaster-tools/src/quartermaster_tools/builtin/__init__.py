@@ -16,8 +16,40 @@ Provides ready-to-use tool implementations:
 - Vector/RAG tools: Embed, Store, Search, Index, Hybrid Search
 - Email tools: Send, Read, Search via SMTP/IMAP
 - Messaging tools: Slack, Discord, Webhooks
+- A2A tools: Agent discovery, task send/status/collect, agent card registration
+- Browser tools: Navigate, Click, Type, Extract, Screenshot, Wait, Eval (requires Playwright)
+- Privacy tools: PII detection, redaction, and file scanning
+- Compliance tools: EU AI Act risk classification, audit logging, checklists
 """
 
+from quartermaster_tools.builtin.compliance import (
+    AuditLogTool,
+    ComplianceChecklistTool,
+    ReadAuditLogTool,
+    RiskClassifierTool,
+)
+from quartermaster_tools.builtin.privacy import (
+    DetectPIITool,
+    RedactPIITool,
+    ScanFilePIITool,
+)
+from quartermaster_tools.builtin.browser import (
+    BrowserClickTool,
+    BrowserEvalTool,
+    BrowserExtractTool,
+    BrowserNavigateTool,
+    BrowserScreenshotTool,
+    BrowserSessionManager,
+    BrowserTypeTool,
+    BrowserWaitTool,
+)
+from quartermaster_tools.builtin.a2a import (
+    A2ACheckStatusTool,
+    A2ACollectResultTool,
+    A2ADiscoverTool,
+    A2ARegisterTool,
+    A2ASendTaskTool,
+)
 from quartermaster_tools.builtin.database import (
     SQLiteQueryTool,
     SQLiteSchemaTool,
@@ -82,6 +114,22 @@ from quartermaster_tools.builtin.web_search import (
 )
 
 __all__ = [
+    "AuditLogTool",
+    "ComplianceChecklistTool",
+    "DetectPIITool",
+    "A2ACheckStatusTool",
+    "A2ACollectResultTool",
+    "A2ADiscoverTool",
+    "A2ARegisterTool",
+    "A2ASendTaskTool",
+    "BrowserClickTool",
+    "BrowserEvalTool",
+    "BrowserExtractTool",
+    "BrowserNavigateTool",
+    "BrowserScreenshotTool",
+    "BrowserSessionManager",
+    "BrowserTypeTool",
+    "BrowserWaitTool",
     "BraveSearchTool",
     "ConvertFormatTool",
     "CopyFileTool",
@@ -109,11 +157,15 @@ __all__ = [
     "ParseXMLTool",
     "ParseYAMLTool",
     "PythonExecutorTool",
+    "ReadAuditLogTool",
     "ReadEmailTool",
     "ReadFileTool",
+    "RedactPIITool",
+    "RiskClassifierTool",
     "SQLiteQueryTool",
     "SQLiteSchemaTool",
     "SQLiteWriteTool",
+    "ScanFilePIITool",
     "SearchEmailTool",
     "SendEmailTool",
     "SetVariableTool",
