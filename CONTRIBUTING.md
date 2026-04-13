@@ -14,28 +14,40 @@ Thank you for considering a contribution to Quartermaster! This document explain
 ### Clone the repository
 
 ```bash
-git clone https://github.com/quartermaster-ai/quartermaster.git
-cd quartermaster-opensource
+git clone https://github.com/MindMade/quartermaster.git
+cd quartermaster
 ```
 
-### Install a single package in development mode
-
-Each package is self-contained. To work on a specific package:
+### Install with uv (recommended)
 
 ```bash
+# Install all packages in development mode
+uv pip install -e quartermaster-providers -e quartermaster-graph \
+  -e quartermaster-tools -e quartermaster-nodes -e quartermaster-engine \
+  -e quartermaster-mcp-client -e quartermaster-code-runner \
+  -e quartermaster-sdk
+
+# Install dev dependencies for a specific package
+uv pip install -e "quartermaster-graph[dev]"
+```
+
+### Install with pip
+
+```bash
+# Single package
 cd quartermaster-providers
 pip install -e ".[dev]"
 ```
 
 The `[dev]` extra installs test and development dependencies (pytest, ruff, mypy, etc.).
 
-### Install all packages
-
-To install every package in development mode:
+### Install all packages with pip
 
 ```bash
-for pkg in quartermaster-mcp-client quartermaster-code-runner quartermaster-providers quartermaster-tools quartermaster-nodes quartermaster-graph quartermaster-engine; do
-    cd "$pkg" && pip install -e ".[dev]" && cd ..
+for pkg in quartermaster-providers quartermaster-graph quartermaster-tools \
+  quartermaster-nodes quartermaster-engine quartermaster-mcp-client \
+  quartermaster-code-runner quartermaster-sdk; do
+    pip install -e "$pkg[dev]"
 done
 ```
 
@@ -98,16 +110,17 @@ mypy src/
 The repository is a monorepo with 7 independent packages:
 
 ```
-quartermaster-opensource/
-    quartermaster-mcp-client/       # MCP protocol client (standalone)
-    quartermaster-code-runner/       # Docker code execution (standalone)
+quartermaster/
+    quartermaster-sdk/               # Meta-package (installs everything)
     quartermaster-providers/         # LLM provider abstraction
+    quartermaster-graph/             # Graph schema and builder
     quartermaster-tools/             # Tool definition and registry
     quartermaster-nodes/             # Node type implementations
-    quartermaster-graph/             # Graph schema and builder
     quartermaster-engine/            # Flow execution engine
-    examples/             # Runnable example scripts
-    Makefile              # Cross-package commands
+    quartermaster-mcp-client/        # MCP protocol client (standalone)
+    quartermaster-code-runner/       # Docker code execution (standalone)
+    examples/                        # Runnable example scripts
+    docs/                            # Documentation
 ```
 
 Each package follows the same internal layout:
@@ -134,7 +147,7 @@ Packages have a layered dependency structure:
 
 ## Pull Request Process
 
-1. **Fork the repository** and create a feature branch from `main`.
+1. **Fork the repository** and create a feature branch from `master`.
 2. **Make your changes** in the relevant package(s).
 3. **Add or update tests** for any new or changed functionality.
 4. **Run checks locally** before pushing:
@@ -145,7 +158,7 @@ Packages have a layered dependency structure:
    mypy src/
    pytest
    ```
-5. **Open a pull request** against `main` with:
+5. **Open a pull request** against `master` with:
    - A clear title summarizing the change.
    - A description explaining what and why.
    - Reference any related issues.
