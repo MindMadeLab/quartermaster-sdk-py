@@ -12,6 +12,153 @@ The `quartermaster-providers` package provides a unified abstraction over multip
 | **Groq** | `GroqProvider` | llama-*, mixtral-* | Text, streaming, tool calling (fast inference) |
 | **xAI** | `XAIProvider` | grok-* | Text, streaming, tool calling |
 | **OpenAI-Compatible** | `OpenAICompatProvider` | Any OpenAI-compatible API | Ollama, vLLM, LiteLLM, Together AI, etc. |
+| **Ollama** | `OllamaProvider` | llama3, mistral, phi, qwen, etc. | Local inference, no API key required (`http://localhost:11434/v1`) |
+| **vLLM** | `VLLMProvider` | Any HuggingFace model | High-throughput GPU serving (`http://localhost:8000/v1`) |
+| **LM Studio** | `LMStudioProvider` | Any GGUF model | Desktop app with local server (`http://localhost:1234/v1`) |
+| **TGI** | `TGIProvider` | Any HuggingFace model | Hugging Face Text Generation Inference (`http://localhost:8080/v1`) |
+| **LocalAI** | `LocalAIProvider` | Any supported model | Drop-in OpenAI replacement (`http://localhost:8080/v1`) |
+| **llama.cpp** | `LlamaCppProvider` | Any GGUF model | Lightweight C++ inference server (`http://localhost:8080/v1`) |
+
+## Local / Self-Hosted Providers
+
+Quartermaster supports six local inference engines out of the box. All of them expose an OpenAI-compatible `/v1` endpoint and are wrapped as thin subclasses of `OpenAICompatibleProvider`. No external API keys are required -- just point to your running server.
+
+### Supported Engines
+
+| Engine | Registry name | Default URL | Notes |
+|--------|--------------|-------------|-------|
+| Ollama | `ollama` | `http://localhost:11434/v1` | No API key needed. Run `ollama serve` and `ollama pull <model>`. |
+| vLLM | `vllm` | `http://localhost:8000/v1` | GPU-accelerated. Start with `vllm serve <model>`. Optional API key via `--api-key`. |
+| LM Studio | `lm-studio` | `http://localhost:1234/v1` | Enable the local server in LM Studio's Developer tab. |
+| TGI | `tgi` | `http://localhost:8080/v1` | Hugging Face Text Generation Inference. Run via Docker. |
+| LocalAI | `localai` | `http://localhost:8080/v1` | Drop-in OpenAI replacement for CPU and GPU. |
+| llama.cpp | `llama-cpp` | `http://localhost:8080/v1` | Start with `llama-server -m model.gguf --port 8080`. |
+
+### One-Liner Registration
+
+Use `register_local()` to register any engine with sensible defaults:
+
+```python
+from quartermaster_providers import ProviderRegistry
+
+registry = ProviderRegistry(auto_configure=False)
+registry.register_local("ollama")
+```
+
+Override the default URL or supply an API key when the server is on another host:
+
+```python
+registry.register_local(
+    "vllm",
+    base_url="http://gpu-box:8000/v1",
+    api_key="my-vllm-key",
+)
+```
+
+### Custom Model Patterns
+
+By default, model names like `llama-3-70b` resolve to the Groq cloud provider. To route open-source model names to a local engine instead, add custom patterns:
+
+```python
+registry.add_model_pattern(r"llama3.*", "ollama")
+registry.add_model_pattern(r"mistral.*", "ollama")
+registry.add_model_pattern(r"codellama.*", "ollama")
+```
+
+You can also pass patterns directly during registration:
+
+```python
+registry.register_local(
+    "vllm",
+    base_url="http://gpu-box:8000/v1",
+    models=[r"llama3.*", r"mistral.*", r"codellama.*"],
+)
+```
+
+### Default Provider
+
+Set a catch-all provider for any model name that does not match a pattern:
+
+```python
+registry.set_default_provider("vllm")
+```
+
+Or pass `default=True` during registration:
+
+```python
+registry.register_local("vllm", default=True)
+```
+
+### Model Resolution Order
+
+When `get_for_model()` is called, the registry resolves the provider in this order:
+
+1. **Custom patterns** -- added via `add_model_pattern()` or `register_local(..., models=[...])`. Checked first, so they can override built-in defaults.
+2. **Built-in patterns** -- the global `MODEL_PATTERNS` table (OpenAI, Anthropic, Google, Groq, xAI).
+3. **Default provider** -- set via `set_default_provider()` or `register_local(..., default=True)`.
+4. **Quartermaster fallback** -- if `QUARTERMASTER_API_KEY` is set in the environment.
+
+If none of these resolve, an `InvalidModelError` is raised.
+
+### Setup Examples
+
+**Ollama only** -- simplest local setup, one line:
+
+```python
+registry = ProviderRegistry(auto_configure=False)
+registry.register_local("ollama")
+registry.add_model_pattern(r"llama3.*", "ollama")
+registry.add_model_pattern(r"mistral.*", "ollama")
+
+provider = registry.get_for_model("llama3.1:70b")  # -> OllamaProvider
+```
+
+**Mixed cloud + local** -- cloud for complex reasoning, local for fast inference:
+
+```python
+from quartermaster_providers.providers import OpenAIProvider
+
+registry = ProviderRegistry(auto_configure=False)
+registry.register("openai", OpenAIProvider, api_key="sk-...")
+registry.register_local(
+    "vllm",
+    base_url="http://gpu-box:8000/v1",
+    models=[r"llama3.*", r"mistral.*"],
+)
+
+provider = registry.get_for_model("gpt-4o")        # -> OpenAIProvider
+provider = registry.get_for_model("llama3.1:70b")   # -> VLLMProvider
+```
+
+**Fully private** -- all traffic stays on your infrastructure:
+
+```python
+registry = ProviderRegistry(auto_configure=False)
+
+# Main inference via vLLM cluster (catch-all)
+registry.register_local(
+    "vllm",
+    base_url="http://vllm-cluster.internal:8000/v1",
+    api_key="internal-key",
+    default=True,
+)
+
+# Embeddings via Ollama
+registry.register_local(
+    "ollama",
+    base_url="http://ollama.internal:11434/v1",
+    models=[r"nomic-embed.*", r"all-minilm.*"],
+)
+
+# Custom corporate gateway
+registry.register_local(
+    "custom",
+    base_url="https://llm-gateway.corp.internal/v1",
+    name="corp-gateway",
+    api_key="corp-secret",
+    models=[r"corp-.*"],
+)
+```
 
 ## ProviderRegistry
 
