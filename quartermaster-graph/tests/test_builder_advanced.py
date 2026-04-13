@@ -1,4 +1,4 @@
-"""Advanced tests for GraphBuilder: sub-graphs, multi-decision, auto-merge."""
+"""Advanced tests for GraphBuilder: sub-graphs, multi-decision, auto-merge, new node types."""
 
 import pytest
 
@@ -129,6 +129,30 @@ class TestSubGraphUse:
         decision_nodes = [n for n in graph.nodes if n.type == NodeType.DECISION]
         assert len(decision_nodes) == 1
         assert _no_errors(graph) == []
+
+    def test_use_accepts_graph_builder_directly(self):
+        """use() should accept a GraphBuilder without needing .build()."""
+        sub = GraphBuilder("Sub").start().instruction("Inlined step").end()
+        graph = GraphBuilder("Main").start().use(sub).end()
+        assert len(graph.nodes) == 3  # Start + Inlined + End
+        assert len(graph.edges) == 2
+        names = [n.name for n in graph.nodes]
+        assert "Inlined step" in names
+
+    def test_use_graph_builder_in_branch(self):
+        """use() on a _BranchBuilder should also accept GraphBuilder."""
+        sub = GraphBuilder("Sub").start().instruction("Branch inline").end()
+        graph = (
+            GraphBuilder("Main")
+            .start()
+            .decision("Pick", options=["a", "b"])
+            .on("a").use(sub).end()
+            .on("b").instruction("Other").end()
+            .end()
+            .build()
+        )
+        names = [n.name for n in graph.nodes]
+        assert "Branch inline" in names
 
 
 # ---------------------------------------------------------------------------
@@ -373,3 +397,519 @@ class TestComplexBuild:
         branch = builder.on("a")
         result = branch.use(sub)
         assert isinstance(result, _BranchBuilder)
+
+
+# ===========================================================================
+# NEW TESTS -- GraphBuilder as graph, new node types, Graph alias
+# ===========================================================================
+
+
+class TestGraphWithoutBuild:
+    """Graph usable without .build() -- access .nodes directly."""
+
+    def test_access_nodes_directly(self):
+        graph = GraphBuilder("Direct").start().instruction("Step").end()
+        # No .build() call -- access .nodes property directly
+        assert len(graph.nodes) == 3
+        types = [n.type for n in graph.nodes]
+        assert NodeType.START in types
+        assert NodeType.INSTRUCTION in types
+        assert NodeType.END in types
+
+    def test_access_edges_directly(self):
+        graph = GraphBuilder("Direct").start().instruction("A").instruction("B").end()
+        assert len(graph.edges) == 3  # Start->A, A->B, B->End
+
+    def test_start_node_id(self):
+        graph = GraphBuilder("Direct").start().instruction("X").end()
+        sid = graph.start_node_id
+        start = graph.get_node(sid)
+        assert start is not None
+        assert start.type == NodeType.START
+
+    def test_start_node_id_raises_without_start(self):
+        graph = GraphBuilder("Empty")
+        with pytest.raises(ValueError, match="No start node"):
+            _ = graph.start_node_id
+
+    def test_get_node(self):
+        graph = GraphBuilder("G").start().instruction("Find me").end()
+        instr = [n for n in graph.nodes if n.name == "Find me"][0]
+        assert graph.get_node(instr.id) is instr
+
+    def test_get_successors(self):
+        graph = GraphBuilder("G").start().instruction("A").instruction("B").end()
+        a_node = [n for n in graph.nodes if n.name == "A"][0]
+        succs = graph.get_successors(a_node.id)
+        assert len(succs) == 1
+        assert succs[0].name == "B"
+
+    def test_get_edges_from(self):
+        graph = GraphBuilder("G").start().instruction("A").end()
+        a_node = [n for n in graph.nodes if n.name == "A"][0]
+        edges = graph.get_edges_from(a_node.id)
+        assert len(edges) == 1
+
+    def test_finalize_adds_end_for_dangling_branches(self):
+        """Accessing .nodes on a graph with dangling branches auto-adds END nodes."""
+        graph = (
+            GraphBuilder("Dangling")
+            .start()
+            .decision("D", options=["a", "b"])
+            .on("a").instruction("A").end()
+            .on("b").instruction("B").end()
+        )
+        # No explicit .end() or .merge() on the parent -- branches are dangling
+        nodes = graph.nodes  # triggers _finalize
+        end_nodes = [n for n in nodes if n.type == NodeType.END]
+        assert len(end_nodes) == 2  # one per dangling branch
+
+    def test_to_version(self):
+        graph = GraphBuilder("V").start().instruction("X").end()
+        version = graph.to_version(version="1.0.0")
+        assert isinstance(version, AgentVersion)
+        assert version.version == "1.0.0"
+
+
+class TestSwitchNode:
+    """switch() with 3+ branches."""
+
+    def test_switch_three_branches(self):
+        graph = (
+            GraphBuilder("SwitchTest")
+            .start()
+            .switch("Route", cases=["fast", "medium", "slow"])
+            .on("fast").instruction("Fast path").end()
+            .on("medium").instruction("Medium path").end()
+            .on("slow").instruction("Slow path").end()
+            .end()
+            .build()
+        )
+        switch_nodes = [n for n in graph.nodes if n.type == NodeType.SWITCH]
+        assert len(switch_nodes) == 1
+        labeled = [e for e in graph.edges if e.label in ("fast", "medium", "slow")]
+        assert len(labeled) == 3
+        assert _no_errors(graph) == []
+
+
+class TestReasoningNode:
+    def test_reasoning(self):
+        graph = (
+            GraphBuilder("R")
+            .start()
+            .reasoning("Think hard", model="o1-preview")
+            .end()
+            .build()
+        )
+        r_nodes = [n for n in graph.nodes if n.type == NodeType.REASONING]
+        assert len(r_nodes) == 1
+        assert r_nodes[0].metadata["model"] == "o1-preview"
+        assert _no_errors(graph) == []
+
+
+class TestSummarizeNode:
+    def test_summarize(self):
+        graph = (
+            GraphBuilder("S")
+            .start()
+            .summarize("Condense", model="gpt-4o-mini")
+            .end()
+            .build()
+        )
+        s_nodes = [n for n in graph.nodes if n.type == NodeType.SUMMARIZE]
+        assert len(s_nodes) == 1
+        assert s_nodes[0].metadata["model"] == "gpt-4o-mini"
+        assert _no_errors(graph) == []
+
+
+class TestVarAndTextNodes:
+    def test_var_node(self):
+        graph = (
+            GraphBuilder("Var")
+            .start()
+            .var("Set X", variable="x", value="42")
+            .end()
+            .build()
+        )
+        var_nodes = [n for n in graph.nodes if n.type == NodeType.VAR]
+        assert len(var_nodes) == 1
+        assert var_nodes[0].metadata["variable"] == "x"
+        assert var_nodes[0].metadata["value"] == "42"
+        assert _no_errors(graph) == []
+
+    def test_text_node(self):
+        graph = (
+            GraphBuilder("Txt")
+            .start()
+            .text("Template", template="Hello {{name}}")
+            .end()
+            .build()
+        )
+        txt_nodes = [n for n in graph.nodes if n.type == NodeType.TEXT]
+        assert len(txt_nodes) == 1
+        assert txt_nodes[0].metadata["template"] == "Hello {{name}}"
+        assert _no_errors(graph) == []
+
+
+class TestMemoryNodes:
+    def test_read_memory(self):
+        graph = (
+            GraphBuilder("RM")
+            .start()
+            .read_memory("Load context", key="user_prefs")
+            .end()
+            .build()
+        )
+        rm_nodes = [n for n in graph.nodes if n.type == NodeType.READ_MEMORY]
+        assert len(rm_nodes) == 1
+        assert rm_nodes[0].metadata["key"] == "user_prefs"
+        assert _no_errors(graph) == []
+
+    def test_write_memory(self):
+        graph = (
+            GraphBuilder("WM")
+            .start()
+            .write_memory("Save result", key="output", value="done")
+            .end()
+            .build()
+        )
+        wm_nodes = [n for n in graph.nodes if n.type == NodeType.WRITE_MEMORY]
+        assert len(wm_nodes) == 1
+        assert wm_nodes[0].metadata["key"] == "output"
+        assert _no_errors(graph) == []
+
+    def test_flow_memory(self):
+        graph = GraphBuilder("FM").start().flow_memory().end()
+        fm_nodes = [n for n in graph.nodes if n.type == NodeType.FLOW_MEMORY]
+        assert len(fm_nodes) == 1
+
+
+class TestUserDecisionNode:
+    def test_user_decision(self):
+        graph = (
+            GraphBuilder("UD")
+            .start()
+            .user_decision("Pick one", options=["opt1", "opt2"])
+            .end()
+            .build()
+        )
+        ud_nodes = [n for n in graph.nodes if n.type == NodeType.USER_DECISION]
+        assert len(ud_nodes) == 1
+        assert ud_nodes[0].metadata["options"] == ["opt1", "opt2"]
+        assert _no_errors(graph) == []
+
+
+class TestWebhookAndApiCall:
+    def test_webhook(self):
+        graph = (
+            GraphBuilder("WH")
+            .start()
+            .webhook("Notify", url="https://example.com/hook", method="POST")
+            .end()
+            .build()
+        )
+        wh_nodes = [n for n in graph.nodes if n.type == NodeType.WEBHOOK]
+        assert len(wh_nodes) == 1
+        assert wh_nodes[0].metadata["url"] == "https://example.com/hook"
+        assert _no_errors(graph) == []
+
+    def test_api_call(self):
+        graph = (
+            GraphBuilder("API")
+            .start()
+            .api_call("Fetch data", url="https://api.example.com/data", method="GET")
+            .end()
+            .build()
+        )
+        api_nodes = [n for n in graph.nodes if n.type == NodeType.API_CALL]
+        assert len(api_nodes) == 1
+        assert api_nodes[0].metadata["method"] == "GET"
+        assert _no_errors(graph) == []
+
+
+class TestBreakNode:
+    def test_break_in_loop(self):
+        graph = (
+            GraphBuilder("LoopBreak")
+            .start()
+            .loop("Repeat", max_iterations=5)
+            .instruction("Work")
+            .if_node("Done?", expression="done == true")
+            .on("true").break_node().end()
+            .on("false").instruction("Continue work").end()
+            .end()
+            .build()
+        )
+        break_nodes = [n for n in graph.nodes if n.type == NodeType.BREAK]
+        assert len(break_nodes) == 1
+        assert _no_errors(graph) == []
+
+
+class TestGraphAlias:
+    def test_graph_alias_import(self):
+        from quartermaster_graph import Graph
+        assert Graph is GraphBuilder
+
+    def test_graph_alias_works(self):
+        from quartermaster_graph import Graph
+        g = Graph("Aliased").start().instruction("Step").end()
+        assert len(g.nodes) == 3
+
+
+class TestMultipleMergePoints:
+    def test_two_merge_points(self):
+        graph = (
+            GraphBuilder("MultiMerge")
+            .start()
+            .decision("D1", options=["a", "b"])
+            .on("a").instruction("A1").end()
+            .on("b").instruction("B1").end()
+            .merge("M1")
+            .instruction("Mid")
+            .decision("D2", options=["c", "d"])
+            .on("c").instruction("C1").end()
+            .on("d").instruction("D1x").end()
+            .merge("M2")
+            .end()
+            .build()
+        )
+        merges = [n for n in graph.nodes if n.type == NodeType.MERGE]
+        assert len(merges) == 2
+        assert merges[0].name == "M1"
+        assert merges[1].name == "M2"
+        assert _no_errors(graph) == []
+
+
+class TestComplexDecisionChain:
+    def test_decision_merge_if_merge_decision(self):
+        """decision -> merge -> if -> merge -> decision chain."""
+        graph = (
+            GraphBuilder("Chain")
+            .start()
+            # First decision
+            .decision("D1", options=["x", "y"])
+            .on("x").instruction("X handler").end()
+            .on("y").instruction("Y handler").end()
+            .merge("M1")
+            .instruction("Between 1-2")
+            # If node
+            .if_node("Check", expression="val > 0")
+            .on("true").instruction("Positive").end()
+            .on("false").instruction("Negative").end()
+            .merge("M2")
+            .instruction("Between 2-3")
+            # Second decision
+            .decision("D2", options=["a", "b", "c"])
+            .on("a").instruction("A").end()
+            .on("b").instruction("B").end()
+            .on("c").instruction("C").end()
+            .merge("M3")
+            .end()
+            .build()
+        )
+        decisions = [n for n in graph.nodes if n.type == NodeType.DECISION]
+        ifs = [n for n in graph.nodes if n.type == NodeType.IF]
+        merges = [n for n in graph.nodes if n.type == NodeType.MERGE]
+        assert len(decisions) == 2
+        assert len(ifs) == 1
+        assert len(merges) == 3
+        assert _no_errors(graph) == []
+
+
+class TestBranchBuilderNewNodes:
+    """Verify that _BranchBuilder has all the new node methods."""
+
+    def test_reasoning_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a", "b"])
+            .on("a").reasoning("Think", model="o1").end()
+            .on("b").instruction("Skip").end()
+            .end()
+            .build()
+        )
+        r_nodes = [n for n in graph.nodes if n.type == NodeType.REASONING]
+        assert len(r_nodes) == 1
+
+    def test_var_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").var("Set", variable="x", value="1").end()
+            .end()
+            .build()
+        )
+        var_nodes = [n for n in graph.nodes if n.type == NodeType.VAR]
+        assert len(var_nodes) == 1
+
+    def test_webhook_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").webhook("Notify", url="http://x.com").end()
+            .end()
+            .build()
+        )
+        wh_nodes = [n for n in graph.nodes if n.type == NodeType.WEBHOOK]
+        assert len(wh_nodes) == 1
+
+    def test_api_call_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").api_call("Fetch", url="http://x.com").end()
+            .end()
+            .build()
+        )
+        api_nodes = [n for n in graph.nodes if n.type == NodeType.API_CALL]
+        assert len(api_nodes) == 1
+
+    def test_read_write_memory_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").read_memory("Load", key="k").write_memory("Save", key="k", value="v").end()
+            .end()
+            .build()
+        )
+        rm = [n for n in graph.nodes if n.type == NodeType.READ_MEMORY]
+        wm = [n for n in graph.nodes if n.type == NodeType.WRITE_MEMORY]
+        assert len(rm) == 1
+        assert len(wm) == 1
+
+    def test_user_decision_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").user_decision("Pick", options=["1", "2"]).end()
+            .end()
+            .build()
+        )
+        ud = [n for n in graph.nodes if n.type == NodeType.USER_DECISION]
+        assert len(ud) == 1
+
+    def test_log_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").log("Debug", message="hit branch a").end()
+            .end()
+            .build()
+        )
+        log_nodes = [n for n in graph.nodes if n.type == NodeType.LOG]
+        assert len(log_nodes) == 1
+
+    def test_summarize_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").summarize("Sum up").end()
+            .end()
+            .build()
+        )
+        s_nodes = [n for n in graph.nodes if n.type == NodeType.SUMMARIZE]
+        assert len(s_nodes) == 1
+
+    def test_text_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").text("T", template="hello").end()
+            .end()
+            .build()
+        )
+        t_nodes = [n for n in graph.nodes if n.type == NodeType.TEXT]
+        assert len(t_nodes) == 1
+
+    def test_flow_memory_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").flow_memory().end()
+            .end()
+            .build()
+        )
+        fm = [n for n in graph.nodes if n.type == NodeType.FLOW_MEMORY]
+        assert len(fm) == 1
+
+    def test_switch_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").switch("Inner SW", cases=["x", "y"]).end()
+            .end()
+            .build()
+        )
+        sw = [n for n in graph.nodes if n.type == NodeType.SWITCH]
+        assert len(sw) == 1
+
+    def test_break_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").break_node("Stop").end()
+            .end()
+            .build()
+        )
+        brk = [n for n in graph.nodes if n.type == NodeType.BREAK]
+        assert len(brk) == 1
+
+    def test_user_form_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").user_form("Form", fields=[{"name": "email"}]).end()
+            .end()
+            .build()
+        )
+        uf = [n for n in graph.nodes if n.type == NodeType.USER_FORM]
+        assert len(uf) == 1
+
+    def test_program_runner_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").program_runner("Run", program="ls").end()
+            .end()
+            .build()
+        )
+        pr = [n for n in graph.nodes if n.type == NodeType.PROGRAM_RUNNER]
+        assert len(pr) == 1
+
+    def test_agent_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").agent("Auto", model="gpt-4o").end()
+            .end()
+            .build()
+        )
+        a_nodes = [n for n in graph.nodes if n.type == NodeType.AGENT]
+        assert len(a_nodes) == 1
+
+    def test_vision_on_branch(self):
+        graph = (
+            GraphBuilder("B")
+            .start()
+            .decision("D", options=["a"])
+            .on("a").vision("See", model="gpt-4o").end()
+            .end()
+            .build()
+        )
+        v_nodes = [n for n in graph.nodes if n.type == NodeType.INSTRUCTION_IMAGE_VISION]
+        assert len(v_nodes) == 1
