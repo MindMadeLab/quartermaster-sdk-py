@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Union
 from uuid import UUID, uuid4
 
 from quartermaster_graph.enums import (
@@ -92,23 +92,68 @@ def _inline_subgraph(
     return nodes_to_end[-1]
 
 
-class _BranchBuilder:
-    """Builder for a specific branch (e.g., after a decision)."""
+# Type alias for the return type of end() — either a GraphBuilder or another
+# _BranchBuilder when branches are nested.
+_Parent = Union["GraphBuilder", "_BranchBuilder"]
 
-    def __init__(self, parent: GraphBuilder, label: str) -> None:
-        self._parent = parent
+
+class _BranchBuilder:
+    """Builder for a branch (decision option, parallel path, or nested control flow).
+
+    Supports full nesting: you can use ``if_node()``, ``decision()``,
+    ``on()``, ``parallel()``, ``branch()``, and ``merge()`` inside a
+    branch to create arbitrarily deep control flow.
+    """
+
+    def __init__(
+        self,
+        graph: GraphBuilder,
+        parent: _Parent,
+        label: str,
+    ) -> None:
+        self._graph = graph          # root GraphBuilder — owns all nodes/edges
+        self._parent = parent        # immediate parent (GraphBuilder or _BranchBuilder)
         self._label = label
         self._last_node_id: UUID | None = None
+        self._decision_node_id: UUID | None = None
+        self._branch_endpoints: list[UUID] = []
+        # Set by the creating on() method so use() can detect the first call
+        self._origin_decision_id: UUID | None = None
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
     def _add_node(self, node: GraphNode) -> _BranchBuilder:
-        self._parent._nodes.append(node)
+        self._auto_merge_if_needed()
+        if node.position is None:
+            node.position = self._graph._advance_position()
+        self._graph._nodes.append(node)
         if self._last_node_id is not None:
             edge = GraphEdge(source_id=self._last_node_id, target_id=node.id)
-            self._parent._edges.append(edge)
+            self._graph._edges.append(edge)
         self._last_node_id = node.id
         return self
 
-    # --- LLM nodes ---
+    def _auto_merge_if_needed(self) -> None:
+        """Auto-insert a merge node if there are pending sub-branch endpoints."""
+        if not self._branch_endpoints:
+            return
+        merge_node = GraphNode(
+            type=NodeType.MERGE,
+            name="Merge",
+            traverse_in=TraverseIn.AWAIT_ALL,
+            position=self._graph._advance_position(),
+        )
+        self._graph._nodes.append(merge_node)
+        for ep in self._branch_endpoints:
+            self._graph._edges.append(GraphEdge(source_id=ep, target_id=merge_node.id))
+        self._branch_endpoints.clear()
+        self._last_node_id = merge_node.id
+
+    # ------------------------------------------------------------------
+    # LLM nodes
+    # ------------------------------------------------------------------
 
     def instruction(
         self,
@@ -206,7 +251,9 @@ class _BranchBuilder:
         node = GraphNode(type=NodeType.INSTRUCTION_IMAGE_VISION, name=name, metadata=meta)
         return self._add_node(node)
 
-    # --- Existing simple nodes ---
+    # ------------------------------------------------------------------
+    # Simple nodes
+    # ------------------------------------------------------------------
 
     def user(self, name: str = "User Input") -> _BranchBuilder:
         """Add a user input node to this branch."""
@@ -227,7 +274,75 @@ class _BranchBuilder:
         )
         return self._add_node(node)
 
-    # --- Control flow ---
+    # ------------------------------------------------------------------
+    # Control flow (nested)
+    # ------------------------------------------------------------------
+
+    def if_node(self, name: str, expression: str = "", variable: str = "") -> _BranchBuilder:
+        """Add an IF conditional node inside this branch.
+
+        Use ``.on("true")`` / ``.on("false")`` for the branches.
+        """
+        self._auto_merge_if_needed()
+        node = GraphNode(
+            type=NodeType.IF,
+            name=name,
+            traverse_out=TraverseOut.SPAWN_PICKED,
+            metadata={"expression": expression, "variable": variable},
+        )
+        self._add_node(node)
+        self._decision_node_id = node.id
+        self._last_node_id = None
+        return self
+
+    def decision(self, name: str, options: list[str] | None = None) -> _BranchBuilder:
+        """Add a decision node inside this branch.
+
+        Use ``.on(label)`` for each option.
+        """
+        self._auto_merge_if_needed()
+        node = GraphNode(
+            type=NodeType.DECISION,
+            name=name,
+            traverse_out=TraverseOut.SPAWN_PICKED,
+            metadata={"decision_prompt": name},
+        )
+        self._add_node(node)
+        self._decision_node_id = node.id
+        self._last_node_id = None
+        return self
+
+    def on(self, label: str) -> _BranchBuilder:
+        """Start a sub-branch for a decision/if option inside this branch."""
+        if self._decision_node_id is None:
+            raise ValueError("on() must be called after if_node() or decision()")
+        decision_id = self._decision_node_id
+        sub = _BranchBuilder(self._graph, self, label)
+        sub._last_node_id = decision_id
+        sub._origin_decision_id = decision_id
+        original_add = sub._add_node
+
+        def labeled_add(node: GraphNode) -> _BranchBuilder:
+            if node.position is None:
+                node.position = self._graph._advance_position()
+            self._graph._nodes.append(node)
+            if sub._last_node_id == decision_id:
+                edge = GraphEdge(
+                    source_id=decision_id,
+                    target_id=node.id,
+                    label=label,
+                )
+                self._graph._edges.append(edge)
+            elif sub._last_node_id is not None:
+                self._graph._edges.append(
+                    GraphEdge(source_id=sub._last_node_id, target_id=node.id)
+                )
+            sub._last_node_id = node.id
+            sub._add_node = original_add  # type: ignore[method-assign]
+            return sub
+
+        sub._add_node = labeled_add  # type: ignore[method-assign]
+        return sub
 
     def switch(self, name: str, cases: list[str] | None = None) -> _BranchBuilder:
         """Add a switch/multi-way decision node."""
@@ -245,7 +360,52 @@ class _BranchBuilder:
         node = GraphNode(type=NodeType.BREAK, name=name)
         return self._add_node(node)
 
-    # --- Data nodes ---
+    def parallel(self, name: str = "Parallel") -> _BranchBuilder:
+        """Start a parallel fan-out inside this branch.
+
+        Use ``.branch()`` to define each parallel path and ``.merge()``
+        to rejoin them.
+        """
+        self._auto_merge_if_needed()
+        if self._last_node_id is not None:
+            for n in self._graph._nodes:
+                if n.id == self._last_node_id:
+                    n.traverse_out = TraverseOut.SPAWN_ALL
+                    break
+        self._decision_node_id = self._last_node_id
+        self._last_node_id = None
+        return self
+
+    def branch(self) -> _BranchBuilder:
+        """Start a parallel branch inside this branch."""
+        if self._decision_node_id is None:
+            raise ValueError("branch() must be called after parallel()")
+        sub = _BranchBuilder(self._graph, self, "")
+        sub._last_node_id = self._decision_node_id
+        return sub
+
+    def merge(self, name: str = "Merge") -> _BranchBuilder:
+        """Add a merge node that collects all pending sub-branch endpoints."""
+        merge_node = GraphNode(
+            type=NodeType.MERGE,
+            name=name,
+            traverse_in=TraverseIn.AWAIT_ALL,
+            position=self._graph._advance_position(),
+        )
+        self._graph._nodes.append(merge_node)
+        for ep in self._branch_endpoints:
+            self._graph._edges.append(GraphEdge(source_id=ep, target_id=merge_node.id))
+        self._branch_endpoints.clear()
+        if self._last_node_id is not None:
+            self._graph._edges.append(
+                GraphEdge(source_id=self._last_node_id, target_id=merge_node.id)
+            )
+        self._last_node_id = merge_node.id
+        return self
+
+    # ------------------------------------------------------------------
+    # Data nodes
+    # ------------------------------------------------------------------
 
     def var(self, name: str, variable: str = "", value: str = "") -> _BranchBuilder:
         """Add a variable assignment node."""
@@ -283,7 +443,9 @@ class _BranchBuilder:
         )
         return self._add_node(node)
 
-    # --- Memory nodes ---
+    # ------------------------------------------------------------------
+    # Memory nodes
+    # ------------------------------------------------------------------
 
     def read_memory(self, name: str, key: str = "") -> _BranchBuilder:
         """Read from persistent memory."""
@@ -317,7 +479,9 @@ class _BranchBuilder:
         node = GraphNode(type=NodeType.FLOW_MEMORY, name=name)
         return self._add_node(node)
 
-    # --- User interaction ---
+    # ------------------------------------------------------------------
+    # User interaction
+    # ------------------------------------------------------------------
 
     def user_decision(self, name: str, options: list[str] | None = None) -> _BranchBuilder:
         """Prompt user to make a decision (shows buttons/options)."""
@@ -337,7 +501,9 @@ class _BranchBuilder:
         )
         return self._add_node(node)
 
-    # --- Utility nodes ---
+    # ------------------------------------------------------------------
+    # Utility nodes
+    # ------------------------------------------------------------------
 
     def comment(self, name: str, text: str = "") -> _BranchBuilder:
         """Add a comment node (no-op, for documentation)."""
@@ -456,7 +622,9 @@ class _BranchBuilder:
         )
         return self._add_node(node)
 
-    # --- Generic ---
+    # ------------------------------------------------------------------
+    # Generic
+    # ------------------------------------------------------------------
 
     def node(
         self,
@@ -477,43 +645,50 @@ class _BranchBuilder:
 
         Accepts either an ``AgentVersion`` or a ``GraphBuilder`` instance.
         """
-        # If this is the first call after .on(), the connecting edge needs
-        # the branch label (just like labeled_add would provide).
-        is_first = self._last_node_id == self._parent._decision_node_id
+        # Detect whether this is the first call after on() — need to label the edge
+        is_first = (
+            self._origin_decision_id is not None
+            and self._last_node_id == self._origin_decision_id
+        )
         new_last = _inline_subgraph(
             sub_graph,
-            self._parent._nodes,
-            self._parent._edges,
+            self._graph._nodes,
+            self._graph._edges,
             self._last_node_id,
-            self._parent._advance_position,
+            self._graph._advance_position,
         )
         # Patch the label on the connecting edge if this was the first call
-        if is_first and self._parent._edges:
-            for edge in reversed(self._parent._edges):
-                if edge.source_id == self._parent._decision_node_id:
+        if is_first and self._graph._edges:
+            for edge in reversed(self._graph._edges):
+                if edge.source_id == self._origin_decision_id:
                     edge.label = self._label
                     break
         if new_last is not None:
             self._last_node_id = new_last
-        # Reset _add_node back to the original (labeled_add was one-shot)
         return self
 
-    def end(self) -> GraphBuilder:
-        """End this branch and return to the parent builder.
+    # ------------------------------------------------------------------
+    # Termination
+    # ------------------------------------------------------------------
 
-        Records the branch endpoint so that a subsequent call on the parent
-        (e.g. ``.merge()``, ``.instruction()``, etc.) can auto-merge the
-        branches.
+    def end(self) -> Any:
+        """End this branch and return to the parent.
+
+        Records the branch endpoint so that a subsequent ``.merge()``
+        or auto-merge can connect all branches.
+
+        Returns the parent — either a ``GraphBuilder`` or another
+        ``_BranchBuilder`` for nested control flow.
         """
         if self._last_node_id is not None:
             self._parent._branch_endpoints.append(self._last_node_id)
         return self._parent
 
-    def merge_to(self, merge_node_id: UUID) -> GraphBuilder:
+    def merge_to(self, merge_node_id: UUID) -> Any:
         """Connect this branch to an existing merge node, then return to parent."""
         if self._last_node_id is not None:
             edge = GraphEdge(source_id=self._last_node_id, target_id=merge_node_id)
-            self._parent._edges.append(edge)
+            self._graph._edges.append(edge)
         return self._parent
 
 
@@ -805,9 +980,11 @@ class GraphBuilder:
         """Start building a branch for a decision option."""
         if self._decision_node_id is None:
             raise ValueError("on() must be called after decision()")
-        branch = _BranchBuilder(self, label)
+        decision_id = self._decision_node_id
+        branch = _BranchBuilder(self, self, label)
         # The first node added to this branch will be connected from the decision node
-        branch._last_node_id = self._decision_node_id
+        branch._last_node_id = decision_id
+        branch._origin_decision_id = decision_id
         # We need to override _add_node to set the edge label for the first edge
         original_add = branch._add_node
 
@@ -815,10 +992,9 @@ class GraphBuilder:
             if node.position is None:
                 node.position = self._advance_position()
             self._nodes.append(node)
-            assert self._decision_node_id is not None
-            if branch._last_node_id == self._decision_node_id:
+            if branch._last_node_id == decision_id:
                 edge = GraphEdge(
-                    source_id=self._decision_node_id,
+                    source_id=decision_id,
                     target_id=node.id,
                     label=label,
                 )
@@ -1151,9 +1327,9 @@ class GraphBuilder:
         """
         if self._decision_node_id is None:
             raise ValueError("branch() must be called after parallel()")
-        branch = _BranchBuilder(self, "")
-        branch._last_node_id = self._decision_node_id
-        return branch
+        b = _BranchBuilder(self, self, "")
+        b._last_node_id = self._decision_node_id
+        return b
 
     def loop(
         self, name: str, max_iterations: int = 10, break_condition: str = ""
