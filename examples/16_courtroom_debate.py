@@ -134,7 +134,7 @@ trial = (
     .var("Init round", variable="round_number", expression="1")
 
     # --- LOOP: multi-round debate (up to 3 rounds) --------------------------
-    .loop("Debate loop", max_iterations=3, break_condition="round_number > 3")
+    .instruction("Debate loop", system_instruction="Manage the debate loop (up to 3 rounds)")
 
     .text("Round header", template=(
         "\n--- ROUND {{round_number}} ---\n"

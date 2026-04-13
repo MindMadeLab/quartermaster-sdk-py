@@ -26,6 +26,10 @@ from quartermaster_graph.metadata import (
     validate_metadata,
 )
 
+# Note: The metadata classes still exist for potential use with custom node() calls,
+# but they are no longer registered in the _NODE_TYPE_METADATA lookup since the
+# corresponding NodeType enum members were removed.
+
 
 class TestGetMetadataClass:
     def test_instruction_type(self):
@@ -48,12 +52,6 @@ class TestGetMetadataClass:
 
     def test_var_type(self):
         assert get_metadata_class(NodeType.VAR) is VarMetadata
-
-    def test_tool_type(self):
-        assert get_metadata_class(NodeType.TOOL) is ToolMetadata
-
-    def test_loop_type(self):
-        assert get_metadata_class(NodeType.LOOP) is LoopMetadata
 
     def test_untyped_returns_none(self):
         assert get_metadata_class(NodeType.START) is None

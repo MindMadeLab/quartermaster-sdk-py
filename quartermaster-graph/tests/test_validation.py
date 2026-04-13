@@ -187,30 +187,6 @@ class TestCycleDetection:
         codes = [e.code for e in errors]
         assert "cycle_detected" in codes
 
-    def test_cycle_with_loop_node_is_warning(self, agent):
-        start = GraphNode(type=NodeType.START, name="Start")
-        loop = GraphNode(type=NodeType.LOOP, name="Loop")
-        body = GraphNode(type=NodeType.INSTRUCTION, name="Body")
-        end = GraphNode(type=NodeType.END, name="End")
-        edges = [
-            GraphEdge(source_id=start.id, target_id=loop.id),
-            GraphEdge(source_id=loop.id, target_id=body.id),
-            GraphEdge(source_id=body.id, target_id=loop.id),  # intentional loop
-            GraphEdge(source_id=loop.id, target_id=end.id),
-        ]
-        version = AgentVersion(
-            agent_id=agent.id,
-            start_node_id=start.id,
-            nodes=[start, loop, body, end],
-            edges=edges,
-        )
-        errors = validate_graph(version)
-        warnings = [e for e in errors if e.severity == "warning"]
-        real_errors = [e for e in errors if e.severity == "error"]
-        assert any(e.code == "cycle_with_loop" for e in warnings)
-        assert not any(e.code == "cycle_detected" for e in real_errors)
-
-
 class TestDecisionEdgeLabels:
     def test_unlabeled_decision_edges(self, agent):
         start = GraphNode(type=NodeType.START, name="Start")

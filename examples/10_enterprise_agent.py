@@ -45,7 +45,7 @@ hr_flow = (
     .instruction("HR analysis", system_instruction="Analyse HR-related query and determine policy")
     .if_node("Needs approval?", expression="requires_manager_approval")
     .on("true")
-        .notification("Alert manager", channel="email", message="HR request requires manager approval")
+        .static("Alert manager", text="HR request requires manager approval")
         .user("Awaiting manager response")
     .end()
     .on("false")
@@ -92,7 +92,7 @@ finance_flow = (
     .instruction("Finance analysis", system_instruction="Analyse the finance-related request")
     .if_node("Large amount?", expression="amount > 10000")
     .on("true")
-        .notification("CFO alert", channel="slack", message="Finance request over $10k requires CFO approval")
+        .static("CFO alert", text="Finance request over $10k requires CFO approval")
         .instruction("Prepare CFO brief", system_instruction="Summarise request for CFO review")
     .end()
     .on("false")
@@ -144,8 +144,8 @@ agent = (
 
     # --- Audit trail ----------------------------------------------------------
     .write_memory("Audit log", memory_name="audit_log", variables=[{"name": "audit", "value": "completed | dept:{{department}} | quality:{{quality_score}}"}])
-    .notification("Completion notice", channel="internal", message="Request handled successfully")
-    .log("Audit", message="Enterprise request completed", level="info")
+    .static("Completion notice", text="Request handled successfully")
+    .static("Audit", text="Enterprise request completed")
     .end()
 )
 

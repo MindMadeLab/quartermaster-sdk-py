@@ -12,7 +12,7 @@ from quartermaster_graph.enums import (
 
 class TestNodeType:
     def test_member_count(self):
-        assert len(NodeType) >= 39
+        assert len(NodeType) >= 22
 
     def test_all_values_end_with_1_or_are_named(self):
         for member in NodeType:
@@ -24,7 +24,6 @@ class TestNodeType:
             NodeType.START, NodeType.END, NodeType.INSTRUCTION,
             NodeType.DECISION, NodeType.IF, NodeType.SWITCH,
             NodeType.MERGE, NodeType.CODE, NodeType.USER,
-            NodeType.TOOL, NodeType.LOOP, NodeType.PARALLEL,
         ]
         for t in essential:
             assert t in NodeType

@@ -155,27 +155,12 @@ def validate_graph(version: AgentVersion) -> list[ValidationError]:  # type: ign
                     queue_cycle.append(succ)
 
         if visited_count < len(version.nodes):
-            cycle_nodes = [nid for nid, deg in in_degree.items() if deg > 0]
-            has_loop_node = any(
-                node_map[nid].type == NodeType.LOOP
-                for nid in cycle_nodes
-                if nid in node_map
+            errors.append(
+                ValidationError(
+                    code="cycle_detected",
+                    message="Graph contains a cycle (not a DAG)",
+                )
             )
-            if has_loop_node:
-                errors.append(
-                    ValidationError(
-                        code="cycle_with_loop",
-                        message="Graph contains a cycle involving Loop nodes",
-                        severity="warning",
-                    )
-                )
-            else:
-                errors.append(
-                    ValidationError(
-                        code="cycle_detected",
-                        message="Graph contains a cycle (not a DAG)",
-                    )
-                )
 
     # --- Decision/If/Switch edge label checks ---
     outgoing: dict[UUID, list[GraphEdge]] = {}  # type: ignore[name-defined]  # noqa: F821

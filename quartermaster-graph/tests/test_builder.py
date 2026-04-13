@@ -144,28 +144,6 @@ class TestNodeTypes:
         user_nodes = [n for n in version.nodes if n.type == NodeType.USER]
         assert len(user_nodes) == 1
 
-    def test_tool_node(self):
-        version = (
-            GraphBuilder("Tool")
-            .start()
-            .tool("Search", tool_name="web_search")
-            .end()
-            .build()
-        )
-        tool_nodes = [n for n in version.nodes if n.type == NodeType.TOOL]
-        assert len(tool_nodes) == 1
-
-    def test_generic_node(self):
-        version = (
-            GraphBuilder("Generic")
-            .start()
-            .node(NodeType.LOG, name="Log step", metadata={"level": "info"})
-            .end()
-            .build()
-        )
-        log_nodes = [n for n in version.nodes if n.type == NodeType.LOG]
-        assert len(log_nodes) == 1
-
     def test_sub_agent_node(self):
         version = (
             GraphBuilder("SubAgent")
@@ -176,18 +154,6 @@ class TestNodeTypes:
         )
         sub_nodes = [n for n in version.nodes if n.type == NodeType.SUB_ASSISTANT]
         assert len(sub_nodes) == 1
-
-    def test_loop_node(self):
-        version = (
-            GraphBuilder("Loop")
-            .start()
-            .loop("Repeat", max_iterations=5)
-            .end()
-            .build()
-        )
-        loop_nodes = [n for n in version.nodes if n.type == NodeType.LOOP]
-        assert len(loop_nodes) == 1
-
 
 class TestBuilderValidation:
     def test_valid_graph_no_errors(self):

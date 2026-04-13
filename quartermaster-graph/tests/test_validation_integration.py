@@ -198,31 +198,6 @@ class TestCycleDetection:
         error_codes = {e.code for e in errors if e.severity == "error"}
         assert "cycle_detected" in error_codes
 
-    def test_cycle_with_loop_node_is_warning(self, agent: Agent) -> None:
-        """A cycle through a Loop node produces a warning, not an error."""
-        start = GraphNode(type=NodeType.START, name="Start")
-        loop = GraphNode(type=NodeType.LOOP, name="Loop")
-        body = GraphNode(type=NodeType.INSTRUCTION, name="Body")
-        end = GraphNode(type=NodeType.END, name="End")
-        edges = [
-            GraphEdge(source_id=start.id, target_id=loop.id),
-            GraphEdge(source_id=loop.id, target_id=body.id),
-            GraphEdge(source_id=body.id, target_id=loop.id),
-            GraphEdge(source_id=loop.id, target_id=end.id),
-        ]
-        version = AgentVersion(
-            agent_id=agent.id,
-            start_node_id=start.id,
-            nodes=[start, loop, body, end],
-            edges=edges,
-        )
-        errors = validate_graph(version)
-        warnings = [e for e in errors if e.severity == "warning"]
-        hard_errors = [e for e in errors if e.severity == "error"]
-        assert any(e.code == "cycle_with_loop" for e in warnings)
-        assert not any(e.code == "cycle_detected" for e in hard_errors)
-
-
 class TestInvalidEdges:
     """Validation must detect edges referencing nonexistent nodes."""
 

@@ -363,19 +363,6 @@ _NODE_TYPE_METADATA: dict[NodeType, type[BaseModel]] = {
     # Utility
     NodeType.COMMENT: CommentMetadata,
     NodeType.USE_ENVIRONMENT: UseEnvironmentMetadata,
-    # Schema-only
-    NodeType.TOOL: ToolMetadata,
-    NodeType.API_CALL: ApiCallMetadata,
-    NodeType.WEBHOOK: ApiCallMetadata,
-    NodeType.TIMER: TimerMetadata,
-    NodeType.LOOP: LoopMetadata,
-    NodeType.VALIDATOR: ValidatorMetadata,
-    NodeType.TRANSFORMER: TransformerMetadata,
-    NodeType.FILTER: FilterMetadata,
-    NodeType.AGGREGATOR: AggregatorMetadata,
-    NodeType.ROUTER: RouterMetadata,
-    NodeType.LOG: LogMetadata,
-    NodeType.NOTIFICATION: NotificationMetadata,
 }
 
 

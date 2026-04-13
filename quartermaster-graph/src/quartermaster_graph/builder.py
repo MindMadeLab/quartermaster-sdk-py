@@ -749,94 +749,6 @@ class _BranchBuilder:
         )
         return self._add_node(node)
 
-    def webhook(self, name: str, url: str = "", method: str = "POST") -> _BranchBuilder:
-        """Add a webhook call node."""
-        node = GraphNode(
-            type=NodeType.WEBHOOK, name=name,
-            metadata={"url": url, "method": method},
-        )
-        return self._add_node(node)
-
-    def api_call(self, name: str, url: str = "", method: str = "GET", **kwargs: Any) -> _BranchBuilder:
-        """Add an API call node."""
-        node = GraphNode(
-            type=NodeType.API_CALL, name=name,
-            metadata={"url": url, "method": method, **kwargs},
-        )
-        return self._add_node(node)
-
-    def log(self, name: str, message: str = "", level: str = "info") -> _BranchBuilder:
-        """Add a logging node."""
-        node = GraphNode(
-            type=NodeType.LOG, name=name,
-            metadata={"message": message, "level": level},
-        )
-        return self._add_node(node)
-
-    def error_handler(self, name: str, strategy: str = "retry") -> _BranchBuilder:
-        """Add an error handler node."""
-        node = GraphNode(
-            type=NodeType.ERROR_HANDLER, name=name,
-            metadata={"strategy": strategy},
-        )
-        return self._add_node(node)
-
-    def router(self, name: str, routes: list[str] | None = None) -> _BranchBuilder:
-        """Add a router node (dynamic dispatch)."""
-        node = GraphNode(
-            type=NodeType.ROUTER, name=name,
-            metadata={"routes": routes or []},
-        )
-        return self._add_node(node)
-
-    def validator(self, name: str, schema: dict | None = None) -> _BranchBuilder:
-        """Add a data validation node."""
-        node = GraphNode(
-            type=NodeType.VALIDATOR, name=name,
-            metadata={"schema": schema or {}},
-        )
-        return self._add_node(node)
-
-    def transformer(self, name: str, transform: str = "") -> _BranchBuilder:
-        """Add a data transformation node."""
-        node = GraphNode(
-            type=NodeType.TRANSFORMER, name=name,
-            metadata={"transform": transform},
-        )
-        return self._add_node(node)
-
-    def filter_node(self, name: str, condition: str = "") -> _BranchBuilder:
-        """Add a data filter node."""
-        node = GraphNode(
-            type=NodeType.FILTER, name=name,
-            metadata={"condition": condition},
-        )
-        return self._add_node(node)
-
-    def notification(self, name: str, channel: str = "", message: str = "") -> _BranchBuilder:
-        """Add a notification node."""
-        node = GraphNode(
-            type=NodeType.NOTIFICATION, name=name,
-            metadata={"channel": channel, "message": message},
-        )
-        return self._add_node(node)
-
-    def timer(self, name: str, delay: float = 0, schedule: str = "") -> _BranchBuilder:
-        """Add a timer/delay node."""
-        node = GraphNode(
-            type=NodeType.TIMER, name=name,
-            metadata={"delay": delay, "schedule": schedule},
-        )
-        return self._add_node(node)
-
-    def tool(self, name: str, tool_name: str = "", **tool_args: str) -> _BranchBuilder:
-        """Add a tool invocation node."""
-        node = GraphNode(
-            type=NodeType.TOOL, name=name,
-            metadata={"tool_name": tool_name, "tool_args": tool_args},
-        )
-        return self._add_node(node)
-
     def sub_agent(self, name: str, graph_id: str = "") -> _BranchBuilder:
         """Call another agent graph synchronously (blocks until sub-graph completes).
 
@@ -1587,97 +1499,9 @@ class GraphBuilder:
         )
         return self._add_node(node)
 
-    def webhook(self, name: str, url: str = "", method: str = "POST") -> GraphBuilder:
-        """Add a webhook call node."""
-        node = GraphNode(
-            type=NodeType.WEBHOOK, name=name,
-            metadata={"url": url, "method": method},
-        )
-        return self._add_node(node)
-
-    def api_call(self, name: str, url: str = "", method: str = "GET", **kwargs: Any) -> GraphBuilder:
-        """Add an API call node."""
-        node = GraphNode(
-            type=NodeType.API_CALL, name=name,
-            metadata={"url": url, "method": method, **kwargs},
-        )
-        return self._add_node(node)
-
-    def log(self, name: str, message: str = "", level: str = "info") -> GraphBuilder:
-        """Add a logging node."""
-        node = GraphNode(
-            type=NodeType.LOG, name=name,
-            metadata={"message": message, "level": level},
-        )
-        return self._add_node(node)
-
-    def error_handler(self, name: str, strategy: str = "retry") -> GraphBuilder:
-        """Add an error handler node."""
-        node = GraphNode(
-            type=NodeType.ERROR_HANDLER, name=name,
-            metadata={"strategy": strategy},
-        )
-        return self._add_node(node)
-
-    def router(self, name: str, routes: list[str] | None = None) -> GraphBuilder:
-        """Add a router node (dynamic dispatch)."""
-        node = GraphNode(
-            type=NodeType.ROUTER, name=name,
-            metadata={"routes": routes or []},
-        )
-        return self._add_node(node)
-
-    def validator(self, name: str, schema: dict | None = None) -> GraphBuilder:
-        """Add a data validation node."""
-        node = GraphNode(
-            type=NodeType.VALIDATOR, name=name,
-            metadata={"schema": schema or {}},
-        )
-        return self._add_node(node)
-
-    def transformer(self, name: str, transform: str = "") -> GraphBuilder:
-        """Add a data transformation node."""
-        node = GraphNode(
-            type=NodeType.TRANSFORMER, name=name,
-            metadata={"transform": transform},
-        )
-        return self._add_node(node)
-
-    def filter_node(self, name: str, condition: str = "") -> GraphBuilder:
-        """Add a data filter node."""
-        node = GraphNode(
-            type=NodeType.FILTER, name=name,
-            metadata={"condition": condition},
-        )
-        return self._add_node(node)
-
-    def notification(self, name: str, channel: str = "", message: str = "") -> GraphBuilder:
-        """Add a notification node."""
-        node = GraphNode(
-            type=NodeType.NOTIFICATION, name=name,
-            metadata={"channel": channel, "message": message},
-        )
-        return self._add_node(node)
-
-    def timer(self, name: str, delay: float = 0, schedule: str = "") -> GraphBuilder:
-        """Add a timer/delay node."""
-        node = GraphNode(
-            type=NodeType.TIMER, name=name,
-            metadata={"delay": delay, "schedule": schedule},
-        )
-        return self._add_node(node)
-
     # ------------------------------------------------------------------
     # Composition / sub-graphs
     # ------------------------------------------------------------------
-
-    def tool(self, name: str, tool_name: str = "", **tool_args: str) -> GraphBuilder:
-        """Add a tool invocation node."""
-        node = GraphNode(
-            type=NodeType.TOOL, name=name,
-            metadata={"tool_name": tool_name, "tool_args": tool_args},
-        )
-        return self._add_node(node)
 
     def sub_agent(self, name: str, graph_id: str = "") -> GraphBuilder:
         """Call another agent graph synchronously (blocks until sub-graph completes).
@@ -1720,16 +1544,6 @@ class GraphBuilder:
         b = _BranchBuilder(self, self, "")
         b._last_node_id = self._decision_node_id
         return b
-
-    def loop(
-        self, name: str, max_iterations: int = 10, break_condition: str = ""
-    ) -> GraphBuilder:
-        """Add a loop node."""
-        node = GraphNode(
-            type=NodeType.LOOP, name=name,
-            metadata={"max_iterations": max_iterations, "break_condition": break_condition},
-        )
-        return self._add_node(node)
 
     def merge(
         self, name: str = "Merge",

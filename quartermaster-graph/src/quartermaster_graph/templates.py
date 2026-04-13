@@ -52,29 +52,6 @@ class Templates:
         return b.build(validate=True)
 
     @staticmethod
-    def rag_pipeline(
-        name: str = "RAG Pipeline",
-        model: str = "gpt-4o",
-        retrieval_tool: str = "vector_search",
-    ) -> AgentVersion:
-        """Start -> Tool (retrieve) -> Instruction (generate) -> End.
-
-        Retrieval-Augmented Generation pipeline.
-        """
-        return (
-            GraphBuilder(name)
-            .start()
-            .tool("Retrieve", tool_name=retrieval_tool)
-            .instruction(
-                "Generate",
-                model=model,
-                system_instruction="Answer based on retrieved context.",
-            )
-            .end()
-            .build(validate=True)
-        )
-
-    @staticmethod
     def multi_step(
         name: str = "Multi-Step Agent",
         steps: list[str] | None = None,
@@ -115,38 +92,6 @@ class Templates:
         return b.build(validate=True)
 
     @staticmethod
-    def tool_using_agent(
-        name: str = "Tool-Using Agent",
-        model: str = "gpt-4o",
-        tools: list[str] | None = None,
-        system_instruction: str = "You are a helpful assistant with access to tools.",
-    ) -> AgentVersion:
-        """Start -> Instruction (plan) -> Tool -> Instruction (synthesize) -> End.
-
-        An agent that reasons about a task, invokes a tool, then synthesizes
-        the tool output into a final answer.
-        """
-        if tools is None:
-            tools = ["web_search"]
-
-        b = GraphBuilder(name)
-        b.start()
-        b.instruction(
-            "Plan",
-            model=model,
-            system_instruction=system_instruction,
-        )
-        for tool_name in tools:
-            b.tool(f"Use {tool_name}", tool_name=tool_name)
-        b.instruction(
-            "Synthesize",
-            model=model,
-            system_instruction="Synthesize the tool results into a coherent answer.",
-        )
-        b.end()
-        return b.build(validate=True)
-
-    @staticmethod
     def multi_agent_supervisor(
         name: str = "Multi-Agent Supervisor",
         worker_names: list[str] | None = None,
@@ -183,33 +128,3 @@ class Templates:
             )
         return b.build(validate=True)
 
-    @staticmethod
-    def advanced_rag(
-        name: str = "Advanced RAG Pipeline",
-        model: str = "gpt-4o",
-        retrieval_tool: str = "vector_search",
-        rerank_tool: str = "reranker",
-    ) -> AgentVersion:
-        """Start -> Instruction (rewrite) -> Tool (retrieve) -> Tool (rerank) -> Instruction (generate) -> End.
-
-        An advanced RAG pipeline with query rewriting and result reranking
-        before final answer generation.
-        """
-        return (
-            GraphBuilder(name)
-            .start()
-            .instruction(
-                "Rewrite Query",
-                model=model,
-                system_instruction="Rewrite the user query for better retrieval.",
-            )
-            .tool("Retrieve", tool_name=retrieval_tool)
-            .tool("Rerank", tool_name=rerank_tool)
-            .instruction(
-                "Generate Answer",
-                model=model,
-                system_instruction="Answer the question using the retrieved and reranked context.",
-            )
-            .end()
-            .build(validate=True)
-        )

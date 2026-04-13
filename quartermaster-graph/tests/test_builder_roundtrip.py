@@ -133,26 +133,8 @@ class TestDecisionBranchRoundtrip:
         assert len(end_nodes) == 3
 
 
-class TestToolAndSubAgentRoundtrip:
-    """Round-trip tests for tool and sub-agent nodes."""
-
-    def test_tool_node_metadata(self) -> None:
-        """Tool node metadata survives JSON round-trip."""
-        version = (
-            GraphBuilder("Tool Agent")
-            .start()
-            .tool("Search", tool_name="web_search")
-            .instruction("Summarize results")
-            .end()
-            .build()
-        )
-
-        data = to_json(version)
-        restored = from_json(data)
-
-        tool_nodes = [n for n in restored.nodes if n.type == NodeType.TOOL]
-        assert len(tool_nodes) == 1
-        assert tool_nodes[0].metadata["tool_name"] == "web_search"
+class TestSubAgentRoundtrip:
+    """Round-trip tests for sub-agent nodes."""
 
     def test_sub_agent_metadata(self) -> None:
         """Sub-agent node metadata survives JSON round-trip."""

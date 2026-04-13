@@ -34,7 +34,7 @@ agent = (
     .if_node("Is urgent?", expression="severity == 'high'")
     .on("true")
         .instruction("Escalate", system_instruction="Create urgent ticket")
-        .notification("Alert team", channel="slack", message="Urgent issue!")
+        .static("Alert team", text="Urgent issue!")
     .end()
     .on("false")
         .instruction("Standard response", system_instruction="Provide standard help")

@@ -612,52 +612,6 @@ class TestUserDecisionNode:
         assert _no_errors(graph) == []
 
 
-class TestWebhookAndApiCall:
-    def test_webhook(self):
-        graph = (
-            GraphBuilder("WH")
-            .start()
-            .webhook("Notify", url="https://example.com/hook", method="POST")
-            .end()
-            .build()
-        )
-        wh_nodes = [n for n in graph.nodes if n.type == NodeType.WEBHOOK]
-        assert len(wh_nodes) == 1
-        assert wh_nodes[0].metadata["url"] == "https://example.com/hook"
-        assert _no_errors(graph) == []
-
-    def test_api_call(self):
-        graph = (
-            GraphBuilder("API")
-            .start()
-            .api_call("Fetch data", url="https://api.example.com/data", method="GET")
-            .end()
-            .build()
-        )
-        api_nodes = [n for n in graph.nodes if n.type == NodeType.API_CALL]
-        assert len(api_nodes) == 1
-        assert api_nodes[0].metadata["method"] == "GET"
-        assert _no_errors(graph) == []
-
-
-class TestBreakNode:
-    def test_break_in_loop(self):
-        graph = (
-            GraphBuilder("LoopBreak")
-            .start()
-            .loop("Repeat", max_iterations=5)
-            .instruction("Work")
-            .if_node("Done?", expression="done == true")
-            .on("true").break_node().end()
-            .on("false").instruction("Continue work").end()
-            .end()
-            .build()
-        )
-        break_nodes = [n for n in graph.nodes if n.type == NodeType.BREAK]
-        assert len(break_nodes) == 1
-        assert _no_errors(graph) == []
-
-
 class TestGraphAlias:
     def test_graph_alias_import(self):
         from quartermaster_graph import Graph
@@ -757,30 +711,6 @@ class TestBranchBuilderNewNodes:
         var_nodes = [n for n in graph.nodes if n.type == NodeType.VAR]
         assert len(var_nodes) == 1
 
-    def test_webhook_on_branch(self):
-        graph = (
-            GraphBuilder("B")
-            .start()
-            .decision("D", options=["a"])
-            .on("a").webhook("Notify", url="http://x.com").end()
-            .end()
-            .build()
-        )
-        wh_nodes = [n for n in graph.nodes if n.type == NodeType.WEBHOOK]
-        assert len(wh_nodes) == 1
-
-    def test_api_call_on_branch(self):
-        graph = (
-            GraphBuilder("B")
-            .start()
-            .decision("D", options=["a"])
-            .on("a").api_call("Fetch", url="http://x.com").end()
-            .end()
-            .build()
-        )
-        api_nodes = [n for n in graph.nodes if n.type == NodeType.API_CALL]
-        assert len(api_nodes) == 1
-
     def test_read_write_memory_on_branch(self):
         graph = (
             GraphBuilder("B")
@@ -806,18 +736,6 @@ class TestBranchBuilderNewNodes:
         )
         ud = [n for n in graph.nodes if n.type == NodeType.USER_DECISION]
         assert len(ud) == 1
-
-    def test_log_on_branch(self):
-        graph = (
-            GraphBuilder("B")
-            .start()
-            .decision("D", options=["a"])
-            .on("a").log("Debug", message="hit branch a").end()
-            .end()
-            .build()
-        )
-        log_nodes = [n for n in graph.nodes if n.type == NodeType.LOG]
-        assert len(log_nodes) == 1
 
     def test_summarize_on_branch(self):
         graph = (

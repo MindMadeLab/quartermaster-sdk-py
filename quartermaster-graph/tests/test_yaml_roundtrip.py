@@ -187,23 +187,3 @@ class TestYamlValidationAfterRoundtrip:
         errors_after = validate_graph(restored)
         assert not [e for e in errors_after if e.severity == "error"]
 
-    def test_tool_graph_valid_after_yaml(self) -> None:
-        """Graph with tool nodes passes validation after YAML round-trip."""
-        version = (
-            GraphBuilder("Tool YAML")
-            .start()
-            .tool("Search", tool_name="vector_search")
-            .instruction("Generate answer")
-            .end()
-            .build()
-        )
-
-        yaml_str = to_yaml(version)
-        restored = from_yaml(yaml_str)
-
-        errors = validate_graph(restored)
-        assert not [e for e in errors if e.severity == "error"]
-
-        tool_nodes = [n for n in restored.nodes if n.type == NodeType.TOOL]
-        assert len(tool_nodes) == 1
-        assert tool_nodes[0].metadata["tool_name"] == "vector_search"

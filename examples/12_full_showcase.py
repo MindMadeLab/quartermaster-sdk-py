@@ -172,8 +172,8 @@ agent = (
 
     # --- Audit trail ----------------------------------------------------------
     .update_memory("Update status", memory_name="research_status")
-    .notification("Report ready", channel="email", message="Research report on {{research_topic}} is ready for review")
-    .log("Completed", message="Research pipeline completed for: {{research_topic}}", level="info")
+    .static("Report ready", text="Research report on {{research_topic}} is ready for review")
+    .static("Completed", text="Research pipeline completed for: {{research_topic}}")
     .end()
 )
 
