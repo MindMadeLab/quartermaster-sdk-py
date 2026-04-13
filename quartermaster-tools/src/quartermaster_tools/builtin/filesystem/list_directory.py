@@ -10,7 +10,7 @@ from typing import Any
 
 from quartermaster_tools.decorator import tool
 
-from ._security import resolve_base_dir, validate_path
+from ._security import validate_path
 
 
 def _entry_info(full_path: str, base: str) -> dict[str, Any]:
@@ -81,35 +81,5 @@ def list_directory(path: str, recursive: bool = False, pattern: str = "*", inclu
     return {"entries": entries, "count": len(entries)}
 
 
-# Backward-compatible class wrapper supporting allowed_base_dir constructor arg
-class ListDirectoryTool:
-    """List entries in a directory.
-
-    Wraps the list_directory function tool, adding optional allowed_base_dir
-    restriction for backward compatibility.
-    """
-
-    def __init__(self, allowed_base_dir: str | None = None) -> None:
-        self._allowed_base_dir = resolve_base_dir(allowed_base_dir)
-        self._tool = list_directory
-
-    def name(self) -> str:
-        return self._tool.name()
-
-    def version(self) -> str:
-        return self._tool.version()
-
-    def parameters(self):
-        return self._tool.parameters()
-
-    def info(self):
-        return self._tool.info()
-
-    def run(self, **kwargs: Any):
-        path = kwargs.get("path", "")
-        if path:
-            error, _ = validate_path(path, self._allowed_base_dir)
-            if error:
-                from quartermaster_tools.types import ToolResult
-                return ToolResult(success=False, error=error)
-        return self._tool.run(**kwargs)
+# Backward-compatible alias
+ListDirectoryTool = list_directory

@@ -6,9 +6,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from quartermaster_tools.builtin.file_read import ReadFileTool
-from quartermaster_tools.builtin.file_write import WriteFileTool
-from quartermaster_tools.builtin.web_request import WebRequestTool
+from quartermaster_tools.builtin.file_read import ReadFileTool, _read_file_impl
+from quartermaster_tools.builtin.file_write import WriteFileTool, _write_file_impl
+from quartermaster_tools.builtin.web_request import WebRequestTool, _web_request_impl
 from quartermaster_tools.types import ToolResult
 
 
@@ -59,10 +59,10 @@ class TestReadFileTool:
         file = tmp_path / "big.txt"
         file.write_text("x" * 100, encoding="utf-8")
 
-        result = ReadFileTool.run(path=str(file), max_file_size=50)
+        result = _read_file_impl(str(file), max_file_size=50)
 
-        assert result.success is False
-        assert "too large" in result.error.lower()
+        assert "error" in result
+        assert "too large" in result["error"].lower()
 
     def test_blocked_path_etc_shadow(self) -> None:
         result = ReadFileTool.run(path="/etc/shadow")
@@ -85,10 +85,10 @@ class TestReadFileTool:
         outside_file = outside / "secret.txt"
         outside_file.write_text("secret", encoding="utf-8")
 
-        result = ReadFileTool.run(path=str(outside_file), allowed_base_dir=str(allowed))
+        result = _read_file_impl(str(outside_file), allowed_base_dir=str(allowed))
 
-        assert result.success is False
-        assert "access denied" in result.error.lower()
+        assert "error" in result
+        assert "access denied" in result["error"].lower()
 
     def test_allowed_base_dir_permits_inside(self, tmp_path: str) -> None:
         allowed = tmp_path / "allowed"
@@ -96,10 +96,10 @@ class TestReadFileTool:
         inside_file = allowed / "ok.txt"
         inside_file.write_text("allowed content", encoding="utf-8")
 
-        result = ReadFileTool.run(path=str(inside_file), allowed_base_dir=str(allowed))
+        result = _read_file_impl(str(inside_file), allowed_base_dir=str(allowed))
 
-        assert result.success is True
-        assert result.data["content"] == "allowed content"
+        assert "error" not in result
+        assert result["content"] == "allowed content"
 
     def test_missing_path_param(self) -> None:
         result = ReadFileTool.run()
@@ -160,18 +160,18 @@ class TestWriteFileTool:
     def test_creates_parent_directories(self, tmp_path: str) -> None:
         file = tmp_path / "a" / "b" / "c" / "deep.txt"
 
-        result = WriteFileTool.run(path=str(file), content="deep", create_dirs=True)
+        result = _write_file_impl(str(file), "deep", create_dirs=True)
 
-        assert result.success is True
+        assert "error" not in result
         assert file.read_text(encoding="utf-8") == "deep"
 
     def test_content_too_large(self, tmp_path: str) -> None:
         file = tmp_path / "big.txt"
 
-        result = WriteFileTool.run(path=str(file), content="x" * 100, max_content_size=10)
+        result = _write_file_impl(str(file), "x" * 100, max_content_size=10)
 
-        assert result.success is False
-        assert "too large" in result.error.lower()
+        assert "error" in result
+        assert "too large" in result["error"].lower()
 
     def test_blocked_path(self) -> None:
         result = WriteFileTool.run(path="/etc/evil.conf", content="bad")
@@ -184,10 +184,10 @@ class TestWriteFileTool:
         allowed.mkdir()
         outside_file = tmp_path / "outside.txt"
 
-        result = WriteFileTool.run(path=str(outside_file), content="nope", allowed_base_dir=str(allowed))
+        result = _write_file_impl(str(outside_file), "nope", allowed_base_dir=str(allowed))
 
-        assert result.success is False
-        assert "access denied" in result.error.lower()
+        assert "error" in result
+        assert "access denied" in result["error"].lower()
 
     def test_missing_path_param(self) -> None:
         result = WriteFileTool.run(content="hello")
@@ -343,10 +343,10 @@ class TestWebRequestTool:
         import sys
         sys.modules["httpx"] = mock_httpx
         try:
-            result = WebRequestTool.run(url="https://example.com", max_response_size=100)
+            result = _web_request_impl("https://example.com", max_response_size=100)
 
-            assert result.success is False
-            assert "too large" in result.error.lower()
+            assert "error" in result
+            assert "too large" in result["error"].lower()
         finally:
             sys.modules.pop("httpx", None)
 

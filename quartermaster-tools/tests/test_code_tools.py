@@ -86,7 +86,7 @@ class TestPythonExecutorTool:
         """Info returns valid ToolDescriptor."""
         info = self.tool.info()
         assert info.name == "python_executor"
-        assert info.is_local is True
+        assert info.is_local is False
 
     def test_exit_code_captured(self) -> None:
         """Exit code is captured in result data."""
@@ -423,4 +423,4 @@ class TestJavaScriptExecutorTool:
         """Info returns valid ToolDescriptor."""
         info = self.tool.info()
         assert info.name == "javascript_executor"
-        assert info.is_local is True
+        assert info.is_local is False

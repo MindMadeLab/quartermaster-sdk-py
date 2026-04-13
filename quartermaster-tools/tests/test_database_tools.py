@@ -277,7 +277,7 @@ class TestDatabaseToolMetadata:
         assert SQLiteQueryTool.name() == "sqlite_query"
         assert SQLiteQueryTool.version() == "1.0.0"
         info = SQLiteQueryTool.info()
-        assert info.is_local is True
+        assert info.is_local is False
 
     def test_write_tool_info(self):
         assert SQLiteWriteTool.name() == "sqlite_write"

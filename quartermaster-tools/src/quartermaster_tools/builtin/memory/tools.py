@@ -121,6 +121,20 @@ def create_memory_tools(
     )
 
 
+# ---------------------------------------------------------------------------
+# Helpers for test isolation
+# ---------------------------------------------------------------------------
+
+def get_store() -> dict[str, Any]:
+    """Return the default module-level store (for test inspection)."""
+    return _default_store
+
+
+def clear_store() -> None:
+    """Clear all entries from the default module-level store."""
+    _default_store.clear()
+
+
 # Default tool instances using the module-level store.
 set_variable = _make_set_variable(_default_store)
 get_variable = _make_get_variable(_default_store)

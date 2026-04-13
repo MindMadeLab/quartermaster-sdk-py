@@ -6,11 +6,10 @@ from __future__ import annotations
 
 import os
 import shutil
-from typing import Any
 
 from quartermaster_tools.decorator import tool
 
-from ._security import resolve_base_dir, validate_path
+from ._security import validate_path
 
 
 @tool()
@@ -45,40 +44,5 @@ def move_file(source: str, destination: str) -> dict:
     return {"source": source, "destination": destination}
 
 
-# Backward-compatible class wrapper supporting allowed_base_dir constructor arg
-class MoveFileTool:
-    """Move or rename a file or directory.
-
-    Wraps the move_file function tool, adding optional allowed_base_dir
-    restriction for backward compatibility.
-    """
-
-    def __init__(self, allowed_base_dir: str | None = None) -> None:
-        self._allowed_base_dir = resolve_base_dir(allowed_base_dir)
-        self._tool = move_file
-
-    def name(self) -> str:
-        return self._tool.name()
-
-    def version(self) -> str:
-        return self._tool.version()
-
-    def parameters(self):
-        return self._tool.parameters()
-
-    def info(self):
-        return self._tool.info()
-
-    def run(self, **kwargs: Any):
-        from quartermaster_tools.types import ToolResult
-        source = kwargs.get("source", "")
-        destination = kwargs.get("destination", "")
-        if source:
-            error, _ = validate_path(source, self._allowed_base_dir)
-            if error:
-                return ToolResult(success=False, error=error)
-        if destination:
-            error, _ = validate_path(destination, self._allowed_base_dir)
-            if error:
-                return ToolResult(success=False, error=error)
-        return self._tool.run(**kwargs)
+# Backward-compatible alias
+MoveFileTool = move_file

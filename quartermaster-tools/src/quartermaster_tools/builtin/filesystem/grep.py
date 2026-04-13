@@ -10,7 +10,7 @@ from typing import Any
 
 from quartermaster_tools.decorator import tool
 
-from ._security import resolve_base_dir, validate_path
+from ._security import validate_path
 
 
 def _search_file(
@@ -86,35 +86,5 @@ def grep(path: str, pattern: str, recursive: bool = True, context_lines: int = 0
     return {"matches": matches, "total_matches": len(matches)}
 
 
-# Backward-compatible class wrapper supporting allowed_base_dir constructor arg
-class GrepTool:
-    """Search file contents for a regex pattern, optionally recursive.
-
-    Wraps the grep function tool, adding optional allowed_base_dir
-    restriction for backward compatibility.
-    """
-
-    def __init__(self, allowed_base_dir: str | None = None) -> None:
-        self._allowed_base_dir = resolve_base_dir(allowed_base_dir)
-        self._tool = grep
-
-    def name(self) -> str:
-        return self._tool.name()
-
-    def version(self) -> str:
-        return self._tool.version()
-
-    def parameters(self):
-        return self._tool.parameters()
-
-    def info(self):
-        return self._tool.info()
-
-    def run(self, **kwargs: Any):
-        path = kwargs.get("path", "")
-        if path:
-            error, _ = validate_path(path, self._allowed_base_dir)
-            if error:
-                from quartermaster_tools.types import ToolResult
-                return ToolResult(success=False, error=error)
-        return self._tool.run(**kwargs)
+# Backward-compatible alias
+GrepTool = grep

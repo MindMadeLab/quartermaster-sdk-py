@@ -8,7 +8,6 @@ Optionally restricts writes to an allowed base directory.
 from __future__ import annotations
 
 import os
-from typing import Any
 
 from quartermaster_tools.decorator import tool
 
@@ -137,58 +136,5 @@ def write_file(path: str, content: str, encoding: str = "utf-8", append: bool = 
     return _write_file_impl(path, content, encoding=encoding, append=append)
 
 
-# Backward-compatible class wrapper supporting constructor args
-class WriteFileTool:
-    """Write text content to a file.
-
-    Wraps the write_file function tool, adding optional max_content_size,
-    allowed_base_dir, and create_dirs for backward compatibility.
-    """
-
-    def __init__(
-        self,
-        max_content_size: int = DEFAULT_MAX_CONTENT_SIZE,
-        allowed_base_dir: str | None = None,
-        create_dirs: bool = False,
-    ) -> None:
-        self._max_content_size = max_content_size
-        if allowed_base_dir is not None:
-            resolved = os.path.realpath(allowed_base_dir)
-            if os.path.exists(resolved) and not os.path.isdir(resolved):
-                raise ValueError(f"allowed_base_dir must be a directory: {allowed_base_dir}")
-            self._allowed_base_dir: str | None = resolved
-        else:
-            self._allowed_base_dir = None
-        self._create_dirs = create_dirs
-        self._tool = write_file
-
-    def name(self) -> str:
-        return self._tool.name()
-
-    def version(self) -> str:
-        return self._tool.version()
-
-    def parameters(self):
-        return self._tool.parameters()
-
-    def info(self):
-        return self._tool.info()
-
-    def run(self, **kwargs: Any):
-        from quartermaster_tools.types import ToolResult
-        path = kwargs.get("path", "")
-        content = kwargs.get("content", "")
-        encoding = kwargs.get("encoding", "utf-8")
-        append = kwargs.get("append", False)
-        result = _write_file_impl(
-            path,
-            content,
-            encoding=encoding,
-            append=append,
-            max_content_size=self._max_content_size,
-            allowed_base_dir=self._allowed_base_dir,
-            create_dirs=self._create_dirs,
-        )
-        if "error" in result:
-            return ToolResult(success=False, error=result["error"])
-        return ToolResult(success=True, data=result)
+# Backward-compatible alias
+WriteFileTool = write_file

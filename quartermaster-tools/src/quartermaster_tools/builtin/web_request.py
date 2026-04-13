@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-from typing import Any
 from urllib.parse import urlparse
 
 from quartermaster_tools.decorator import tool
@@ -165,53 +164,5 @@ def web_request(url: str, method: str = "GET", headers: dict = None, body: str =
     return _web_request_impl(url, method=method, headers=headers, body=body)
 
 
-# Backward-compatible class wrapper supporting constructor args
-class WebRequestTool:
-    """Make HTTP requests and return the response body.
-
-    Wraps the web_request function tool, adding optional timeout and
-    max_response_size for backward compatibility.
-    """
-
-    def __init__(
-        self,
-        timeout: int = DEFAULT_TIMEOUT,
-        max_response_size: int = DEFAULT_MAX_RESPONSE_SIZE,
-    ) -> None:
-        if timeout > MAX_TIMEOUT:
-            raise ValueError(f"timeout must be <= {MAX_TIMEOUT} seconds, got {timeout}")
-        self._timeout = timeout
-        self._max_response_size = max_response_size
-        self._tool = web_request
-
-    def name(self) -> str:
-        return self._tool.name()
-
-    def version(self) -> str:
-        return self._tool.version()
-
-    def parameters(self):
-        return self._tool.parameters()
-
-    def info(self):
-        info = self._tool.info()
-        info.is_local = False
-        return info
-
-    def run(self, **kwargs: Any):
-        from quartermaster_tools.types import ToolResult
-        url = kwargs.get("url", "")
-        method = kwargs.get("method", "GET")
-        headers = kwargs.get("headers")
-        body = kwargs.get("body")
-        result = _web_request_impl(
-            url,
-            method=method,
-            headers=headers,
-            body=body,
-            timeout=self._timeout,
-            max_response_size=self._max_response_size,
-        )
-        if "error" in result:
-            return ToolResult(success=False, error=result["error"])
-        return ToolResult(success=True, data=result)
+# Backward-compatible alias
+WebRequestTool = web_request
