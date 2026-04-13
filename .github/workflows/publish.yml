@@ -93,13 +93,13 @@ jobs:
             echo "bump=${{ github.event.inputs.bump }}" >> "$GITHUB_OUTPUT"
           else
             # Auto-detect from commit messages on push to master
-            # Use "minor" if any commit contains [minor] or [feature]
-            # Use "major" if any commit contains [major] or [breaking]
+            # Use "minor" if any commit contains [minor]
+            # Use "major" if any commit contains [major]
             # Default to "patch"
             COMMITS=$(git log --format=%s $(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~10")..HEAD 2>/dev/null || echo "")
-            if echo "$COMMITS" | grep -qiE '\[(major|breaking)\]'; then
+            if echo "$COMMITS" | grep -qiE '\[major\]'; then
               echo "bump=major" >> "$GITHUB_OUTPUT"
-            elif echo "$COMMITS" | grep -qiE '\[(minor|feature)\]'; then
+            elif echo "$COMMITS" | grep -qiE '\[minor\]'; then
               echo "bump=minor" >> "$GITHUB_OUTPUT"
             else
               echo "bump=patch" >> "$GITHUB_OUTPUT"
