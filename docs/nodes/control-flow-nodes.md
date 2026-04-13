@@ -131,6 +131,13 @@ graph = (
 )
 ```
 
+### Convergence after IfNode
+
+Because IfNode uses `SpawnPickedNode`, only one branch executes. The branches
+can converge directly at a downstream node (using `traverse_in=AwaitFirst`).
+Do **not** place a Merge or StaticMerge after an IfNode -- those use
+`AwaitAll` and would block forever waiting for the branch that was not taken.
+
 ### Common use cases
 
 * Branch on extracted variables (sentiment, intent, score thresholds).
@@ -194,6 +201,13 @@ metadata = {
     "default_edge_id": "edge-general",
 }
 ```
+
+### Convergence after SwitchNode
+
+Because SwitchNode uses `SpawnPickedNode`, only the matched branch executes.
+Branches converge directly at a downstream node (using
+`traverse_in=AwaitFirst`). Do **not** place a Merge or StaticMerge after a
+SwitchNode -- those use `AwaitAll` and would block forever.
 
 ### Common use cases
 
@@ -328,7 +342,12 @@ GraphBuilder("Orchestrator") \
 
 ## Branching patterns
 
-### Binary branch (IfNode) then merge
+### Binary branch (IfNode) -- no merge needed
+
+IfNode uses `SpawnPickedNode`, so only **one** branch executes. The branches
+converge directly at a downstream node without any merge step. A Merge or
+StaticMerge node would never fire here because only one incoming edge will
+ever arrive.
 
 ```mermaid
 graph TD
@@ -336,11 +355,20 @@ graph TD
     A --> IF{if score > 0.8}
     IF -->|True| H[High confidence]
     IF -->|False| L[Low confidence]
-    H --> E[End]
-    L --> E
+    H --> N[Next step]
+    L --> N
+    N --> E[End]
 ```
 
-### Multi-way branch (SwitchNode)
+The `Next step` node receives exactly one incoming activation (whichever
+branch was picked). It should use `traverse_in=AwaitFirst`. Do **not** place
+a Merge or StaticMerge here -- those nodes use `AwaitAll` and would hang
+waiting for the branch that never fires.
+
+### Multi-way branch (SwitchNode) -- no merge needed
+
+SwitchNode also uses `SpawnPickedNode`. The same rule applies: branches
+converge directly and no merge is required.
 
 ```mermaid
 graph TD
@@ -348,4 +376,28 @@ graph TD
     SW -->|billing| B[Billing]
     SW -->|tech| T[Tech]
     SW -->|default| G[General]
+    B --> N[Continue]
+    T --> N
+    G --> N
+```
+
+### Parallel branches (SpawnAll) -- merge required
+
+When a node uses `SpawnAll` (e.g., StartNode, InstructionNode), **all**
+outgoing edges fire simultaneously. To collect those parallel results back
+into a single path, use one of:
+
+| Node | When to use |
+|---|---|
+| `StaticMerge1` | You only need to join the branch outputs into one context. No LLM call -- just concatenates the thoughts. |
+| `Merge1` | You need an LLM to synthesize or compress the parallel outputs into a single coherent message. |
+
+```mermaid
+graph TD
+    S[Start] --> A[Research node]
+    A --> B[Search web]
+    A --> C[Search docs]
+    B --> M[StaticMerge1 or Merge1]
+    C --> M
+    M --> E[End]
 ```

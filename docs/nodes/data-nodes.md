@@ -248,6 +248,13 @@ based on truthiness. Provides deterministic branching without an LLM.
 "age >= 18 and country == 'US'"         # compound condition
 ```
 
+### Convergence after StaticDecision1
+
+Because StaticDecision1 uses `SpawnPickedNode`, only one branch runs.
+Branches converge directly at a downstream node (using
+`traverse_in=AwaitFirst`). Do **not** place a Merge or StaticMerge after
+this node -- those use `AwaitAll` and would block forever.
+
 ### Common use cases
 
 - Route users based on computed flags or thresholds.
@@ -264,7 +271,17 @@ based on truthiness. Provides deterministic branching without an LLM.
 | **Version** | 1.0 |
 
 Waits for all incoming branches to complete (`traverse_in=AwaitAll`), then
-outputs static text. The static counterpart to an LLM-based merge node.
+outputs static text. The static counterpart to an LLM-based
+[Merge1](llm-nodes.md#merge1) node.
+
+Use StaticMerge1 when you only need to **join** parallel branch outputs into
+a single context without any LLM synthesis. Use Merge1 when you need the LLM
+to **compress or synthesize** the branch outputs into one coherent message.
+
+**Important:** Only use StaticMerge1 (or Merge1) after **parallel branches**
+created by a `SpawnAll` node. Do **not** place it after Decision, IfNode,
+SwitchNode, or any `SpawnPickedNode` branching -- those fire only one branch,
+so `AwaitAll` would hang waiting for the branches that never execute.
 
 ### Configuration
 
@@ -276,6 +293,15 @@ outputs static text. The static counterpart to an LLM-based merge node.
 
 1. Execution pauses until every incoming edge has delivered a thought.
 2. Reads `static_text` from metadata and appends it to a new thought.
+3. All branch thoughts are joined into the downstream context (no LLM call).
+
+### When to use StaticMerge1 vs Merge1
+
+| Scenario | Use |
+|---|---|
+| Join parallel outputs, keep all content as-is | `StaticMerge1` (no LLM cost) |
+| Synthesize/compress parallel outputs into one message | `Merge1` (LLM call) |
+| After a Decision/If/Switch node | **Neither** -- branches converge directly |
 
 ### Common use cases
 

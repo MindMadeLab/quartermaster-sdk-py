@@ -170,6 +170,13 @@ graph TD
     C -->|Other| F[Handle other]
 ```
 
+### Convergence after Decision
+
+Because Decision1 uses `SpawnPickedNode`, only one branch runs. The branches
+can converge directly at a downstream node (using `traverse_in=AwaitFirst`).
+No Merge or StaticMerge node is needed -- those use `AwaitAll` and would
+block forever waiting for the branches that were not picked.
+
 ### Common use cases
 
 * Intent routing in multi-skill assistants.
@@ -182,8 +189,16 @@ graph TD
 **Node name:** `Merge1` | **Version:** 1.0.0 | **Class:** `Merge1`
 
 Waits for all incoming branches, collects their text, and uses an LLM to
-merge the results into a single coherent response. Typically placed after
-parallel branches created by a Decision or SpawnAll node.
+merge the results into a single coherent response. Place this node after
+**parallel branches** created by a `SpawnAll` node (e.g., StartNode or
+InstructionNode with multiple outgoing edges). Do **not** use it after
+Decision, IfNode, SwitchNode, or any `SpawnPickedNode` branching -- those
+nodes fire only one branch, so a Merge (which uses `AwaitAll`) would hang
+waiting for branches that never execute.
+
+If you only need to join parallel outputs into a single context without LLM
+synthesis, use [StaticMerge1](data-nodes.md#staticmerge1) instead -- it
+concatenates the branch thoughts with no LLM call.
 
 ### Configuration
 

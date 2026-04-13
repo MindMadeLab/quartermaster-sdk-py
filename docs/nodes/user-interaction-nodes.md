@@ -129,6 +129,14 @@ graph LR
 Each outgoing edge is labeled in the UI. The user picks one, and only that
 branch executes.
 
+### Convergence after UserDecisionV1
+
+Because UserDecisionV1 uses `SpawnPickedNode`, only the selected branch
+executes. Branches converge directly at a downstream node (using
+`traverse_in=AwaitFirst`). Do **not** place a Merge or StaticMerge after
+this node -- those use `AwaitAll` and would block forever waiting for the
+branches the user did not pick.
+
 ### UI Integration
 
 Render outgoing edges as buttons or a radio list. Submit the selected edge

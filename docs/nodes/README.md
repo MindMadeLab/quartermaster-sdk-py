@@ -69,7 +69,7 @@ LLM nodes delegate work to a `Chain` of handlers executed in sequence:
 | InstructionNode | `InstructionNodeV1` | Core LLM instruction node | [llm-nodes.md](llm-nodes.md) |
 | AgentNode | `AgentNodeV1` | Autonomous agent with tool loop | [llm-nodes.md](llm-nodes.md) |
 | Decision1 | `Decision1` | LLM picks which edge to follow | [llm-nodes.md](llm-nodes.md) |
-| Merge1 | `Merge1` | Combine parallel branches via LLM | [llm-nodes.md](llm-nodes.md) |
+| Merge1 | `Merge1` | Synthesize parallel (SpawnAll) branch outputs via LLM | [llm-nodes.md](llm-nodes.md) |
 | ReasoningNode | `ReasoningV1` | Chain-of-thought reasoning | [llm-nodes.md](llm-nodes.md) |
 | Summarize1 | `Summarize1` | LLM summarization | [llm-nodes.md](llm-nodes.md) |
 | InstructionParameters1 | `InstructionParameters1` | Structured output via tool calling | [llm-nodes.md](llm-nodes.md) |
@@ -83,7 +83,7 @@ LLM nodes delegate work to a `Chain` of handlers executed in sequence:
 |---|---|---|
 | StaticAssistant | `StaticNode1` | Output static text content |
 | StaticDecision1 | `StaticDecision1` | Rule-based path selection |
-| StaticMerge1 | `StaticMerge1` | Concatenate parallel branches without LLM |
+| StaticMerge1 | `StaticMerge1` | Join parallel (SpawnAll) branch outputs without LLM |
 | StaticProgramParameters1 | `StaticProgramParameters1` | Static structured parameters |
 | TextNode1 | `TextNode` | Template-rendered text |
 | TextToVariableNode1 | `TextToVariableNode` | Store text into a variable |
