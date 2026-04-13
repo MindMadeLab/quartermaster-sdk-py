@@ -93,7 +93,7 @@ class TestCloudUpload:
         cloud = QuartermasterCloud(api_key="qm-test", base_url=self.base_url)
         graph = Graph("Bad Graph")  # No start node
 
-        with pytest.raises(ValueError, match="Start node"):
+        with pytest.raises(ValueError, match="start node"):
             cloud.upload(graph)
 
 

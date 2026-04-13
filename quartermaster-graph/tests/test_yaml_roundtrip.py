@@ -55,10 +55,10 @@ class TestSimpleYamlRoundtrip:
         orig_inst = [n for n in version.nodes if n.type == NodeType.INSTRUCTION][0]
         rest_inst = [n for n in restored.nodes if n.type == NodeType.INSTRUCTION][0]
 
-        assert rest_inst.metadata["model"] == orig_inst.metadata["model"]
-        assert rest_inst.metadata["provider"] == orig_inst.metadata["provider"]
-        assert rest_inst.metadata["temperature"] == orig_inst.metadata["temperature"]
-        assert rest_inst.metadata["system_instruction"] == orig_inst.metadata["system_instruction"]
+        assert rest_inst.metadata["llm_model"] == orig_inst.metadata["llm_model"]
+        assert rest_inst.metadata["llm_provider"] == orig_inst.metadata["llm_provider"]
+        assert rest_inst.metadata["llm_temperature"] == orig_inst.metadata["llm_temperature"]
+        assert rest_inst.metadata["llm_system_instruction"] == orig_inst.metadata["llm_system_instruction"]
 
     def test_multi_step_yaml(self) -> None:
         """Multi-step pipeline survives YAML serialization."""
@@ -66,8 +66,8 @@ class TestSimpleYamlRoundtrip:
             GraphBuilder("Multi-Step")
             .start()
             .instruction("Step 1")
-            .code("Run code", code="result = 42", language="python")
-            .static("Output", content="Final answer.")
+            .code("Run code", code="result = 42", filename="run.py")
+            .static("Output", text="Final answer.")
             .end()
             .build()
         )
@@ -79,7 +79,7 @@ class TestSimpleYamlRoundtrip:
         code_nodes = [n for n in restored.nodes if n.type == NodeType.CODE]
         assert len(code_nodes) == 1
         assert code_nodes[0].metadata["code"] == "result = 42"
-        assert code_nodes[0].metadata["language"] == "python"
+        assert code_nodes[0].metadata["filename"] == "run.py"
 
 
 class TestDecisionYamlRoundtrip:
@@ -117,7 +117,7 @@ class TestDecisionYamlRoundtrip:
             .decision("Category?", options=["Urgent", "Normal", "Low"])
             .on("Urgent").instruction("Handle urgent").end()
             .on("Normal").instruction("Handle normal").end()
-            .on("Low").static("Auto-reply", content="We will get back to you.").end()
+            .on("Low").static("Auto-reply", text="We will get back to you.").end()
             .build()
         )
 

@@ -439,7 +439,7 @@ class TestAutoMergeInNestedBranches:
             .build()
         )
         # Auto-merge should be inserted between IF branches and "After IF"
-        merges = _nodes_by_type(graph, NodeType.MERGE)
+        merges = [n for n in graph.nodes if n.type in (NodeType.MERGE, NodeType.STATIC_MERGE)]
         # At least 2 merges: auto-merge for IF + P merge
         merge_names = [m.name for m in merges]
         assert "P merge" in merge_names
@@ -453,7 +453,7 @@ class TestAutoMergeInNestedBranches:
         # The source of that edge should be a merge node
         source_id = edges_in[0].source_id
         source_node = [n for n in graph.nodes if n.id == source_id][0]
-        assert source_node.type == NodeType.MERGE
+        assert source_node.type in (NodeType.MERGE, NodeType.STATIC_MERGE)
 
         assert _no_errors(graph) == []
 
@@ -474,7 +474,7 @@ class TestAutoMergeInNestedBranches:
             .end()
             .build()
         )
-        merges = _nodes_by_type(graph, NodeType.MERGE)
+        merges = [n for n in graph.nodes if n.type in (NodeType.MERGE, NodeType.STATIC_MERGE)]
         assert len(merges) >= 2  # auto-merge for decision + P merge
 
         cont = _node_by_name(graph, "Continue")
@@ -482,6 +482,6 @@ class TestAutoMergeInNestedBranches:
         assert len(edges_in) == 1
         source_id = edges_in[0].source_id
         source_node = [n for n in graph.nodes if n.id == source_id][0]
-        assert source_node.type == NodeType.MERGE
+        assert source_node.type in (NodeType.MERGE, NodeType.STATIC_MERGE)
 
         assert _no_errors(graph) == []

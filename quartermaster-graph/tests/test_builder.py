@@ -35,13 +35,16 @@ class TestBasicBuilder:
         assert len(version.edges) == 4
 
     def test_no_start_raises(self):
-        with pytest.raises(ValueError, match="Start node"):
+        with pytest.raises(ValueError, match="start node"):
             GraphBuilder("Test").instruction("X").end().build()
 
     def test_validation_on_build(self):
-        # No end node should fail validation
-        with pytest.raises(ValueError, match="validation failed"):
-            GraphBuilder("Test").start().instruction("X").build()
+        # No end node should produce validation warnings/errors (but build still returns)
+        version = GraphBuilder("Test").start().instruction("X").build()
+        from quartermaster_graph.validation import validate_graph
+        errors = validate_graph(version)
+        real_errors = [e for e in errors if e.severity == "error"]
+        assert len(real_errors) > 0
 
     def test_skip_validation(self):
         version = (
@@ -58,7 +61,7 @@ class TestBasicBuilder:
             .start()
             .instruction("X")
             .end()
-            .build(version="2.0.0")
+            .to_version(version="2.0.0")
         )
         assert version.version == "2.0.0"
 
@@ -96,7 +99,7 @@ class TestIfBuilder:
         version = (
             GraphBuilder("If Test")
             .start()
-            .if_node("Check", expression="x > 0", variable="x")
+            .if_node("Check", expression="x > 0")
             .on("true").instruction("Positive").end()
             .on("false").instruction("Negative").end()
             .build()
@@ -110,19 +113,19 @@ class TestNodeTypes:
         version = (
             GraphBuilder("Static")
             .start()
-            .static("Content", content="Hello World")
+            .static("Content", text="Hello World")
             .end()
             .build()
         )
         static_nodes = [n for n in version.nodes if n.type == NodeType.STATIC]
         assert len(static_nodes) == 1
-        assert static_nodes[0].metadata["content"] == "Hello World"
+        assert static_nodes[0].metadata["static_text"] == "Hello World"
 
     def test_code_node(self):
         version = (
             GraphBuilder("Code")
             .start()
-            .code("Script", code="print('hi')", language="python")
+            .code("Script", code="print('hi')", filename="script.py")
             .end()
             .build()
         )
@@ -204,7 +207,7 @@ class TestBuilderValidation:
             GraphBuilder("Full Test")
             .start()
             .instruction("Step 1", model="gpt-4o", temperature=0.5)
-            .code("Execute", code="result = process()", language="python")
+            .code("Execute", code="result = process()", filename="execute.py")
             .instruction("Step 2", model="claude-3")
             .end()
             .build()

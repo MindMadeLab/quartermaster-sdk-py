@@ -58,22 +58,21 @@ class TestGetMetadataClass:
     def test_untyped_returns_none(self):
         assert get_metadata_class(NodeType.START) is None
         assert get_metadata_class(NodeType.END) is None
-        assert get_metadata_class(NodeType.MERGE) is None
-        assert get_metadata_class(NodeType.COMMENT) is None
+        assert get_metadata_class(NodeType.BLANK) is None
 
 
 class TestValidateMetadata:
     def test_valid_instruction(self):
         result = validate_metadata(NodeType.INSTRUCTION, {
-            "system_instruction": "Be helpful",
-            "model": "gpt-4o",
+            "llm_system_instruction": "Be helpful",
+            "llm_model": "gpt-4o",
         })
         assert isinstance(result, InstructionMetadata)
-        assert result.system_instruction == "Be helpful"
+        assert result.llm_system_instruction == "Be helpful"
 
     def test_valid_code(self):
         result = validate_metadata(NodeType.CODE, {
-            "language": "python",
+            "filename": "script.py",
             "code": "x = 1",
         })
         assert isinstance(result, CodeMetadata)
@@ -85,60 +84,56 @@ class TestValidateMetadata:
     def test_defaults_applied(self):
         result = validate_metadata(NodeType.INSTRUCTION, {})
         assert isinstance(result, InstructionMetadata)
-        assert result.model == "gpt-4o"
-        assert result.temperature == 0.7
+        assert result.llm_model == "gpt-4o"
+        assert result.llm_temperature == 0.5
 
     def test_extra_fields_ignored(self):
         result = validate_metadata(NodeType.STATIC, {
-            "content": "hello",
+            "static_text": "hello",
             "extra_field": "ignored",
         })
         assert isinstance(result, StaticMetadata)
-        assert result.content == "hello"
+        assert result.static_text == "hello"
 
 
 class TestIndividualMetadata:
     def test_instruction_metadata(self):
         m = InstructionMetadata(
-            system_instruction="test",
-            model="claude-3",
-            provider="anthropic",
-            temperature=0.5,
-            max_tokens=100,
-            tools=["search"],
+            llm_system_instruction="test",
+            llm_model="claude-3",
+            llm_provider="anthropic",
+            llm_temperature=0.5,
         )
-        assert m.model == "claude-3"
-        assert m.tools == ["search"]
+        assert m.llm_model == "claude-3"
+        assert m.llm_system_instruction == "test"
 
     def test_decision_inherits_instruction(self):
-        m = DecisionMetadata(decision_prompt="Choose", model="gpt-4o")
-        assert m.decision_prompt == "Choose"
-        assert m.model == "gpt-4o"  # inherited
+        m = DecisionMetadata(prefix_message="Choose", llm_model="gpt-4o")
+        assert m.prefix_message == "Choose"
+        assert m.llm_model == "gpt-4o"  # inherited
 
     def test_if_metadata(self):
-        m = IfMetadata(expression="x > 0", variable="x")
-        assert m.expression == "x > 0"
+        m = IfMetadata(if_expression="x > 0")
+        assert m.if_expression == "x > 0"
 
     def test_switch_metadata(self):
-        m = SwitchMetadata(variable="status", cases={"active": "go", "inactive": "stop"})
+        m = SwitchMetadata(cases=[{"expression": "active", "edge_id": "go"}, {"expression": "inactive", "edge_id": "stop"}])
         assert len(m.cases) == 2
 
     def test_code_metadata_defaults(self):
         m = CodeMetadata()
-        assert m.language == "python"
-        assert m.timeout_seconds == 30
+        assert m.filename == ""
+        assert m.code == ""
 
     def test_var_metadata(self):
-        m = VarMetadata(variable_name="count", default_value="0")
-        assert m.variable_name == "count"
+        m = VarMetadata(name="count", expression="0")
+        assert m.name == "count"
 
     def test_user_form_metadata(self):
         m = UserFormMetadata(
-            fields=[{"name": "email", "type": "text"}],
-            submit_label="Go",
+            parameters=[{"name": "email", "type": "text"}],
         )
-        assert len(m.fields) == 1
-        assert m.submit_label == "Go"
+        assert len(m.parameters) == 1
 
     def test_tool_metadata(self):
         m = ToolMetadata(tool_name="web_search", tool_args={"query": "test"})

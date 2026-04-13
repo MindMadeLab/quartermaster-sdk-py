@@ -24,7 +24,7 @@ class TestSimpleChat:
     def test_custom_model(self):
         version = Templates.simple_chat(model="claude-3")
         inst_nodes = [n for n in version.nodes if n.type == NodeType.INSTRUCTION]
-        assert any(n.metadata.get("model") == "claude-3" for n in inst_nodes)
+        assert any(n.metadata.get("llm_model") == "claude-3" for n in inst_nodes)
 
 
 class TestDecisionTree:
@@ -115,7 +115,7 @@ class TestToolUsingAgent:
         """Custom model is propagated to instruction nodes."""
         version = Templates.tool_using_agent(model="claude-3-opus")
         inst_nodes = [n for n in version.nodes if n.type == NodeType.INSTRUCTION]
-        assert all(n.metadata.get("model") == "claude-3-opus" for n in inst_nodes)
+        assert all(n.metadata.get("llm_model") == "claude-3-opus" for n in inst_nodes)
 
 
 class TestMultiAgentSupervisor:

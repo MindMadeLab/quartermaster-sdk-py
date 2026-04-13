@@ -179,7 +179,7 @@ class TestMultiDecision:
         #              If, High-instr, Low-instr, Merge, End
         decision_nodes = [n for n in graph.nodes if n.type == NodeType.DECISION]
         if_nodes = [n for n in graph.nodes if n.type == NodeType.IF]
-        merge_nodes = [n for n in graph.nodes if n.type == NodeType.MERGE]
+        merge_nodes = [n for n in graph.nodes if n.type in (NodeType.MERGE, NodeType.STATIC_MERGE)]
         assert len(decision_nodes) == 1
         assert len(if_nodes) == 1
         assert len(merge_nodes) >= 1  # at least one auto-merge
@@ -291,7 +291,7 @@ class TestAutoMerge:
             .end()
             .build()
         )
-        merge_nodes = [n for n in graph.nodes if n.type == NodeType.MERGE]
+        merge_nodes = [n for n in graph.nodes if n.type in (NodeType.MERGE, NodeType.STATIC_MERGE)]
         assert len(merge_nodes) == 1
         assert merge_nodes[0].traverse_in == TraverseIn.AWAIT_ALL
         # Both A and B should have edges to the merge node
@@ -311,7 +311,7 @@ class TestAutoMerge:
             .end()
             .build()
         )
-        merge_nodes = [n for n in graph.nodes if n.type == NodeType.MERGE]
+        merge_nodes = [n for n in graph.nodes if n.type in (NodeType.MERGE, NodeType.STATIC_MERGE)]
         end_nodes = [n for n in graph.nodes if n.type == NodeType.END]
         assert len(merge_nodes) == 1
         assert len(end_nodes) == 1
@@ -478,7 +478,11 @@ class TestSwitchNode:
         graph = (
             GraphBuilder("SwitchTest")
             .start()
-            .switch("Route", cases=["fast", "medium", "slow"])
+            .switch("Route", cases=[
+                {"expression": "speed == 'fast'", "edge_id": "fast"},
+                {"expression": "speed == 'medium'", "edge_id": "medium"},
+                {"expression": "speed == 'slow'", "edge_id": "slow"},
+            ])
             .on("fast").instruction("Fast path").end()
             .on("medium").instruction("Medium path").end()
             .on("slow").instruction("Slow path").end()
@@ -503,7 +507,7 @@ class TestReasoningNode:
         )
         r_nodes = [n for n in graph.nodes if n.type == NodeType.REASONING]
         assert len(r_nodes) == 1
-        assert r_nodes[0].metadata["model"] == "o1-preview"
+        assert r_nodes[0].metadata["llm_model"] == "o1-preview"
         assert _no_errors(graph) == []
 
 
@@ -518,7 +522,7 @@ class TestSummarizeNode:
         )
         s_nodes = [n for n in graph.nodes if n.type == NodeType.SUMMARIZE]
         assert len(s_nodes) == 1
-        assert s_nodes[0].metadata["model"] == "gpt-4o-mini"
+        assert s_nodes[0].metadata["llm_model"] == "gpt-4o-mini"
         assert _no_errors(graph) == []
 
 
@@ -527,14 +531,14 @@ class TestVarAndTextNodes:
         graph = (
             GraphBuilder("Var")
             .start()
-            .var("Set X", variable="x", value="42")
+            .var("Set X", variable="x", expression="42")
             .end()
             .build()
         )
         var_nodes = [n for n in graph.nodes if n.type == NodeType.VAR]
         assert len(var_nodes) == 1
-        assert var_nodes[0].metadata["variable"] == "x"
-        assert var_nodes[0].metadata["value"] == "42"
+        assert var_nodes[0].metadata["name"] == "x"
+        assert var_nodes[0].metadata["expression"] == "42"
         assert _no_errors(graph) == []
 
     def test_text_node(self):
@@ -547,7 +551,7 @@ class TestVarAndTextNodes:
         )
         txt_nodes = [n for n in graph.nodes if n.type == NodeType.TEXT]
         assert len(txt_nodes) == 1
-        assert txt_nodes[0].metadata["template"] == "Hello {{name}}"
+        assert txt_nodes[0].metadata["text"] == "Hello {{name}}"
         assert _no_errors(graph) == []
 
 
@@ -556,26 +560,26 @@ class TestMemoryNodes:
         graph = (
             GraphBuilder("RM")
             .start()
-            .read_memory("Load context", key="user_prefs")
+            .read_memory("Load context", memory_name="user_prefs")
             .end()
             .build()
         )
         rm_nodes = [n for n in graph.nodes if n.type == NodeType.READ_MEMORY]
         assert len(rm_nodes) == 1
-        assert rm_nodes[0].metadata["key"] == "user_prefs"
+        assert rm_nodes[0].metadata["memory_name"] == "user_prefs"
         assert _no_errors(graph) == []
 
     def test_write_memory(self):
         graph = (
             GraphBuilder("WM")
             .start()
-            .write_memory("Save result", key="output", value="done")
+            .write_memory("Save result", memory_name="output", variables=[{"name": "result", "expression": "done"}])
             .end()
             .build()
         )
         wm_nodes = [n for n in graph.nodes if n.type == NodeType.WRITE_MEMORY]
         assert len(wm_nodes) == 1
-        assert wm_nodes[0].metadata["key"] == "output"
+        assert wm_nodes[0].metadata["memory_name"] == "output"
         assert _no_errors(graph) == []
 
     def test_flow_memory(self):
@@ -589,13 +593,14 @@ class TestUserDecisionNode:
         graph = (
             GraphBuilder("UD")
             .start()
-            .user_decision("Pick one", options=["opt1", "opt2"])
+            .user_decision("Pick one")
+            .on("opt1").instruction("Handle opt1").end()
+            .on("opt2").instruction("Handle opt2").end()
             .end()
             .build()
         )
         ud_nodes = [n for n in graph.nodes if n.type == NodeType.USER_DECISION]
         assert len(ud_nodes) == 1
-        assert ud_nodes[0].metadata["options"] == ["opt1", "opt2"]
         assert _no_errors(graph) == []
 
 
@@ -737,7 +742,7 @@ class TestBranchBuilderNewNodes:
             GraphBuilder("B")
             .start()
             .decision("D", options=["a"])
-            .on("a").var("Set", variable="x", value="1").end()
+            .on("a").var("Set", variable="x", expression="1").end()
             .end()
             .build()
         )
@@ -773,7 +778,7 @@ class TestBranchBuilderNewNodes:
             GraphBuilder("B")
             .start()
             .decision("D", options=["a"])
-            .on("a").read_memory("Load", key="k").write_memory("Save", key="k", value="v").end()
+            .on("a").read_memory("Load", memory_name="k").write_memory("Save", memory_name="k", variables=[{"name": "k", "expression": "v"}]).end()
             .end()
             .build()
         )
@@ -787,7 +792,7 @@ class TestBranchBuilderNewNodes:
             GraphBuilder("B")
             .start()
             .decision("D", options=["a"])
-            .on("a").user_decision("Pick", options=["1", "2"]).end()
+            .on("a").user_decision("Pick").end()
             .end()
             .build()
         )
@@ -871,7 +876,7 @@ class TestBranchBuilderNewNodes:
             GraphBuilder("B")
             .start()
             .decision("D", options=["a"])
-            .on("a").user_form("Form", fields=[{"name": "email"}]).end()
+            .on("a").user_form("Form", parameters=[{"name": "email"}]).end()
             .end()
             .build()
         )
