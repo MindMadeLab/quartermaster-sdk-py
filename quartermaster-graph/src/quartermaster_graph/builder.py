@@ -153,6 +153,9 @@ class _BranchBuilder:
         Copies all nodes except START/END from the sub-graph, remaps their
         IDs, and connects them into the current branch chain.
         """
+        # If this is the first call after .on(), the connecting edge needs
+        # the branch label (just like labeled_add would provide).
+        is_first = self._last_node_id == self._parent._decision_node_id
         new_last = _inline_subgraph(
             sub_graph,
             self._parent._nodes,
@@ -160,8 +163,15 @@ class _BranchBuilder:
             self._last_node_id,
             self._parent._advance_position,
         )
+        # Patch the label on the connecting edge if this was the first call
+        if is_first and self._parent._edges:
+            for edge in reversed(self._parent._edges):
+                if edge.source_id == self._parent._decision_node_id:
+                    edge.label = self._label
+                    break
         if new_last is not None:
             self._last_node_id = new_last
+        # Reset _add_node back to the original (labeled_add was one-shot)
         return self
 
     def end(self) -> GraphBuilder:
@@ -365,8 +375,7 @@ class GraphBuilder:
         """Add a merge node that collects all pending branch endpoints.
 
         All branch endpoints are connected to this merge node, which becomes
-        the new current node for further chaining. Returns ``self`` for fluent
-        chaining (unlike the legacy signature that returned the ``GraphNode``).
+        the new current node for further chaining.
         """
         merge_node = GraphNode(
             type=NodeType.MERGE,
@@ -475,7 +484,7 @@ class GraphBuilder:
         self._edges.append(e)
         return self
 
-    def build(self, validate: bool = True, version: str = "1.0.0") -> AgentVersion:
+    def build(self, validate: bool = True, version: str = "0.1.0") -> AgentVersion:
         """Build the AgentVersion, optionally validating the graph.
 
         Raises ValueError if validation fails and validate=True.
