@@ -221,13 +221,26 @@ class _BranchBuilder:
         model: str = "gpt-4o",
         provider: str = "openai",
         system_instruction: str = "",
+        tools: list[str] | None = None,
+        max_iterations: int = 25,
         **kwargs: Any,
     ) -> _BranchBuilder:
-        """Add an autonomous agent node (multi-turn LLM with tool use)."""
+        """Add an autonomous agent node (agentic loop with tool use).
+
+        Args:
+            name: Display name for this node.
+            model: LLM model identifier.
+            provider: LLM provider name.
+            system_instruction: System prompt (mapped to ``llm_system_instruction`` at runtime).
+            tools: List of program-version IDs the agent may call.
+            max_iterations: Maximum agentic-loop iterations before forced stop.
+        """
         meta = {
             "system_instruction": system_instruction,
             "model": model,
             "provider": provider,
+            "program_version_ids": tools or [],
+            "max_iterations": max_iterations,
             **kwargs,
         }
         node = GraphNode(type=NodeType.AGENT, name=name, metadata=meta)
@@ -613,12 +626,21 @@ class _BranchBuilder:
         )
         return self._add_node(node)
 
-    def sub_agent(self, name: str, agent_id: str = "") -> _BranchBuilder:
-        """Add a sub-agent node."""
+    def sub_agent(self, name: str, graph_id: str = "") -> _BranchBuilder:
+        """Call another agent graph synchronously (blocks until sub-graph completes).
+
+        This is different from ``spawn_agent`` (session tool) which runs agents
+        in background sessions. Sub-agent nodes execute inline and return
+        their result to the current flow.
+
+        Args:
+            name: Display name for this node.
+            graph_id: ID of the agent graph to execute as a sub-flow.
+        """
         node = GraphNode(
-            type=NodeType.SUB_AGENT,
+            type=NodeType.SUB_ASSISTANT,
             name=name,
-            metadata={"agent_id": agent_id},
+            metadata={"sub_assistant_id": graph_id},
         )
         return self._add_node(node)
 
@@ -747,7 +769,7 @@ class GraphBuilder:
                 .allowed_agents("researcher", "writer", "reviewer")
                 .start()
                 .user("Task")
-                .sub_agent("Do research", agent_id="researcher")
+                .sub_agent("Do research", graph_id="researcher")
                 .end()
             )
         """
@@ -926,13 +948,26 @@ class GraphBuilder:
         model: str = "gpt-4o",
         provider: str = "openai",
         system_instruction: str = "",
+        tools: list[str] | None = None,
+        max_iterations: int = 25,
         **kwargs: Any,
     ) -> GraphBuilder:
-        """Add an autonomous agent node (multi-turn LLM with tool use)."""
+        """Add an autonomous agent node (agentic loop with tool use).
+
+        Args:
+            name: Display name for this node.
+            model: LLM model identifier.
+            provider: LLM provider name.
+            system_instruction: System prompt (mapped to ``llm_system_instruction`` at runtime).
+            tools: List of program-version IDs the agent may call.
+            max_iterations: Maximum agentic-loop iterations before forced stop.
+        """
         meta = {
             "system_instruction": system_instruction,
             "model": model,
             "provider": provider,
+            "program_version_ids": tools or [],
+            "max_iterations": max_iterations,
             **kwargs,
         }
         node = GraphNode(type=NodeType.AGENT, name=name, metadata=meta)
@@ -1291,12 +1326,21 @@ class GraphBuilder:
         )
         return self._add_node(node)
 
-    def sub_agent(self, name: str, agent_id: str = "") -> GraphBuilder:
-        """Add a sub-agent node."""
+    def sub_agent(self, name: str, graph_id: str = "") -> GraphBuilder:
+        """Call another agent graph synchronously (blocks until sub-graph completes).
+
+        This is different from ``spawn_agent`` (session tool) which runs agents
+        in background sessions. Sub-agent nodes execute inline and return
+        their result to the current flow.
+
+        Args:
+            name: Display name for this node.
+            graph_id: ID of the agent graph to execute as a sub-flow.
+        """
         node = GraphNode(
-            type=NodeType.SUB_AGENT,
+            type=NodeType.SUB_ASSISTANT,
             name=name,
-            metadata={"agent_id": agent_id},
+            metadata={"sub_assistant_id": graph_id},
         )
         return self._add_node(node)
 

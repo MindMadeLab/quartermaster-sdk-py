@@ -106,7 +106,7 @@ class TestAllowedAgents:
             .allowed_agents("researcher", "writer")
             .start()
             .user("Task")
-            .sub_agent("Research", agent_id="researcher")
+            .sub_agent("Research", graph_id="researcher")
             .end()
         )
         assert graph._allowed_agents == ["researcher", "writer"]

@@ -19,6 +19,7 @@ from quartermaster_tools.builtin.agents.tools import (
     GetSessionStatusTool,
     InjectMessageTool,
     ListSessionsTool,
+    NotifyParentTool,
     SpawnAgentTool,
     StartSessionTool,
     WaitSessionTool,
@@ -452,6 +453,57 @@ class TestSpawnAgentTool:
         result = tool.run(agent_id="agent-a", task="")
         assert result.success is False
         assert "task" in result.error
+
+
+class TestNotifyParentTool:
+    def test_basic_notification(self):
+        tool = NotifyParentTool()
+        result = tool.run(message="Task 50% complete", status="progress")
+        assert result.success
+        assert result.data["status"] == "progress"
+        assert result.data["notification"]["message"] == "Task 50% complete"
+
+    def test_missing_message(self):
+        tool = NotifyParentTool()
+        result = tool.run()
+        assert not result.success
+
+    def test_completed_status(self):
+        tool = NotifyParentTool()
+        result = tool.run(message="All done", status="completed", data='{"items": 5}')
+        assert result.success
+        assert result.data["status"] == "completed"
+        assert result.data["notification"]["data"]["items"] == 5
+
+    def test_invalid_json_data(self):
+        tool = NotifyParentTool()
+        result = tool.run(message="update", data="not-json")
+        assert result.success
+        assert result.data["notification"]["data"] == {"raw": "not-json"}
+
+
+class TestSpawnAgentWithParentSession:
+    def test_parent_session_id_stored(self):
+        mgr = SessionManager()
+        tool = SpawnAgentTool(manager=mgr)
+        result = tool.run(
+            agent_id="child",
+            task="do work",
+            parent_session_id="parent-123",
+        )
+        assert result.success
+        sid = result.data["session_id"]
+        session = mgr.get_session(sid)
+        assert session.metadata["parent_session_id"] == "parent-123"
+
+    def test_no_parent_session_id(self):
+        mgr = SessionManager()
+        tool = SpawnAgentTool(manager=mgr)
+        result = tool.run(agent_id="child", task="do work")
+        assert result.success
+        sid = result.data["session_id"]
+        session = mgr.get_session(sid)
+        assert "parent_session_id" not in session.metadata
 
 
 class TestParallelSessions:

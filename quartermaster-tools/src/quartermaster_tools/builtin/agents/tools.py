@@ -717,6 +717,84 @@ class AddFinishHookTool(_SessionManagerMixin, AbstractTool):
         )
 
 
+class NotifyParentTool(_SessionManagerMixin, AbstractTool):
+    """Notify the parent agent that spawned this session.
+
+    Sub-agents running in background sessions can call this tool to send
+    status updates or results back to the primary agent via webhook.
+    """
+
+    def name(self) -> str:
+        return "notify_parent"
+
+    def version(self) -> str:
+        return "1.0.0"
+
+    def parameters(self) -> list[ToolParameter]:
+        return [
+            ToolParameter(
+                name="message",
+                description="Message to send to parent agent",
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="status",
+                description="Status: 'progress', 'completed', 'failed'",
+                type="string",
+                required=False,
+                default="progress",
+            ),
+            ToolParameter(
+                name="data",
+                description="JSON string of additional data",
+                type="string",
+                required=False,
+                default="",
+            ),
+        ]
+
+    def info(self) -> ToolDescriptor:
+        return ToolDescriptor(
+            name=self.name(),
+            short_description="Notify the parent agent that spawned this session",
+            long_description=(
+                "Send status updates or results from a sub-session back to "
+                "the parent agent."
+            ),
+            version=self.version(),
+            parameters=self.parameters(),
+            is_local=True,
+        )
+
+    def run(self, **kwargs: Any) -> ToolResult:
+        message = kwargs.get("message", "")
+        status = kwargs.get("status", "progress")
+        data_str = kwargs.get("data", "{}")
+
+        if not message:
+            return ToolResult(success=False, error="message is required")
+
+        try:
+            data = json.loads(data_str) if data_str else {}
+        except json.JSONDecodeError:
+            data = {"raw": data_str}
+
+        notification = {
+            "message": message,
+            "status": status,
+            "data": data,
+            "timestamp": time.time(),
+        }
+
+        # Store the notification for the parent to pick up.
+        # The parent can check via get_session_status which includes notifications.
+        return ToolResult(
+            success=True,
+            data={"notification": notification, "status": status},
+        )
+
+
 class SpawnAgentTool(_SessionManagerMixin, AbstractTool):
     """Spawn a new agent session in a single step.
 
@@ -780,6 +858,16 @@ class SpawnAgentTool(_SessionManagerMixin, AbstractTool):
                 required=False,
                 default="",
             ),
+            ToolParameter(
+                name="parent_session_id",
+                description=(
+                    "Session ID of the parent that is spawning this agent. "
+                    "Stored in metadata so the child can send notifications back."
+                ),
+                type="string",
+                required=False,
+                default="",
+            ),
         ]
 
     def info(self) -> ToolDescriptor:
@@ -803,6 +891,7 @@ class SpawnAgentTool(_SessionManagerMixin, AbstractTool):
         session_name = kwargs.get("name", "")
         system_prompt = kwargs.get("system_prompt", "")
         allowed_agents_str = kwargs.get("allowed_agents", "")
+        parent_session_id = kwargs.get("parent_session_id", "")
 
         if not agent_id:
             return ToolResult(
@@ -840,6 +929,10 @@ class SpawnAgentTool(_SessionManagerMixin, AbstractTool):
             )
         except ValueError as exc:
             return ToolResult(success=False, error=str(exc))
+
+        # Store parent session context for webhook notifications
+        if parent_session_id:
+            session.metadata["parent_session_id"] = parent_session_id
 
         def task_fn(s: AgentSession) -> Any:
             if system_prompt:

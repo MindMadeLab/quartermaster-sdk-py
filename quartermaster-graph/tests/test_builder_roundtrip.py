@@ -159,7 +159,7 @@ class TestToolAndSubAgentRoundtrip:
         version = (
             GraphBuilder("Orchestrator")
             .start()
-            .sub_agent("Worker", agent_id="agent-123")
+            .sub_agent("Worker", graph_id="agent-123")
             .end()
             .build()
         )
@@ -167,9 +167,9 @@ class TestToolAndSubAgentRoundtrip:
         data = to_json(version)
         restored = from_json(data)
 
-        sub_nodes = [n for n in restored.nodes if n.type == NodeType.SUB_AGENT]
+        sub_nodes = [n for n in restored.nodes if n.type == NodeType.SUB_ASSISTANT]
         assert len(sub_nodes) == 1
-        assert sub_nodes[0].metadata["agent_id"] == "agent-123"
+        assert sub_nodes[0].metadata["sub_assistant_id"] == "agent-123"
 
 
 class TestEdgeAttributeRoundtrip:

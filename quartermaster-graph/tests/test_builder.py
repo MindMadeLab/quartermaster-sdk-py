@@ -167,11 +167,11 @@ class TestNodeTypes:
         version = (
             GraphBuilder("SubAgent")
             .start()
-            .sub_agent("Delegate", agent_id="agent-123")
+            .sub_agent("Delegate", graph_id="agent-123")
             .end()
             .build()
         )
-        sub_nodes = [n for n in version.nodes if n.type == NodeType.SUB_AGENT]
+        sub_nodes = [n for n in version.nodes if n.type == NodeType.SUB_ASSISTANT]
         assert len(sub_nodes) == 1
 
     def test_loop_node(self):
