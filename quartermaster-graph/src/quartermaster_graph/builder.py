@@ -1099,13 +1099,61 @@ class GraphBuilder:
         return self._add_node(node)
 
     def parallel(self, name: str = "Parallel") -> GraphBuilder:
-        """Add a parallel fork node."""
-        node = GraphNode(
-            type=NodeType.PARALLEL,
-            name=name,
-            traverse_out=TraverseOut.SPAWN_ALL,
-        )
-        return self._add_node(node)
+        """Start a parallel fan-out from the current node.
+
+        Unlike ``.decision()`` (which picks ONE branch), ``.parallel()``
+        executes ALL branches concurrently.  Use ``.branch()`` to define
+        each parallel path and ``.merge()`` to await them all.
+
+        Example::
+
+            graph = (
+                Graph("Parallel")
+                .start()
+                .user("Input")
+                .parallel()
+                .branch()                          # path 1 (direct)
+                .end()
+                .branch()                          # path 2
+                    .instruction("Research")
+                .end()
+                .branch()                          # path 3
+                    .instruction("Analyze")
+                .end()
+                .merge("Await all")
+                .end()
+            )
+
+        The resulting graph fans out from the User node into 3 parallel
+        paths and the Merge node waits for all 3 to finish.
+        """
+        self._auto_merge_if_needed()
+        # Mark the current node as the parallel fan-out point.
+        # Unlike decision (which creates a new DECISION node), parallel
+        # reuses the LAST node as the fork — the runtime dispatches all
+        # outgoing edges when traverse_out == SPAWN_ALL.
+        if self._last_node_id is not None:
+            # Set traverse_out on the fork node so the runtime spawns all
+            for n in self._nodes:
+                if n.id == self._last_node_id:
+                    n.traverse_out = TraverseOut.SPAWN_ALL
+                    break
+        self._decision_node_id = self._last_node_id
+        self._last_node_id = None   # branches take over
+        return self
+
+    def branch(self) -> _BranchBuilder:
+        """Start a parallel branch from the current fan-out point.
+
+        Use after ``.parallel()``.  Each ``.branch()`` creates an
+        independent execution path.  Call ``.end()`` to close the branch
+        and ``.merge()`` on the parent to rejoin all branches.
+        """
+        if self._decision_node_id is None:
+            raise ValueError("branch() must be called after parallel()")
+        branch = _BranchBuilder(self, "")
+        branch._last_node_id = self._decision_node_id
+        return branch
 
     def loop(
         self, name: str, max_iterations: int = 10, break_condition: str = ""
