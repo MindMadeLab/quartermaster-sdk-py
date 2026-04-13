@@ -96,7 +96,7 @@ agent = (
 )
 ```
 
-See [`examples/`](./examples/) for 15 runnable examples covering every pattern.
+See [`examples/`](./examples/) for 16 runnable examples covering every pattern.
 
 ## Packages
 

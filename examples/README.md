@@ -33,6 +33,8 @@ pip install -e quartermaster-sdk
 | 13 | `13_orchestrator.py` | Agent orchestrator with spawn/collect session tools |
 | 14 | `14_local_providers.py` | Local LLM providers: Ollama, vLLM, mixed cloud+local |
 | 15 | `15_user_forms.py` | User forms, variables, IF conditions, and Jinja2 templates |
+| 16 | `16_courtroom_debate.py` | Multi-round courtroom drama: parallel prep, loop-back debate, judge verdict |
+| -- | `run_interactive.py` | Real LLM demo with Anthropic/OpenAI auto-detection and decision routing |
 
 ## Running
 

@@ -96,7 +96,7 @@ When `get_for_model()` is called, the registry resolves the provider in this ord
 1. **Custom patterns** -- added via `add_model_pattern()` or `register_local(..., models=[...])`. Checked first, so they can override built-in defaults.
 2. **Built-in patterns** -- the global `MODEL_PATTERNS` table (OpenAI, Anthropic, Google, Groq, xAI).
 3. **Default provider** -- set via `set_default_provider()` or `register_local(..., default=True)`.
-4. **Quartermaster fallback** -- if `QUARTERMASTER_API_KEY` is set in the environment.
+4. **Default provider** -- set via `set_default_provider()` or `register_local(..., default=True)`.
 
 If none of these resolve, an `InvalidModelError` is raised.
 

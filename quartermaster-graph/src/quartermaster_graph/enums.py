@@ -46,24 +46,6 @@ class NodeType(str, Enum):
     VAR = "Var1"
     VIEW_METADATA = "ViewMetadata1"
     WRITE_MEMORY = "WriteMemory1"
-    # Graph-schema-only types (not yet implemented as nodes)
-    TOOL = "Tool1"
-    API_CALL = "ApiCall1"
-    WEBHOOK = "Webhook1"
-    TIMER = "Timer1"
-    LOOP = "Loop1"
-    PARALLEL = "Parallel1"
-    SUB_AGENT = "SubAgent1"
-    TEMPLATE = "Template1"
-    VALIDATOR = "Validator1"
-    TRANSFORMER = "Transformer1"
-    FILTER = "Filter1"
-    AGGREGATOR = "Aggregator1"
-    ROUTER = "Router1"
-    ERROR_HANDLER = "ErrorHandler1"
-    LOG = "Log1"
-    NOTIFICATION = "Notification1"
-    CUSTOM = "Custom1"
 
 
 class TraverseIn(str, Enum):

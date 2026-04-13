@@ -89,20 +89,8 @@ class ProviderRegistry:
             self._auto_configure()
 
     def _auto_configure(self) -> None:
-        """Auto-register QuartermasterProvider when QUARTERMASTER_API_KEY is set."""
-        import os
-
-        api_key = os.environ.get("QUARTERMASTER_API_KEY")
-        if api_key:
-            try:
-                from quartermaster_providers.providers.quartermaster import (
-                    QuartermasterProvider,
-                )
-
-                self._factories["quartermaster"] = (QuartermasterProvider, {"api_key": api_key})
-                self._auto_configured = True
-            except ImportError:
-                pass
+        """Auto-configure providers from environment variables."""
+        pass
 
     def register(
         self,
@@ -291,7 +279,7 @@ class ProviderRegistry:
         2. Built-in ``MODEL_PATTERNS`` (OpenAI, Anthropic, Google, etc.).
         3. Default provider (set via ``set_default_provider()`` /
            ``register_local(..., default=True)``).
-        4. ``QuartermasterProvider`` fallback (via ``QUARTERMASTER_API_KEY``).
+        4. Default provider fallback.
 
         Args:
             model_name: The model identifier.
@@ -310,9 +298,6 @@ class ProviderRegistry:
             # Try default provider
             if self._default_provider and self.is_registered(self._default_provider):
                 return self.get(self._default_provider)
-            # If Quartermaster is available, use it as a catch-all
-            if self.is_registered("quartermaster"):
-                return self.get("quartermaster")
             raise InvalidModelError(
                 model_name,
                 provider=f"Could not infer provider for model '{model_name}'",
@@ -323,13 +308,9 @@ class ProviderRegistry:
         # Fall back to default provider
         if self._default_provider and self.is_registered(self._default_provider):
             return self.get(self._default_provider)
-        # Fall back to Quartermaster if available
-        if self.is_registered("quartermaster"):
-            return self.get("quartermaster")
         raise ProviderError(
-            f"Provider '{provider_name}' (for model '{model_name}') is not registered "
-            f"and no Quartermaster API key is configured. "
-            f"Either register the provider or set QUARTERMASTER_API_KEY."
+            f"Provider '{provider_name}' (for model '{model_name}') is not registered. "
+            f"Register the provider first via registry.register('{provider_name}', ...)."
         )
 
     def list_providers(self) -> list[str]:
