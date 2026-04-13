@@ -79,6 +79,41 @@ registry.register("openai", OpenAIProvider, api_key=new_key)
 
 Avoid storing API keys or secrets in `GraphNode.metadata`. Graph definitions may be serialized, logged, or stored in databases. Instead, resolve secrets at runtime from environment variables or a secrets manager.
 
+## Expression Evaluation Security
+
+Several node types evaluate Python-like expressions at runtime: `IfNode`, `SwitchNode`, `StaticDecision`, `Var`, `WriteMemory`, `UpdateMemory`, and the `data_filter` built-in tool. **None of these use Python's `eval()` or `exec()`.** All expression evaluation goes through a safe AST-based evaluator.
+
+### How It Works
+
+The `safe_eval()` function in `quartermaster-nodes` parses the expression string into an AST (Abstract Syntax Tree) and walks it node by node. Only a strict allowlist of operations is permitted:
+
+| Category | Allowed | Blocked |
+|----------|---------|---------|
+| **Literals** | Strings, numbers, booleans, `None`, lists, dicts, tuples, sets, f-strings | -- |
+| **Operators** | Arithmetic (`+`, `-`, `*`, `/`, `//`, `%`, `**`), comparison (`==`, `!=`, `<`, `>`, `<=`, `>=`), boolean (`and`, `or`, `not`, `in`, `not in`, `is`, `is not`) | Bitwise shifts, walrus operator |
+| **Subscripts** | `row["key"]`, `data[0]`, `items[1:3]` | -- |
+| **Attributes** | `.lower()`, `.strip()`, `.items()`, etc. (allowlisted methods only) | Dunder attributes (`__class__`, `__import__`, etc.) |
+| **Functions** | `len`, `int`, `float`, `str`, `bool`, `abs`, `min`, `max`, `sum`, `round`, `sorted`, `list`, `dict`, `tuple`, `set`, `any`, `all`, `enumerate`, `zip`, `range`, `isinstance`, `hasattr`, `getattr` | `eval`, `exec`, `compile`, `open`, `import`, `globals`, `locals`, `vars`, `dir`, `delattr`, `setattr`, `breakpoint`, `exit`, `quit`, `input`, `__import__` |
+| **Comprehensions** | List, dict, set, generator comprehensions | -- |
+| **Ternary** | `x if condition else y` | -- |
+
+### Context Variable Priority
+
+Context variables (the runtime values available to the expression) take priority over blocked names. This means a node can have a variable named `input` or `type` without triggering a security error -- the evaluator checks the context dictionary first:
+
+```python
+# This works: "input" resolves to the context variable, not Python's input()
+safe_eval("len(input) > 100", {"input": "some long text..."})
+```
+
+### Size Limits
+
+Expressions are limited to 10,000 characters. Expressions exceeding this limit are rejected before parsing.
+
+### The data_filter Tool
+
+The `data_filter` built-in tool in `quartermaster-tools` contains its own self-contained AST evaluator (`_FilterEval`) with the same security guarantees. This avoids a cross-package dependency on `quartermaster-nodes` while maintaining identical safety properties.
+
 ## Tool Execution Security
 
 ### Parameter Validation
