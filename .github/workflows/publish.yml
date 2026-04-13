@@ -1,0 +1,174 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"          # Trigger on version tags: v0.1.0, v1.0.0, etc.
+
+  workflow_dispatch:    # Allow manual trigger from GitHub Actions UI
+    inputs:
+      dry_run:
+        description: "Dry run (build only, do not upload)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: read
+  id-token: write      # Required for PyPI trusted publishing
+
+jobs:
+  # -----------------------------------------------------------------------
+  # Step 1: Run full test suite before publishing
+  # -----------------------------------------------------------------------
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.11", "3.12"]
+        package:
+          - quartermaster-providers
+          - quartermaster-graph
+          - quartermaster-tools
+          - quartermaster-nodes
+          - quartermaster-engine
+          - quartermaster-mcp-client
+          - quartermaster-code-runner
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package with dev dependencies
+        working-directory: ${{ matrix.package }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        working-directory: ${{ matrix.package }}
+        run: pytest -v --tb=short
+
+  # -----------------------------------------------------------------------
+  # Step 2: Build all packages
+  # -----------------------------------------------------------------------
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: true
+      matrix:
+        package:
+          - quartermaster-providers
+          - quartermaster-graph
+          - quartermaster-tools
+          - quartermaster-nodes
+          - quartermaster-engine
+          - quartermaster-mcp-client
+          - quartermaster-code-runner
+          - quartermaster-sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: python -m pip install --upgrade pip build
+
+      - name: Build package
+        working-directory: ${{ matrix.package }}
+        run: python -m build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.package }}
+          path: ${{ matrix.package }}/dist/
+
+  # -----------------------------------------------------------------------
+  # Step 3: Publish all packages to PyPI (in dependency order)
+  # -----------------------------------------------------------------------
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'false')
+    runs-on: ubuntu-latest
+    environment: pypi       # Configure this environment in GitHub repo settings
+
+    # Publish in dependency order: providers first (no deps), then graph,
+    # tools, nodes, engine, standalone packages, and SDK last.
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-dists/
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install twine
+        run: python -m pip install --upgrade twine
+
+      # Publish in dependency order so each package can resolve its deps
+      - name: Publish quartermaster-providers
+        run: twine upload all-dists/dist-quartermaster-providers/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Publish quartermaster-graph
+        run: twine upload all-dists/dist-quartermaster-graph/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Publish quartermaster-tools
+        run: twine upload all-dists/dist-quartermaster-tools/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Publish quartermaster-nodes
+        run: twine upload all-dists/dist-quartermaster-nodes/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Publish quartermaster-engine
+        run: twine upload all-dists/dist-quartermaster-engine/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Publish quartermaster-mcp-client
+        run: twine upload all-dists/dist-quartermaster-mcp-client/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Publish quartermaster-code-runner
+        run: twine upload all-dists/dist-quartermaster-code-runner/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+      # SDK last — depends on all other packages being available
+      - name: Publish quartermaster-sdk
+        run: twine upload all-dists/dist-quartermaster-sdk/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
