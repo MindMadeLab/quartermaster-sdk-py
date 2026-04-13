@@ -1,6 +1,9 @@
 """quartermaster-graph: Framework-agnostic agent graph schema for AI agent workflows."""
 
 from quartermaster_graph.builder import GraphBuilder
+
+# Convenience alias -- GraphBuilder IS the graph, so ``Graph`` reads naturally.
+Graph = GraphBuilder
 from quartermaster_graph.enums import (
     ErrorStrategy,
     ExceptionResolution,
@@ -96,6 +99,7 @@ __all__ = [
     "topological_sort",
     # Builder
     "GraphBuilder",
+    "Graph",
     # Templates
     "Templates",
 ]
