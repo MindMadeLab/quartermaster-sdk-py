@@ -79,13 +79,14 @@ class IfNode(AbstractAssistantNode):
                 "IfNode must have one edge with main_direction=True and one with main_direction=False"
             )
 
-        # Evaluate expression using injected evaluator or simple eval
+        # Evaluate expression using injected evaluator or safe AST evaluator
         evaluator = ctx.node_metadata.get("_expression_evaluator")
         if evaluator is not None:
             result = evaluator.eval_expression(ctx.flow_node_id, if_expression, metadata)
             eval_result = result.result
         else:
-            eval_result = eval(if_expression, {"__builtins__": {}}, metadata)
+            from quartermaster_nodes.safe_eval import safe_eval
+            eval_result = safe_eval(if_expression, metadata)
 
         picked_node = true_node if eval_result else false_node
 

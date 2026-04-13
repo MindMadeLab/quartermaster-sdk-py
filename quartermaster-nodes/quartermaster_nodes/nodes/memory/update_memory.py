@@ -77,7 +77,6 @@ class UpdateMemoryNode(AbstractAssistantNode):
                         )
                         data[var_name] = result.result
                     elif expression:
-                        data[var_name] = eval(
-                            expression, {"__builtins__": {}}, ctx.thought.metadata
-                        )
+                        from quartermaster_nodes.safe_eval import safe_eval
+                        data[var_name] = safe_eval(expression, ctx.thought.metadata)
             memory_updater(memory_name, memory_type, data, ctx)

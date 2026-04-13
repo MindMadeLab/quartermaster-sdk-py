@@ -78,7 +78,8 @@ class VarNode(AbstractAssistantNode):
             result = evaluator.eval_expression(ctx.flow_node_id, expression, metadata)
             eval_result = result.result
         else:
-            eval_result = eval(expression, {"__builtins__": {}}, metadata)
+            from quartermaster_nodes.safe_eval import safe_eval
+            eval_result = safe_eval(expression, metadata)
 
         assert ctx.handle is not None, "handle not set"
         ctx.handle.update_metadata({var_name: eval_result})

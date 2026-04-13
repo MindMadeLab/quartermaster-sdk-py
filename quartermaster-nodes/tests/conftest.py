@@ -86,9 +86,10 @@ class MockExpressionEvaluator:
     ) -> ExpressionResult:
         if expression in self.results:
             return ExpressionResult(result=self.results[expression])
-        # Fall back to eval for simple expressions
+        # Fall back to safe AST evaluator for simple expressions
         try:
-            result = eval(expression, {"__builtins__": {}}, context)
+            from quartermaster_nodes.safe_eval import safe_eval
+            result = safe_eval(expression, context)
             return ExpressionResult(result=result)
         except Exception as e:
             return ExpressionResult(result=None, error=str(e), success=False)
