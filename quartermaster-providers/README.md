@@ -37,14 +37,33 @@ pip install quartermaster-providers[all]
 
 ## Supported Providers
 
-| Provider | Class | Models (examples) | Import |
-|----------|-------|-------------------|--------|
-| OpenAI | `OpenAIProvider` | gpt-4o, gpt-4-turbo, o1, o3-mini | `from quartermaster_providers.providers import OpenAIProvider` |
-| Anthropic | `AnthropicProvider` | claude-sonnet-4-20250514, claude-3-haiku | `from quartermaster_providers.providers import AnthropicProvider` |
-| Google | `GoogleProvider` | gemini-1.5-pro, gemini-pro | `from quartermaster_providers.providers import GoogleProvider` |
-| Groq | `GroqProvider` | llama-3-70b, mixtral-8x7b | `from quartermaster_providers.providers import GroqProvider` |
-| xAI | `XAIProvider` | grok-2, grok-2-mini | `from quartermaster_providers.providers import XAIProvider` |
-| Custom | `OpenAICompatibleProvider` | Any OpenAI-compatible API | `from quartermaster_providers.providers import OpenAICompatibleProvider` |
+| Provider | Class | Models (examples) |
+|----------|-------|-------------------|
+| OpenAI | `OpenAIProvider` | gpt-4o, gpt-4-turbo, o1, o3-mini |
+| Anthropic | `AnthropicProvider` | claude-sonnet-4-20250514, claude-3-haiku |
+| Google | `GoogleProvider` | gemini-1.5-pro, gemini-pro |
+| Groq | `GroqProvider` | llama-3-70b, mixtral-8x7b |
+| xAI | `XAIProvider` | grok-2, grok-2-mini |
+| Quartermaster | `QuartermasterProvider` | All models via one API key |
+| Custom | `OpenAICompatibleProvider` | Any OpenAI-compatible API |
+
+### Local / Self-Hosted Providers
+
+| Provider | Class | Description |
+|----------|-------|-------------|
+| Ollama | `OllamaProvider` | Local models via Ollama |
+| vLLM | `VLLMProvider` | High-throughput inference server |
+| LM Studio | `LMStudioProvider` | Desktop LLM app |
+| TGI | `TGIProvider` | HuggingFace Text Generation Inference |
+| LocalAI | `LocalAIProvider` | OpenAI-compatible local server |
+| llama.cpp | `LlamaCppProvider` | llama.cpp HTTP server |
+
+Register local providers with one line:
+
+```python
+registry = ProviderRegistry()
+registry.register_local("ollama")  # Auto-discovers models
+```
 
 ## Quick Start
 

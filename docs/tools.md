@@ -392,7 +392,7 @@ This bridge requires the optional `quartermaster-providers` dependency. Install 
 
 ## See Also
 
-- [Tools Catalog](tools-catalog.md) -- Complete reference for all 50+ built-in tools with parameters, examples, and categories
+- [Tools Catalog](tools-catalog.md) -- Complete reference for all built-in tools with parameters, examples, and categories
 - [Architecture](architecture.md) -- How tools fit into the system
 - [Providers](providers.md) -- LLM providers that consume tool definitions
 - [Graph Building](graph-building.md) -- Tool nodes in agent graphs

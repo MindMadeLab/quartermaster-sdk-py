@@ -124,7 +124,7 @@ See [`examples/`](./examples/) for 16 runnable examples covering every pattern.
 | [`quartermaster-sdk`](./quartermaster-sdk/) | Meta-package -- installs all core packages |
 | [`quartermaster-graph`](./quartermaster-graph/) | Graph schema, fluent builder API, validation |
 | [`quartermaster-providers`](./quartermaster-providers/) | LLM provider abstraction (OpenAI, Anthropic, Google, Groq, Ollama, vLLM) |
-| [`quartermaster-tools`](./quartermaster-tools/) | Tool definition, registry, 50+ built-in tools |
+| [`quartermaster-tools`](./quartermaster-tools/) | Tool definition, registry, built-in tools |
 | [`quartermaster-nodes`](./quartermaster-nodes/) | Node execution protocols and 40+ node implementations |
 | [`quartermaster-engine`](./quartermaster-engine/) | Flow execution, traversal, memory, streaming |
 | [`quartermaster-mcp-client`](./quartermaster-mcp-client/) | MCP protocol client -- standalone, no framework dependency |
@@ -157,7 +157,7 @@ quartermaster-code-runner   Standalone Docker code execution
 - **Thoughts** -- Runtime containers that carry text and variables (metadata) between nodes.
 - **Memory** -- Flow-scoped persistent storage accessible from any node via `write_memory`/`read_memory`.
 - **Providers** -- Pluggable LLM backends. Model name auto-resolves to the right provider.
-- **Tools** -- `@tool()` decorator for custom tools, 50+ built-in tools, JSON Schema export.
+- **Tools** -- `@tool()` decorator for custom tools, built-in tools, JSON Schema export.
 
 ### Branching Rules
 
@@ -176,7 +176,7 @@ quartermaster-code-runner   Standalone Docker code execution
 | [Graph Building](./docs/graph-building.md) | Builder API, node types, patterns |
 | [Architecture](./docs/architecture.md) | System overview and data flow |
 | [Providers](./docs/providers.md) | LLM providers including local (Ollama, vLLM) |
-| [Tools Catalog](./docs/tools-catalog.md) | All 50+ built-in tools with parameters |
+| [Tools Catalog](./docs/tools-catalog.md) | All built-in tools with parameters |
 | [Engine](./docs/engine.md) | Execution engine internals |
 | [Security](./docs/security.md) | Safe eval, sandboxing, API key management |
 | [Node Reference](./docs/nodes/README.md) | Detailed node documentation by category |

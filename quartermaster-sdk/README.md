@@ -37,7 +37,7 @@ agent = (
 |---------|-------------|
 | `quartermaster-graph` | Graph schema, builder API, validation |
 | `quartermaster-providers` | LLM provider abstraction (OpenAI, Anthropic, Google, Groq, local) |
-| `quartermaster-tools` | Tool definition, registry, 50+ built-in tools |
+| `quartermaster-tools` | Tool definition, registry, built-in tools |
 | `quartermaster-nodes` | Node execution protocols and implementations |
 | `quartermaster-engine` | Flow execution, traversal, memory, streaming |
 | `quartermaster-mcp-client` | MCP protocol client (standalone) |

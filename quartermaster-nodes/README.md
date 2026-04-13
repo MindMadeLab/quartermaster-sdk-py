@@ -8,7 +8,7 @@ Composable node types for building AI agent graphs.
 
 ## Features
 
-- **38 built-in node types** across 6 categories: LLM, control flow, data, user interaction, memory, and utility
+- **40 built-in node types** across 6 categories: LLM, control flow, data, user interaction, memory, and utility
 - **Framework-agnostic** via the `NodeContext` protocol -- integrates with any runtime
 - **Stateless class-based design** -- all nodes use `@classmethod` with no instance state
 - **Chain-of-Responsibility pattern** for composable LLM processing pipelines
@@ -38,7 +38,7 @@ registry.register(InstructionNodeV1)
 registry.register(Decision1)
 registry.register(EndNodeV1)
 
-# Or auto-discover all 38 built-in nodes
+# Or auto-discover all 40 built-in nodes
 registry = NodeRegistry()
 count = registry.discover("quartermaster_nodes.nodes")
 print(f"Discovered {count} nodes")

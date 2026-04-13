@@ -1,6 +1,6 @@
 # Quartermaster Tools Catalog
 
-Comprehensive reference for all built-in tools in the `quartermaster-tools` package. This catalog covers 50+ tools organized across 14 categories, with parameter specifications, usage examples, and extension patterns.
+Comprehensive reference for all built-in tools in the `quartermaster-tools` package. This catalog covers tools organized across 14 categories, with parameter specifications, usage examples, and extension patterns.
 
 ---
 
