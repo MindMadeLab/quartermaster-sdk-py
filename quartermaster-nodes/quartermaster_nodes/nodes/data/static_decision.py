@@ -29,10 +29,6 @@ class StaticDecision1(AbstractAssistantNode):
         return "StaticDecision1"
 
     @classmethod
-    def version(cls) -> str:
-        return "1.0"
-
-    @classmethod
     def info(cls) -> AssistantInfo:
         info = AssistantInfo()
         info.version = cls.version()

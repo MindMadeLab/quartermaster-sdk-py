@@ -19,7 +19,7 @@ class TestEndNodeInfo:
         assert EndNodeV1.name() == "EndNode"
 
     def test_version(self):
-        assert EndNodeV1.version() == "1.0.0"
+        assert EndNodeV1.version() == "1.0"
 
     def test_info_description(self):
         info = EndNodeV1.info()
@@ -32,7 +32,7 @@ class TestEndNodeInfo:
 
     def test_info_version_matches(self):
         info = EndNodeV1.info()
-        assert info.version == "1.0.0"
+        assert info.version == "1.0"
 
     def test_info_has_instructions(self):
         info = EndNodeV1.info()

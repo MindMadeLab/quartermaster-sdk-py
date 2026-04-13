@@ -37,10 +37,9 @@ class AbstractAssistantNode(ABC):
         pass
 
     @classmethod
-    @abstractmethod
     def version(cls) -> str:
         """Return the node's version string."""
-        pass
+        return "1.0"
 
     @classmethod
     def deprecated(cls) -> bool:

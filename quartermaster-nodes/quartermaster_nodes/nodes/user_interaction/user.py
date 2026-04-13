@@ -23,10 +23,6 @@ class UserNode1(AbstractAssistantNode):
     metadata_text_snippets_default = []
 
     @classmethod
-    def version(cls) -> str:
-        return "1.0.0"
-
-    @classmethod
     def name(cls) -> str:
         return "UserAssistant1"
 

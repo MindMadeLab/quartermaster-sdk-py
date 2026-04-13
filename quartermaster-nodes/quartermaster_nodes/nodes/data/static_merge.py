@@ -28,10 +28,6 @@ class StaticMerge1(AbstractAssistantNode):
         return "StaticMerge1"
 
     @classmethod
-    def version(cls) -> str:
-        return "1.0"
-
-    @classmethod
     def info(cls) -> AssistantInfo:
         info = AssistantInfo()
         info.version = cls.version()

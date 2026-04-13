@@ -27,10 +27,6 @@ class UserProgramFormV1(AbstractAssistantNode):
         return "UserProgramForm1"
 
     @classmethod
-    def version(cls) -> str:
-        return "1.0.0"
-
-    @classmethod
     def flow_config(cls) -> FlowNodeConf:
         return FlowNodeConf(
             traverse_in=AvailableTraversingIn.AwaitFirst,

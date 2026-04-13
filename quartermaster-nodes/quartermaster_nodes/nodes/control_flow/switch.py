@@ -32,10 +32,6 @@ class SwitchNode1(AbstractAssistantNode):
         return "Switch1"
 
     @classmethod
-    def version(cls) -> str:
-        return "1.0"
-
-    @classmethod
     def info(cls) -> AssistantInfo:
         info = AssistantInfo()
         info.version = cls.version()

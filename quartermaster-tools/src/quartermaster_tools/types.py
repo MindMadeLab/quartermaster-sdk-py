@@ -65,7 +65,7 @@ class ToolDescriptor:
     name: str
     short_description: str
     long_description: str
-    version: str
+    version: str = "1.0.0"
     parameters: list[ToolParameter] = field(default_factory=list)
     is_local: bool = False  # Is this tool executable locally?
 

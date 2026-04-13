@@ -34,10 +34,9 @@ class AbstractTool(ABC):
         """Return the unique name of this tool."""
         ...
 
-    @abstractmethod
     def version(self) -> str:
         """Return the semantic version of this tool (e.g., '1.0.0')."""
-        ...
+        return "1.0.0"
 
     @abstractmethod
     def parameters(self) -> list[ToolParameter]:

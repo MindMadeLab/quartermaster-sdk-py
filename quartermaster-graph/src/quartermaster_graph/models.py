@@ -66,7 +66,7 @@ class AgentVersion(BaseModel):
 
     id: UUID = Field(default_factory=uuid4)
     agent_id: UUID
-    version: str = "0.1.0"
+    version: str = "1.0.0"
     start_node_id: UUID
     nodes: list[GraphNode] = Field(default_factory=list)
     edges: list[GraphEdge] = Field(default_factory=list)

@@ -22,7 +22,7 @@ class TestMergeInfo:
         assert Merge1.name() == "Merge1"
 
     def test_version(self):
-        assert Merge1.version() == "1.0.0"
+        assert Merge1.version() == "1.0"
 
     def test_info_description(self):
         info = Merge1.info()

@@ -29,7 +29,7 @@ class TestDecisionInfo:
         assert Decision1.name() == "Decision1"
 
     def test_version(self):
-        assert Decision1.version() == "1.0.0"
+        assert Decision1.version() == "1.0"
 
     def test_info_description(self):
         info = Decision1.info()

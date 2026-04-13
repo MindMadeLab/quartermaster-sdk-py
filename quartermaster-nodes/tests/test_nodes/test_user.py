@@ -22,7 +22,7 @@ class TestUserNodeInfo:
         assert UserNode1.name() == "UserAssistant1"
 
     def test_version(self):
-        assert UserNode1.version() == "1.0.0"
+        assert UserNode1.version() == "1.0"
 
     def test_info_description(self):
         info = UserNode1.info()
