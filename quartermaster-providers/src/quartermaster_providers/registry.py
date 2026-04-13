@@ -56,6 +56,11 @@ class ProviderRegistry:
     Supports registration by name, automatic provider creation from
     stored configurations, and model-name-based provider inference.
 
+    When ``QUARTERMASTER_API_KEY`` is set in the environment, a
+    ``QuartermasterProvider`` is automatically registered and used as the
+    fallback for all model inference — so a single API key gives access
+    to every supported model.
+
     Example:
         registry = ProviderRegistry()
         registry.register("openai", OpenAIProvider, api_key="sk-...")
@@ -63,9 +68,28 @@ class ProviderRegistry:
         provider = registry.get_for_model("gpt-4o")
     """
 
-    def __init__(self) -> None:
+    def __init__(self, auto_configure: bool = True) -> None:
         self._providers: dict[str, AbstractLLMProvider] = {}
         self._factories: dict[str, tuple[type[AbstractLLMProvider], dict[str, Any]]] = {}
+        self._auto_configured = False
+        if auto_configure:
+            self._auto_configure()
+
+    def _auto_configure(self) -> None:
+        """Auto-register QuartermasterProvider when QUARTERMASTER_API_KEY is set."""
+        import os
+
+        api_key = os.environ.get("QUARTERMASTER_API_KEY")
+        if api_key:
+            try:
+                from quartermaster_providers.providers.quartermaster import (
+                    QuartermasterProvider,
+                )
+
+                self._factories["quartermaster"] = (QuartermasterProvider, {"api_key": api_key})
+                self._auto_configured = True
+            except ImportError:
+                pass
 
     def register(
         self,
@@ -123,6 +147,10 @@ class ProviderRegistry:
     def get_for_model(self, model_name: str) -> AbstractLLMProvider:
         """Get a provider for a model name using inference.
 
+        If the inferred provider is not explicitly registered but a
+        ``QuartermasterProvider`` is available (via ``QUARTERMASTER_API_KEY``),
+        requests are routed through Quartermaster Cloud automatically.
+
         Args:
             model_name: The model identifier.
 
@@ -135,11 +163,24 @@ class ProviderRegistry:
         """
         provider_name = infer_provider(model_name)
         if provider_name is None:
+            # If Quartermaster is available, use it as a catch-all
+            if self.is_registered("quartermaster"):
+                return self.get("quartermaster")
             raise InvalidModelError(
                 model_name,
                 provider=f"Could not infer provider for model '{model_name}'",
             )
-        return self.get(provider_name)
+        # If the inferred provider is registered, use it directly
+        if self.is_registered(provider_name):
+            return self.get(provider_name)
+        # Fall back to Quartermaster if available
+        if self.is_registered("quartermaster"):
+            return self.get("quartermaster")
+        raise ProviderError(
+            f"Provider '{provider_name}' (for model '{model_name}') is not registered "
+            f"and no Quartermaster API key is configured. "
+            f"Either register the provider or set QUARTERMASTER_API_KEY."
+        )
 
     def list_providers(self) -> list[str]:
         """List all registered provider names."""

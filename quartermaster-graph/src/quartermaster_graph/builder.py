@@ -727,6 +727,32 @@ class GraphBuilder:
         self._branch_endpoints: list[UUID] = []
         self._position_x = 0
         self._position_y = 0
+        self._allowed_agents: list[str] = []
+
+    # ------------------------------------------------------------------
+    # Agent control
+    # ------------------------------------------------------------------
+
+    def allowed_agents(self, *agent_ids: str) -> GraphBuilder:
+        """Declare which sub-agents this graph is allowed to spawn.
+
+        Call this on the graph to restrict which agent IDs can be used
+        with ``.sub_agent()`` nodes and the ``spawn_agent`` tool at
+        runtime.  An empty list means "allow all" (default).
+
+        Example::
+
+            graph = (
+                Graph("Coordinator")
+                .allowed_agents("researcher", "writer", "reviewer")
+                .start()
+                .user("Task")
+                .sub_agent("Do research", agent_id="researcher")
+                .end()
+            )
+        """
+        self._allowed_agents = list(agent_ids)
+        return self
 
     # ------------------------------------------------------------------
     # Graph-like properties -- auto-finalize on access

@@ -10,6 +10,7 @@ from quartermaster_providers.providers.google import GoogleProvider
 from quartermaster_providers.providers.groq import GroqProvider
 from quartermaster_providers.providers.xai import XAIProvider
 from quartermaster_providers.providers.openai_compat import OpenAICompatibleProvider
+from quartermaster_providers.providers.quartermaster import QuartermasterProvider
 
 __all__ = [
     "OpenAIProvider",
@@ -18,4 +19,5 @@ __all__ = [
     "GroqProvider",
     "XAIProvider",
     "OpenAICompatibleProvider",
+    "QuartermasterProvider",
 ]
