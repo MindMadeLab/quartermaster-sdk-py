@@ -75,7 +75,7 @@ For boolean conditions, use `.if_node()`:
 graph = (
     GraphBuilder("Conditional")
     .start()
-    .if_node("Check length", expression="len(input) > 100", variable="input")
+    .if_node("Check length", expression="len(input) > 100")
     .on("true")
         .instruction("Summarize", system_instruction="The input is long. Summarize it.")
         .end()
@@ -122,17 +122,34 @@ graph = (
 
 ### Parallel Execution
 
-Fork execution into parallel branches:
+Fork execution into concurrent branches with `.parallel()`, define each
+branch with `.branch()`, and rejoin with `.static_merge()`:
 
 ```python
 graph = (
-    GraphBuilder("Parallel")
+    GraphBuilder("Parallel Research")
     .start()
-    .parallel("Fork")
-    # Parallel branches are connected via manual edges or the on() pattern
-    .build(validate=False)  # Parallel graphs may need manual edge wiring
+    .instruction("Prepare", system_instruction="Prepare the research task")
+    .parallel()
+    .branch()
+        .instruction("Security audit", system_instruction="Check for security issues")
+    .end()
+    .branch()
+        .instruction("Performance audit", system_instruction="Check for performance issues")
+    .end()
+    .branch()
+        .instruction("Code quality", system_instruction="Review code quality")
+    .end()
+    .static_merge("Collect all audits")
+    .instruction("Final report", system_instruction="Combine all audit results into a report")
+    .end()
+    .build()
 )
 ```
+
+All three branches run concurrently. `.static_merge()` waits for all to
+complete and joins their outputs. The next instruction node sees all
+three outputs in its context.
 
 ### Other Node Types
 
@@ -191,13 +208,13 @@ The `NodeType` enum defines all available node types. Here is the complete list 
 |------|-----------|-------------|
 | `START` | `Start1` | Entry point of the graph. Exactly one per graph. |
 | `END` | `End1` | Terminal node. At least one per graph. |
-| `DECISION` | `Decision1` | LLM-powered branching based on classification. |
-| `STATIC_DECISION` | `StaticDecision1` | Rule-based branching (no LLM). |
-| `USER_DECISION` | `UserDecision1` | User selects the branch to follow. |
-| `IF` | `If1` | Boolean condition evaluation. |
-| `SWITCH` | `Switch1` | Multi-way branching on a variable value. |
-| `MERGE` | `Merge1` | Waits for all incoming branches, then continues. |
-| `STATIC_MERGE` | `StaticMerge1` | Merge with static content injection. |
+| `DECISION` | `Decision1` | LLM picks ONE branch via tool call (SpawnPicked). No merge needed after. |
+| `STATIC_DECISION` | `StaticDecision1` | Expression-based branching, no LLM (SpawnPicked). |
+| `USER_DECISION` | `UserDecision1` | User selects which branch to follow (SpawnPicked). |
+| `IF` | `If1` | Boolean expression -> true/false branch (SpawnPicked). No merge needed. |
+| `SWITCH` | `Switch1` | Multi-way expression branching, first match wins (SpawnPicked). |
+| `MERGE` | `Merge1` | LLM combines parallel branch outputs into one message. Use after parallel(). |
+| `STATIC_MERGE` | `StaticMerge1` | Joins parallel branch outputs without LLM. Use after parallel(). |
 | `BREAK` | `Break1` | Exit a loop early. |
 | `LOOP` | `Loop1` | Repeat a subgraph up to N iterations. |
 | `PARALLEL` | `Parallel1` | Fork execution into concurrent branches. |

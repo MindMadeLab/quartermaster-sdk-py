@@ -124,6 +124,7 @@ graph = (
     .on("Negative")
         .instruction("Negative reply", system_instruction="Write an empathetic response.")
         .end()
+    # Decision picks ONE branch -- no merge needed. Branches converge on .end()/.build().
     .build()
 )
 ```

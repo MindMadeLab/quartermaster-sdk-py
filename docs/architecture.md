@@ -91,7 +91,7 @@ sequenceDiagram
 
 5. **Successor Dispatch** -- The `TraverseOutGate` determines which successor nodes to trigger based on the node's `traverse_out` strategy (`SpawnAll`, `SpawnPicked`, `SpawnNone`, `SpawnStart`).
 
-6. **Branching and Merging** -- Decision nodes use `SpawnPicked` to route to a single branch. Parallel nodes use `SpawnAll` to fork. Merge nodes use `AwaitAll` to wait for all incoming branches before continuing.
+6. **Branching and Merging** -- Decision/If/Switch nodes use `SpawnPicked` to route to a single branch (no merge needed -- branches converge directly on the next node). Parallel nodes use `SpawnAll` to fork into concurrent branches. After parallel execution, `StaticMerge` (no LLM) or `Merge` (LLM synthesis) nodes use `AwaitAll` to wait for all branches before continuing.
 
 7. **Completion** -- When all branches reach an End node or stop, `FlowRunner` collects the final output from the End node's execution result and returns a `FlowResult`.
 
