@@ -137,6 +137,41 @@ class ToolRegistry:
         self._ensure_plugins_loaded()
         return name in self._tools
 
+    # --- Decorator Registration (FastMCP-style) ---
+
+    def tool(
+        self,
+        name: str | None = None,
+        description: str | None = None,
+    ):
+        """Decorator to register a function as a tool.
+
+        Usage:
+            registry = ToolRegistry()
+
+            @registry.tool()
+            def my_tool(x: str) -> dict:
+                '''Tool description.'''
+                return {"result": x}
+
+            @registry.tool(name="custom_name")
+            def another_tool(x: str) -> dict:
+                ...
+
+        Args:
+            name: Override tool name (defaults to function __name__).
+            description: Override short description (defaults to docstring first line).
+        """
+
+        def decorator(func):
+            from quartermaster_tools.decorator import tool as make_tool
+
+            tool_instance = make_tool(name=name, description=description)(func)
+            self.register(tool_instance)
+            return tool_instance
+
+        return decorator
+
     # --- Plugin Discovery ---
 
     def load_plugins(self) -> None:
