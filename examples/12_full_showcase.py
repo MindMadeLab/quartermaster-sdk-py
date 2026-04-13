@@ -104,7 +104,7 @@ agent = (
     # --- Input and topic capture ----------------------------------------------
     .user("What do you want to research?")
     .var("Capture topic", variable="research_topic")
-    .write_memory("Store topic", key="research_topic")
+    .write_memory("Store topic", memory_name="research_topic")
     .text("Acknowledge", template="Researching: {{research_topic}}")
 
     # --- Strategy selection ----------------------------------------------------
@@ -128,7 +128,7 @@ agent = (
     .merge("Collect research results")
 
     # --- Quality review: parallel checks with nested IF -----------------------
-    .read_memory("Recall topic", key="research_topic")
+    .read_memory("Recall topic", memory_name="research_topic")
 
     .parallel("Quality review")
 
@@ -165,11 +165,11 @@ agent = (
     .merge("Quality review complete")
 
     # --- Synthesis and delivery -----------------------------------------------
-    .reasoning("Synthesise findings", system_instruction="Synthesise all research and review results into coherent findings")
+    .reasoning("Synthesise findings")
     .summarize("Executive summary", system_instruction="Create a concise executive summary with key takeaways")
 
     # --- Audit trail ----------------------------------------------------------
-    .update_memory("Update status", key="research_status")
+    .update_memory("Update status", memory_name="research_status")
     .notification("Report ready", channel="email", message="Research report on {{research_topic}} is ready for review")
     .log("Completed", message="Research pipeline completed for: {{research_topic}}", level="info")
     .end()
@@ -210,7 +210,7 @@ print(f"\n  Memory operations:")
 for n in agent.nodes:
     ntype = n.type.value.upper()
     if "MEMORY" in ntype or ntype == "VAR":
-        key = n.metadata.get("key", n.metadata.get("variable", ""))
+        key = n.metadata.get("memory_name", n.metadata.get("variable", ""))
         print(f"    {n.type.value:15s}  {n.name:30s}  key={key}")
 
 # Full edge list

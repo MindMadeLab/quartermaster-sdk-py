@@ -41,7 +41,7 @@ agent = (
     # --- Step 1: Collect customer name ----------------------------------------
     .user("What is your name?")
     .var("Capture name", variable="customer_name")
-    .write_memory("Remember customer", key="customer_name")
+    .write_memory("Remember customer", memory_name="customer_name")
 
     # --- Step 2: Personalised greeting using a text template ------------------
     .text("Greeting", template="Hello {{customer_name}}, welcome to support! How can I help?")
@@ -51,12 +51,12 @@ agent = (
     .var("Capture issue", variable="issue_description")
     .write_memory(
         "Create ticket",
-        key="support_ticket",
-        value="status:open | issue:{{issue_description}}",
+        memory_name="support_ticket",
+        variables=[{"name": "issue_description", "value": "status:open | issue:{{issue_description}}"}],
     )
 
     # --- Step 4: Read back customer name for personalised resolution ----------
-    .read_memory("Recall customer", key="customer_name")
+    .read_memory("Recall customer", memory_name="customer_name")
     .instruction(
         "Resolve issue",
         system_instruction=(
@@ -66,11 +66,11 @@ agent = (
     )
 
     # --- Step 5: Update ticket and log interaction ----------------------------
-    .update_memory("Close ticket", key="support_ticket")
+    .update_memory("Close ticket", memory_name="support_ticket")
     .write_memory(
         "Log interaction",
-        key="interaction_log",
-        value="resolved | customer:{{customer_name}} | issue:{{issue_description}}",
+        memory_name="interaction_log",
+        variables=[{"name": "interaction", "value": "resolved | customer:{{customer_name}} | issue:{{issue_description}}"}],
     )
 
     # --- Step 6: Farewell -----------------------------------------------------
@@ -99,5 +99,5 @@ print("\nMemory operations:")
 for node in agent.nodes:
     ntype = node.type.value.upper()
     if "MEMORY" in ntype or ntype == "VAR":
-        key = node.metadata.get("key", node.metadata.get("variable", ""))
+        key = node.metadata.get("memory_name", node.metadata.get("variable", ""))
         print(f"  {node.type.value:15s}  {node.name:25s}  key={key}")

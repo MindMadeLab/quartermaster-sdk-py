@@ -52,7 +52,7 @@ hr_flow = (
         .instruction("Direct HR response", system_instruction="Provide HR information from policy database")
     .end()
     .merge("HR resolution")
-    .write_memory("Log HR query", key="hr_query_log")
+    .write_memory("Log HR query", memory_name="hr_query_log")
     .end()
 )
 
@@ -99,7 +99,7 @@ finance_flow = (
         .instruction("Process directly", system_instruction="Handle finance request within standard limits")
     .end()
     .merge("Finance resolution")
-    .write_memory("Log finance query", key="last_finance_query")
+    .write_memory("Log finance query", memory_name="last_finance_query")
     .end()
 )
 
@@ -111,7 +111,7 @@ agent = (
     Graph("Enterprise Assistant")
     .start()
     .user("How can I help you today?")
-    .write_memory("Log session start", key="session_start", value="{{timestamp}}")
+    .write_memory("Log session start", memory_name="session_start", variables=[{"name": "timestamp", "value": "{{timestamp}}"}])
     .instruction("Classify request", system_instruction="Classify the request into: hr, it, finance, or general")
 
     # --- Department routing ---------------------------------------------------
@@ -143,7 +143,7 @@ agent = (
     .merge("Final output")
 
     # --- Audit trail ----------------------------------------------------------
-    .write_memory("Audit log", key="audit_log", value="completed | dept:{{department}} | quality:{{quality_score}}")
+    .write_memory("Audit log", memory_name="audit_log", variables=[{"name": "audit", "value": "completed | dept:{{department}} | quality:{{quality_score}}"}])
     .notification("Completion notice", channel="internal", message="Request handled successfully")
     .log("Audit", message="Enterprise request completed", level="info")
     .end()
