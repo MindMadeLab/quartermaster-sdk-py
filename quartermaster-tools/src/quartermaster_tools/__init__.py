@@ -48,6 +48,7 @@ from quartermaster_tools.builtin.web_search import (
     WebScraperTool,
 )
 from quartermaster_tools.chain import Chain, Handler
+from quartermaster_tools.decorator import FunctionTool, tool
 from quartermaster_tools.registry import ToolRegistry, get_default_registry, register_tool
 from quartermaster_tools.types import (
     ToolDescriptor,
@@ -70,6 +71,7 @@ __all__ = [
     "EvalMathTool",
     "FileInfoTool",
     "FindFilesTool",
+    "FunctionTool",
     "GetVariableTool",
     "GrepTool",
     "Handler",
@@ -90,6 +92,7 @@ __all__ = [
     "SetVariableTool",
     "ShellExecutorTool",
     "ToolDescriptor",
+    "tool",
     "ToolParameter",
     "ToolParameterOption",
     "ToolRegistry",

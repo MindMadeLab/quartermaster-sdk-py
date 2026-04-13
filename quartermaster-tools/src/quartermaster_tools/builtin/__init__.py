@@ -20,8 +20,22 @@ Provides ready-to-use tool implementations:
 - Browser tools: Navigate, Click, Type, Extract, Screenshot, Wait, Eval (requires Playwright)
 - Privacy tools: PII detection, redaction, and file scanning
 - Compliance tools: EU AI Act risk classification, audit logging, checklists
+- Agent tools: Parallel agent session creation, execution, monitoring, and result collection
 """
 
+from quartermaster_tools.builtin.agents import (
+    AddFinishHookTool,
+    CancelSessionTool,
+    CollectResultsTool,
+    CreateSessionTool,
+    GetSessionStatusTool,
+    InjectMessageTool,
+    ListSessionsTool,
+    SessionManager,
+    SessionStatus,
+    StartSessionTool,
+    WaitSessionTool,
+)
 from quartermaster_tools.builtin.compliance import (
     AuditLogTool,
     ComplianceChecklistTool,
@@ -114,6 +128,7 @@ from quartermaster_tools.builtin.web_search import (
 )
 
 __all__ = [
+    "AddFinishHookTool",
     "AuditLogTool",
     "ComplianceChecklistTool",
     "DetectPIITool",
@@ -122,6 +137,9 @@ __all__ = [
     "A2ADiscoverTool",
     "A2ARegisterTool",
     "A2ASendTaskTool",
+    "CancelSessionTool",
+    "CollectResultsTool",
+    "CreateSessionTool",
     "BrowserClickTool",
     "BrowserEvalTool",
     "BrowserExtractTool",
@@ -143,13 +161,16 @@ __all__ = [
     "EvalMathTool",
     "FileInfoTool",
     "FindFilesTool",
+    "GetSessionStatusTool",
     "GetVariableTool",
     "GoogleSearchTool",
     "GrepTool",
     "HybridSearchTool",
+    "InjectMessageTool",
     "JavaScriptExecutorTool",
     "JsonApiTool",
     "ListDirectoryTool",
+    "ListSessionsTool",
     "ListVariablesTool",
     "MoveFileTool",
     "ParseCSVTool",
@@ -162,6 +183,8 @@ __all__ = [
     "ReadFileTool",
     "RedactPIITool",
     "RiskClassifierTool",
+    "SessionManager",
+    "SessionStatus",
     "SQLiteQueryTool",
     "SQLiteSchemaTool",
     "SQLiteWriteTool",
@@ -169,9 +192,11 @@ __all__ = [
     "SearchEmailTool",
     "SendEmailTool",
     "SetVariableTool",
+    "StartSessionTool",
     "ShellExecutorTool",
     "SlackMessageTool",
     "SlackReadTool",
+    "WaitSessionTool",
     "VectorSearchTool",
     "VectorStoreTool",
     "WebRequestTool",
