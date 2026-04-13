@@ -121,13 +121,14 @@ graph TD
 
 ```python
 graph = (
-    GraphBuilder("Sentiment Router")
+    Graph("Sentiment Router")
     .start()
+    .user("Enter text to analyze")
     .instruction("Analyze sentiment", model="gpt-4o")
     .if_node("Is positive?", expression="sentiment == 'positive'")
     .on("true").instruction("Positive reply").end()
     .on("false").instruction("Negative reply").end()
-    .build()
+    .end()
 )
 ```
 
@@ -313,13 +314,13 @@ graph TD
 ### Example
 
 ```python
-GraphBuilder("Orchestrator") \
+Graph("Orchestrator") \
     .start() \
+    .user("What do you need?") \
     .instruction("Decide task", model="gpt-4o") \
     .sub_agent("Run specialist", graph_id="specialist-flow-id") \
     .instruction("Summarize result", model="gpt-4o") \
-    .end() \
-    .build()
+    .end()
 ```
 
 ### Common use cases

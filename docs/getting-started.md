@@ -73,21 +73,21 @@ The registry supports automatic model-to-provider inference. When the engine enc
 
 ### Step 2: Build a Graph
 
-Use the `GraphBuilder` fluent API to define your agent's workflow:
+Use the `Graph` fluent API to define your agent's workflow:
 
 ```python
-from quartermaster_graph import GraphBuilder
+from quartermaster_graph import Graph
 
 graph = (
-    GraphBuilder("My First Agent")
+    Graph("My First Agent")
     .start()
+    .user("What would you like to know?")
     .instruction("Analyze input", model="gpt-4o", temperature=0.7)
     .end()
-    .build()
 )
 ```
 
-This creates a minimal graph: Start -> Instruction (LLM call) -> End.
+This creates a minimal graph: Start -> User (collect input) -> Instruction (LLM call) -> End.
 
 ### Step 3: Run the Graph
 
@@ -110,8 +110,9 @@ Make it more interesting with a decision node:
 
 ```python
 graph = (
-    GraphBuilder("Sentiment Analyzer")
+    Graph("Sentiment Analyzer")
     .start()
+    .user("Enter text to analyze")
     .instruction(
         "Classify sentiment",
         model="gpt-4o",
@@ -124,8 +125,8 @@ graph = (
     .on("Negative")
         .instruction("Negative reply", system_instruction="Write an empathetic response.")
         .end()
-    # Decision picks ONE branch -- no merge needed. Branches converge on .end()/.build().
-    .build()
+    # Decision picks ONE branch -- no merge needed. Branches converge on the next node.
+    .end()
 )
 ```
 
@@ -160,7 +161,7 @@ A typical project using Quartermaster looks like this:
 ```
 my-agent/
     agents/
-        analyzer.py      # Graph definitions (GraphBuilder)
+        analyzer.py      # Graph definitions (Graph)
         summarizer.py
     config.py            # Provider registry setup
     main.py              # FlowRunner execution
@@ -187,11 +188,34 @@ registry.register("openai", OpenAIProvider, api_key=os.environ["OPENAI_API_KEY"]
 registry.register("anthropic", AnthropicProvider, api_key=os.environ["ANTHROPIC_API_KEY"])
 ```
 
+### Step 6: Create Custom Tools
+
+Use the `@tool` decorator to turn plain functions into tools for agents:
+
+```python
+from quartermaster_tools import ToolRegistry
+
+registry = ToolRegistry()
+
+@registry.tool()
+def get_weather(city: str, units: str = "celsius") -> dict:
+    """Get current weather for a city.
+
+    Args:
+        city: The city name to look up.
+        units: Temperature units (celsius or fahrenheit).
+    """
+    return {"city": city, "temperature": 22, "units": units}
+
+# The function is now a FunctionTool registered in the registry
+print(registry.list_tools())  # [ToolDescriptor(name="get_weather", ...)]
+```
+
 ## Next Steps
 
-- [Graph Building](graph-building.md) -- Complete GraphBuilder API, all 50+ node types, edge types, and templates
+- [Graph Building](graph-building.md) -- Complete Graph builder API, node types, edge types, and patterns
 - [Providers](providers.md) -- Configure multiple LLM providers, streaming, cost estimation
-- [Tools](tools.md) -- Create custom tools and register them for agent use
+- [Tools](tools.md) -- Create custom tools with the `@tool` decorator and register them for agent use
 - [Engine](engine.md) -- Dispatchers, memory stores, error handling, streaming
 - [Architecture](architecture.md) -- Full system design and data flow
 - [Security](security.md) -- Security best practices for production deployments

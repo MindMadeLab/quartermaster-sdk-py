@@ -30,9 +30,9 @@ graph TD
 
 | Package | Responsibility | Key Types |
 |---------|---------------|-----------|
-| **quartermaster-graph** | Graph schema, builder API, validation | `GraphBuilder`, `GraphNode`, `GraphEdge`, `AgentVersion`, `NodeType` |
+| **quartermaster-graph** | Graph schema, builder API, validation | `Graph` (`GraphBuilder`), `GraphNode`, `GraphEdge`, `AgentVersion`, `NodeType` |
 | **quartermaster-providers** | LLM provider abstraction and registry | `AbstractLLMProvider`, `ProviderRegistry`, `LLMConfig`, `TokenResponse` |
-| **quartermaster-tools** | Tool definition, registry, JSON schema export | `AbstractTool`, `ToolRegistry`, `ToolDescriptor`, `ToolParameter` |
+| **quartermaster-tools** | Tool definition, `@tool` decorator, registry, JSON schema export | `AbstractTool`, `tool`, `ToolRegistry`, `ToolDescriptor`, `ToolParameter` |
 | **quartermaster-nodes** | Node execution protocols and type contracts | `NodeContext`, `LLMProvider`, `ThoughtHandle`, `ExpressionEvaluator` |
 | **quartermaster-engine** | Flow execution, traversal, memory, streaming | `FlowRunner`, `FlowResult`, `ExecutionStore`, `SyncDispatcher` |
 | **quartermaster-mcp-client** | MCP protocol client (SSE + Streamable HTTP) | Standalone, no framework dependency |
@@ -76,7 +76,7 @@ sequenceDiagram
 
 ### Step-by-Step Execution
 
-1. **Graph Definition** -- The application builds a graph using `GraphBuilder` from `quartermaster-graph`. The builder produces an `AgentVersion` containing nodes, edges, and a start node reference.
+1. **Graph Definition** -- The application builds a graph using `Graph` (alias for `GraphBuilder`) from `quartermaster-graph`. The builder itself IS the graph -- `.nodes` and `.edges` are directly accessible without calling `.build()`.
 
 2. **Runner Initialization** -- A `FlowRunner` is created with the graph, a `NodeRegistry` (maps node types to executors), an `ExecutionStore` (state persistence), and a dispatcher (sync, threaded, or async).
 
@@ -164,7 +164,7 @@ The `quartermaster-providers` and `quartermaster-tools` packages use standard Py
 ## See Also
 
 - [Getting Started](getting-started.md) -- Installation and first agent
-- [Graph Building](graph-building.md) -- GraphBuilder API and node types
+- [Graph Building](graph-building.md) -- Graph builder API and node types
 - [Providers](providers.md) -- LLM provider configuration
 - [Tools](tools.md) -- Tool system documentation
 - [Engine](engine.md) -- Execution engine details

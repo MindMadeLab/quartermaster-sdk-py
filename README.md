@@ -96,6 +96,27 @@ agent = (
 )
 ```
 
+### Custom Tools with @tool Decorator
+
+```python
+from quartermaster_tools import ToolRegistry
+
+registry = ToolRegistry()
+
+@registry.tool()
+def get_weather(city: str, units: str = "celsius") -> dict:
+    """Get current weather for a city.
+
+    Args:
+        city: The city name to look up.
+        units: Temperature units (celsius or fahrenheit).
+    """
+    return {"city": city, "temperature": 22, "units": units}
+
+# Registered and discoverable -- export as JSON Schema for LLM function calling
+schemas = registry.to_json_schema()
+```
+
 See [`examples/`](./examples/) for 16 runnable examples covering every pattern.
 
 ## Packages
@@ -131,12 +152,14 @@ quartermaster-code-runner   Standalone Docker code execution
 
 ## Key Concepts
 
-- **Graph** -- A directed acyclic graph of nodes and edges. Built with the fluent `Graph("name").start()...end()` API.
+- **Graph** -- A directed acyclic graph of nodes and edges. Built with the fluent `Graph("name").start().user("Input")...end()` API.
+- **User Node** -- Every graph starts with `.user()` after `.start()` to collect user input.
 - **Nodes** -- Units of work: LLM calls, decisions, user input, memory, tools, templates.
 - **Edges** -- Directed connections between nodes. Decision/IF/Switch edges carry labels.
 - **Thoughts** -- Runtime containers that carry text and variables (metadata) between nodes.
 - **Memory** -- Flow-scoped persistent storage accessible from any node via `write_memory`/`read_memory`.
 - **Providers** -- Pluggable LLM backends. Model name auto-resolves to the right provider.
+- **Tools** -- `@tool()` decorator for custom tools, 50+ built-in tools, JSON Schema export.
 
 ### Branching Rules
 
@@ -164,8 +187,8 @@ quartermaster-code-runner   Standalone Docker code execution
 
 ```bash
 # Clone
-git clone https://github.com/MindMade/quartermaster.git
-cd quartermaster
+git clone https://github.com/MindMadeLab/quartermaster-sdk-py.git
+cd quartermaster-sdk-py
 
 # Install all packages (with uv)
 uv pip install -e quartermaster-providers -e quartermaster-graph \

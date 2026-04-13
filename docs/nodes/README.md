@@ -188,22 +188,21 @@ The `thought_type` on a node's `FlowNodeConf` controls how results are stored:
 | `EditSameOrAddNew1` | Edits the current thought or creates a new one. |
 | `UsePreviousThought1` | Reuses the incoming thought without creating a new one. |
 
-## GraphBuilder quick start
+## Graph builder quick start
 
-The `GraphBuilder` from `quartermaster-graph` provides a fluent API for
-assembling graphs in code:
+The `Graph` builder from `quartermaster-graph` provides a fluent API for
+assembling graphs in code. Every graph should start with `.user()` after
+`.start()` to collect input:
 
 ```python
-from quartermaster_graph.builder import GraphBuilder
+from quartermaster_graph import Graph
 
 agent = (
-    GraphBuilder("Support Bot")
+    Graph("Support Bot")
     .start()
-    .instruction("Greet user", model="gpt-4o", system_instruction="Say hello")
-    .user("Wait for question")
-    .instruction("Answer", model="gpt-4o")
+    .user("What can I help you with?")
+    .instruction("Answer", model="gpt-4o", system_instruction="You are a helpful assistant.")
     .end()
-    .build()
 )
 ```
 

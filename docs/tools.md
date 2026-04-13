@@ -2,11 +2,63 @@
 
 The `quartermaster-tools` package provides a framework for defining, registering, and executing tools that AI agents can invoke. Tools are units of functionality -- file operations, web requests, calculations, or any custom logic -- that extend what an agent can do beyond LLM text generation.
 
+## Quick Start: The @tool Decorator
+
+The fastest way to create a tool is with the `@tool` decorator, which turns a plain Python function into a `FunctionTool`:
+
+```python
+from quartermaster_tools import tool
+
+@tool()
+def get_weather(city: str, units: str = "celsius") -> dict:
+    """Get current weather for a city.
+
+    Args:
+        city: The city name to look up.
+        units: Temperature units (celsius or fahrenheit).
+    """
+    return {"city": city, "temperature": 22, "units": units}
+
+# get_weather is now a FunctionTool instance
+print(get_weather.name())        # "get_weather"
+print(get_weather.parameters())  # [ToolParameter(name="city", ...), ToolParameter(name="units", ...)]
+
+# Call it directly (the decorator preserves callable behavior)
+result = get_weather(city="Amsterdam")
+
+# Or via the tool interface
+result = get_weather.run(city="Amsterdam", units="fahrenheit")
+# result.success == True, result.data == {"city": "Amsterdam", ...}
+```
+
+You can also register tools directly with a `ToolRegistry`:
+
+```python
+from quartermaster_tools import ToolRegistry
+
+registry = ToolRegistry()
+
+@registry.tool()
+def search_database(query: str, limit: int = 10) -> dict:
+    """Search the knowledge database.
+
+    Args:
+        query: Search query string.
+        limit: Maximum results to return.
+    """
+    return {"results": [f"Result for: {query}"], "count": 1}
+
+# Tool is registered and discoverable
+schemas = registry.to_json_schema()  # Export for LLM function calling
+```
+
+The decorator extracts metadata from type hints and Google-style docstrings. It supports sync and async functions, all standard Python types (`str` -> `string`, `int` -> `integer`, `float` -> `number`, `bool` -> `boolean`, `list` -> `array`, `dict` -> `object`), and default values for optional parameters.
+
 ## Core Types
 
 ### AbstractTool
 
-All tools inherit from `AbstractTool` and implement five methods:
+For more control, inherit from `AbstractTool` and implement five methods:
 
 ```python
 from quartermaster_tools.base import AbstractTool
@@ -148,7 +200,20 @@ registry.clear()  # remove all
 
 ### Decorator Registration
 
-Use the `@register_tool` decorator to auto-register with the module-level default registry:
+Register tools using the `@registry.tool()` decorator for functions:
+
+```python
+registry = ToolRegistry()
+
+@registry.tool()
+def fetch_weather(city: str) -> dict:
+    """Fetch current weather for a city."""
+    return {"city": city, "temp": 72}
+
+tool = registry.get("fetch_weather")
+```
+
+Or use the `@register_tool` class decorator to auto-register with the module-level default registry:
 
 ```python
 from quartermaster_tools.registry import register_tool, get_default_registry

@@ -9,30 +9,30 @@ A graph consists of:
 - **Edges** (`GraphEdge`) -- Directed connections between nodes, optionally labeled
 - **AgentVersion** -- A versioned snapshot containing all nodes and edges, with a designated start node
 
-## GraphBuilder API
+## Graph Builder API
 
-The `GraphBuilder` class provides a fluent (chainable) interface for constructing graphs programmatically.
+The `Graph` class (alias for `GraphBuilder`) provides a fluent (chainable) interface for constructing graphs programmatically. The builder itself IS the graph -- you can access `.nodes` and `.edges` directly without calling `.build()`.
 
-### Creating a Builder
+### Creating a Graph
 
 ```python
-from quartermaster_graph import GraphBuilder
+from quartermaster_graph import Graph
 
-builder = GraphBuilder("My Agent", description="Processes user queries")
+graph = Graph("My Agent", description="Processes user queries")
 ```
 
 ### Linear Chains
 
-The simplest pattern is a linear sequence of nodes:
+The simplest pattern is a linear sequence of nodes. Every graph should have a `.user()` node after `.start()` to collect input:
 
 ```python
 graph = (
-    GraphBuilder("Simple Chain")
+    Graph("Simple Chain")
     .start()
+    .user("Enter text to process")
     .instruction("Step 1", model="gpt-4o", system_instruction="Summarize the input.")
     .instruction("Step 2", model="gpt-4o", system_instruction="Translate to French.")
     .end()
-    .build()
 )
 ```
 
@@ -45,8 +45,9 @@ next node.
 
 ```python
 graph = (
-    GraphBuilder("Router")
+    Graph("Router")
     .start()
+    .user("What would you like help with?")
     .instruction(
         "Classify",
         model="gpt-4o",
@@ -62,8 +63,8 @@ graph = (
     .on("General")
         .instruction("General response", system_instruction="Give a general answer.")
         .end()
-    # No .merge() — only one branch fires, they converge on .end()
-    .build()
+    # No .merge() -- only one branch fires, they converge on .end()
+    .end()
 )
 ```
 
@@ -73,8 +74,9 @@ For boolean conditions, use `.if_node()`:
 
 ```python
 graph = (
-    GraphBuilder("Conditional")
+    Graph("Conditional")
     .start()
+    .user("Enter your text")
     .if_node("Check length", expression="len(input) > 100")
     .on("true")
         .instruction("Summarize", system_instruction="The input is long. Summarize it.")
@@ -82,7 +84,7 @@ graph = (
     .on("false")
         .instruction("Expand", system_instruction="The input is short. Elaborate on it.")
         .end()
-    .build()
+    .end()
 )
 ```
 
@@ -103,8 +105,9 @@ Two flavours:
 
 ```python
 graph = (
-    GraphBuilder("Parallel with Merge")
+    Graph("Parallel with Merge")
     .start()
+    .user("Enter your request")
     .instruction("Prepare")
     .parallel()
     .branch()
@@ -116,7 +119,6 @@ graph = (
     .static_merge("Combine results")  # joins parallel outputs into one context
     .instruction("Final step")        # this LLM sees both outputs
     .end()
-    .build()
 )
 ```
 
@@ -127,8 +129,9 @@ branch with `.branch()`, and rejoin with `.static_merge()`:
 
 ```python
 graph = (
-    GraphBuilder("Parallel Research")
+    Graph("Parallel Research")
     .start()
+    .user("Paste your code for review")
     .instruction("Prepare", system_instruction="Prepare the research task")
     .parallel()
     .branch()
@@ -143,7 +146,6 @@ graph = (
     .static_merge("Collect all audits")
     .instruction("Final report", system_instruction="Combine all audit results into a report")
     .end()
-    .build()
 )
 ```
 
@@ -154,48 +156,36 @@ three outputs in its context.
 ### Other Node Types
 
 ```python
-# Static content (no LLM call)
-builder.static("Welcome", text="Hello! How can I help you today?")
-
 # User input (pauses execution, waits for user response)
-builder.user("Ask for clarification")
+graph.user("Ask for clarification")
+
+# Static content (no LLM call)
+graph.static("Welcome", text="Hello! How can I help you today?")
+
+# Text template with Jinja2 interpolation
+graph.text("Greeting", template="Hello {{user_name}}, welcome!")
+
+# Variable capture and expression evaluation
+graph.var("Capture name", variable="user_name", expression="input.strip()")
 
 # Code execution
-builder.code("Calculate", code="result = 2 + 2", filename="calc.py")
-
-# Tool invocation
-builder.tool("Search", tool_name="web_search", query="latest news")
+graph.code("Calculate", code="result = 2 + 2", filename="calc.py")
 
 # Sub-agent delegation
-builder.sub_agent("Delegate", graph_id="agent-uuid-here")
+graph.sub_agent("Delegate", graph_id="agent-uuid-here")
 
-# Loop
-builder.loop("Retry loop", max_iterations=5, break_condition="success == True")
+# Agent node (autonomous tool-use loop)
+graph.agent("Researcher", model="gpt-4o", tools=["web-search-v1"], max_iterations=10)
+
+# Reasoning (for o-series models)
+graph.reasoning("Deep analysis", model="o1-mini")
+
+# Summarize conversation
+graph.summarize("Summary", system_instruction="Summarize the conversation.")
 
 # Generic node (any NodeType)
 from quartermaster_graph.enums import NodeType
-builder.node(NodeType.SUMMARIZE, name="Summarize conversation")
-```
-
-### Manual Edge Wiring
-
-For complex topologies, add edges explicitly:
-
-```python
-builder.edge(source_id=node_a.id, target_id=node_b.id, label="custom label")
-```
-
-### Build and Validate
-
-```python
-# Build with validation (default)
-graph = builder.build()
-
-# Build with a specific version tag
-graph = builder.build(version="1.2.0")
-
-# Skip validation (useful during development)
-graph = builder.build(validate=False)
+graph.node(NodeType.SUMMARIZE, name="Summarize conversation")
 ```
 
 ## Node Types Reference
@@ -215,20 +205,19 @@ The `NodeType` enum defines all available node types. Here is the complete list 
 | `SWITCH` | `Switch1` | Multi-way expression branching, first match wins (SpawnPicked). |
 | `MERGE` | `Merge1` | LLM combines parallel branch outputs into one message. Use after parallel(). |
 | `STATIC_MERGE` | `StaticMerge1` | Joins parallel branch outputs without LLM. Use after parallel(). |
-| `BREAK` | `Break1` | Exit a loop early. |
-| `LOOP` | `Loop1` | Repeat a subgraph up to N iterations. |
-| `PARALLEL` | `Parallel1` | Fork execution into concurrent branches. |
+| `BREAK` | `Break1` | Message collection boundary -- stops backward context traversal. |
 
-### LLM Instruction
+### LLM Nodes
 
 | Type | Enum Value | Description |
 |------|-----------|-------------|
-| `INSTRUCTION` | `Instruction1` | Standard LLM call with system instruction. |
+| `INSTRUCTION` | `Instruction1` | Standard LLM call with system instruction (streaming). |
+| `AGENT` | `Agent1` | Autonomous agentic loop WITH tools, iterates up to max_iterations. |
 | `INSTRUCTION_IMAGE_VISION` | `InstructionImageVision1` | LLM call with image/vision input. |
-| `INSTRUCTION_PARAMETERS` | `InstructionParameters1` | LLM call with structured parameters. |
-| `INSTRUCTION_PROGRAM` | `InstructionProgram1` | LLM call that produces tool/program calls. |
-| `INSTRUCTION_PROGRAM_PARAMETERS` | `InstructionProgramParameters1` | Combined instruction + tool parameters. |
-| `REASONING` | `Reasoning1` | Extended thinking / chain-of-thought mode. |
+| `INSTRUCTION_PARAMETERS` | `InstructionParameters1` | LLM call with structured parameter extraction. |
+| `INSTRUCTION_PROGRAM` | `InstructionProgram1` | LLM call with tool execution. |
+| `INSTRUCTION_PROGRAM_PARAMETERS` | `InstructionProgramParameters1` | Combined instruction + tool + structured parameters. |
+| `REASONING` | `Reasoning1` | Extended thinking / chain-of-thought mode (o-series models). |
 | `SUMMARIZE` | `Summarize1` | Summarize conversation or content. |
 
 ### User Interaction
@@ -243,54 +232,39 @@ The `NodeType` enum defines all available node types. Here is the complete list 
 
 | Type | Enum Value | Description |
 |------|-----------|-------------|
-| `FLOW_MEMORY` | `FlowMemory1` | Access flow-scoped memory. |
-| `READ_MEMORY` | `ReadMemory1` | Read a value from memory. |
-| `WRITE_MEMORY` | `WriteMemory1` | Write a value to memory. |
-| `UPDATE_MEMORY` | `UpdateMemory1` | Update an existing memory value. |
-| `USER_MEMORY` | `UserMemory1` | Access user-scoped persistent memory. |
-| `VAR` | `Var1` | Set or read a variable. |
-| `TEXT_TO_VARIABLE` | `TextToVariable1` | Extract text into a named variable. |
+| `FLOW_MEMORY` | `FlowMemory1` | Define flow-scoped memory (standalone declaration). |
+| `USER_MEMORY` | `UserMemory1` | Define user-scoped persistent memory (standalone declaration). |
+| `READ_MEMORY` | `ReadMemory1` | Read variables from a memory store into thought metadata. |
+| `WRITE_MEMORY` | `WriteMemory1` | Write variables to a memory store. |
+| `UPDATE_MEMORY` | `UpdateMemory1` | Update existing variables in a memory store. |
+| `VAR` | `Var1` | Evaluate expression and store result as a named variable. |
+| `TEXT_TO_VARIABLE` | `TextToVariable1` | Store thought text as a named variable. |
 
 ### Content and Code
 
 | Type | Enum Value | Description |
 |------|-----------|-------------|
-| `STATIC` | `Static1` | Inject static text content. |
-| `TEXT` | `Text1` | Text processing node. |
+| `STATIC` | `Static1` | Output fixed text content (no LLM). |
+| `TEXT` | `Text1` | Render Jinja2 template using thought metadata. |
 | `CODE` | `Code1` | Execute code (Python, JS, etc.). |
-| `PROGRAM_RUNNER` | `ProgramRunner1` | Run an external program/tool. |
-| `TEMPLATE` | `Template1` | Render a template with variables. |
+| `PROGRAM_RUNNER` | `ProgramRunner1` | Run a registered tool/program inline. |
+| `STATIC_PROGRAM_PARAMETERS` | `StaticProgramParameters1` | Inject static tool parameters into metadata. |
 
-### Integration and Agents
+### Integration
 
 | Type | Enum Value | Description |
 |------|-----------|-------------|
-| `SUB_ASSISTANT` | `SubAssistant1` | Delegate to a sub-assistant. |
-| `SUB_AGENT` | `SubAgent1` | Delegate to a sub-agent graph. |
-| `TOOL` | `Tool1` | Invoke a registered tool. |
-| `API_CALL` | `ApiCall1` | Make an external API call. |
-| `WEBHOOK` | `Webhook1` | Trigger or receive a webhook. |
+| `SUB_ASSISTANT` | `SubAssistant1` | Invoke another agent graph synchronously (blocks until complete). |
 
 ### Utility
 
 | Type | Enum Value | Description |
 |------|-----------|-------------|
-| `AGENT` | `Agent1` | Agent identity node. |
 | `BLANK` | `Blank1` | No-op placeholder. |
-| `COMMENT` | `Comment1` | Documentation node (not executed). |
-| `TIMER` | `Timer1` | Delay execution for a duration. |
-| `VALIDATOR` | `Validator1` | Validate data against rules. |
-| `TRANSFORMER` | `Transformer1` | Transform data between formats. |
-| `FILTER` | `Filter1` | Filter data based on criteria. |
-| `AGGREGATOR` | `Aggregator1` | Aggregate data from multiple sources. |
-| `ROUTER` | `Router1` | Route messages to different handlers. |
-| `ERROR_HANDLER` | `ErrorHandler1` | Custom error handling logic. |
-| `LOG` | `Log1` | Log data for debugging. |
-| `NOTIFICATION` | `Notification1` | Send a notification. |
-| `CUSTOM` | `Custom1` | User-defined custom node type. |
-| `VIEW_METADATA` | `ViewMetadata1` | Inspect node metadata. |
-| `USE_ENVIRONMENT` | `UseEnvironment1` | Load environment configuration. |
-| `UNSELECT_ENVIRONMENT` | `UnselectEnvironment1` | Unload environment configuration. |
+| `COMMENT` | `Comment1` | Documentation node (not executed, no edges). |
+| `VIEW_METADATA` | `ViewMetadata1` | Debug node -- inspect thought metadata. |
+| `USE_ENVIRONMENT` | `UseEnvironment1` | Activate a runtime environment. |
+| `UNSELECT_ENVIRONMENT` | `UnselectEnvironment1` | Deactivate a runtime environment. |
 | `USE_FILE` | `UseFile1` | Load a file into the context. |
 
 ## Edge Types and Traversal
@@ -359,4 +333,4 @@ node = GraphNode(
 - [Architecture](architecture.md) -- System overview and data flow
 - [Engine](engine.md) -- How the engine executes graphs
 - [Providers](providers.md) -- LLM provider configuration for instruction nodes
-- [Tools](tools.md) -- Tool definitions for tool nodes
+- [Tools](tools.md) -- Tool definitions and the `@tool` decorator

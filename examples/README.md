@@ -51,7 +51,8 @@ They print graph structure, node counts, and edge lists to verify correctness.
 
 ## Patterns Demonstrated
 
-- **Fluent builder**: `Graph("name").start()...end()` -- chainable API, no `.build()` needed
+- **Fluent builder**: `Graph("name").start().user("Input")...end()` -- chainable API, no `.build()` needed
+- **User input**: Every graph starts with `.user()` after `.start()` to collect input
 - **Decision routing**: `decision()` picks ONE branch via LLM -- no merge needed
 - **If/else**: `if_node()` with safe AST-evaluated boolean expressions -- no merge needed
 - **Switch**: `switch()` for multi-way expression branching -- no merge needed
@@ -61,5 +62,5 @@ They print graph structure, node counts, and edge lists to verify correctness.
 - **Templates**: `text()` with `{{variable}}` Jinja2 interpolation
 - **User forms**: `user_form()` with typed parameters for structured data collection
 - **Reasoning**: `reasoning()` and `summarize()` for analytical pipelines
-- **Tools**: `@tool()` decorator with automatic type and docstring extraction
+- **Tools**: `@tool()` and `@registry.tool()` decorator with automatic type and docstring extraction
 - **Local LLMs**: `register_local("ollama")` for self-hosted inference

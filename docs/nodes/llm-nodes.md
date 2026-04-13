@@ -45,12 +45,12 @@ single-turn LLM generation.
 ### Example
 
 ```python
-GraphBuilder("Bot") \
+Graph("Bot") \
     .start() \
+    .user("Enter text to summarize") \
     .instruction("Summarize input", model="gpt-4o",
                  system_instruction="Summarize the user's message.") \
-    .end() \
-    .build()
+    .end()
 ```
 
 ### Common use cases
@@ -95,16 +95,13 @@ The loop exits when the LLM produces no tool calls or the iteration cap is hit.
 ### Example
 
 ```python
-GraphBuilder("Research Agent") \
+Graph("Research Agent") \
     .start() \
-    .node(NodeType.AGENT, "Researcher", metadata={
-        "llm_model": "gpt-4o",
-        "llm_system_instruction": "You are a research assistant.",
-        "program_version_ids": ["web-search-v1"],
-        "max_iterations": 10,
-    }) \
-    .end() \
-    .build()
+    .user("What should I research?") \
+    .agent("Researcher", model="gpt-4o",
+           system_instruction="You are a research assistant.",
+           tools=["web-search-v1"], max_iterations=10) \
+    .end()
 ```
 
 ### Common use cases
@@ -150,14 +147,15 @@ with the chosen edge ID.
 
 ```python
 graph = (
-    GraphBuilder("Triage Bot")
+    Graph("Triage Bot")
     .start()
+    .user("Describe your issue")
     .instruction("Classify intent", model="gpt-4o")
     .decision("Route request", options=["Billing", "Technical", "Other"])
     .on("Billing").instruction("Handle billing").end()
     .on("Technical").instruction("Handle tech").end()
     .on("Other").instruction("Handle other").end()
-    .build()
+    .end()
 )
 ```
 
