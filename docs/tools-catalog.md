@@ -22,9 +22,11 @@ Comprehensive reference for all built-in tools in the `quartermaster-tools` pack
 14. [Observability](#observability)
 15. [Privacy / PII Detection](#privacy--pii-detection)
 16. [Compliance (EU AI Act)](#compliance-eu-ai-act)
-17. [Creating Custom Tools with @tool](#creating-custom-tools-with-tool)
-18. [Registering Custom Tools](#registering-custom-tools)
-19. [Bridging Tools to LLM Providers](#bridging-tools-to-llm-providers)
+17. [A2A (Agent-to-Agent Protocol)](#a2a-agent-to-agent-protocol)
+18. [Agent Sessions](#agent-sessions)
+19. [Creating Custom Tools with @tool](#creating-custom-tools-with-tool)
+20. [Registering Custom Tools](#registering-custom-tools)
+21. [Bridging Tools to LLM Providers](#bridging-tools-to-llm-providers)
 
 ---
 
@@ -1012,6 +1014,308 @@ Tamper-evident audit trail using JSON Lines. Each entry contains a SHA-256 hash 
 | `system_type` | string | no | None | Optional system type for context |
 
 Returns a checklist of items, each with `article`, `requirement`, and `status` fields.
+
+---
+
+## A2A (Agent-to-Agent Protocol)
+
+Tools for inter-agent communication using the A2A protocol (JSON-RPC 2.0 over HTTP). Enables discovering remote agents, sending tasks, and collecting results.
+
+| Tool | Class | Description |
+|------|-------|-------------|
+| `a2a_discover` | `A2ADiscoverTool` | Fetch a remote agent's Agent Card |
+| `a2a_register` | `A2ARegisterTool` | Generate an Agent Card for local registration |
+| `a2a_send_task` | `A2ASendTaskTool` | Send a task to a remote A2A agent |
+| `a2a_check_status` | `A2ACheckStatusTool` | Check the status of a remote A2A task |
+| `a2a_collect_result` | `A2ACollectResultTool` | Collect results from a completed A2A task |
+
+### a2a_discover
+
+Fetch the Agent Card from a remote agent's `/.well-known/agent.json` endpoint. Returns the agent's name, description, skills, capabilities, and version. Includes SSRF protection against private/reserved IP networks.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `agent_url` | string | yes | -- | Base URL of the remote A2A agent |
+
+Constructor accepts `timeout` (default 30 seconds).
+
+Returns: `{"agent_name", "description", "skills", "capabilities", "version"}`.
+
+Requires httpx (`pip install quartermaster-tools[web]`).
+
+```python
+from quartermaster_tools.builtin.a2a.discover import A2ADiscoverTool
+
+tool = A2ADiscoverTool(timeout=30)
+result = tool.run(agent_url="https://agent.example.com")
+# result.data == {
+#     "agent_name": "SummaryBot",
+#     "description": "Summarizes documents",
+#     "skills": [{"id": "summarize", "name": "Summarize", ...}],
+#     "capabilities": {"streaming": False, "pushNotifications": False},
+#     "version": "1.0.0",
+# }
+```
+
+### a2a_register
+
+Generate an A2A Agent Card JSON document describing the local agent. Optionally writes the card to a file. No external dependencies required.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `name` | string | yes | -- | Name of the agent |
+| `description` | string | yes | -- | Short description of the agent |
+| `url` | string | yes | -- | Public URL where the agent is reachable |
+| `skills` | array | yes | -- | List of skill dicts with `id`, `name`, `description` keys |
+| `version` | string | no | `"1.0.0"` | Agent version string |
+| `streaming` | boolean | no | `false` | Whether the agent supports streaming responses |
+| `push_notifications` | boolean | no | `false` | Whether the agent supports push notifications |
+| `output_path` | string | no | None | Optional file path to save the Agent Card JSON |
+
+Returns: `{"agent_card": {...}, "saved_to": "path" or null}`.
+
+```python
+from quartermaster_tools.builtin.a2a.register import A2ARegisterTool
+
+tool = A2ARegisterTool()
+result = tool.run(
+    name="AnalysisAgent",
+    description="Performs data analysis",
+    url="https://analysis.example.com",
+    skills=[{"id": "analyze", "name": "Analyze", "description": "Run analysis on data"}],
+    output_path=".well-known/agent.json",
+)
+# result.data["saved_to"] == ".well-known/agent.json"
+```
+
+### a2a_send_task
+
+Send a task to a remote A2A agent via JSON-RPC 2.0 `tasks/send`. Includes SSRF protection. Auto-generates a UUID task ID if not provided.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `agent_url` | string | yes | -- | Base URL of the remote A2A agent |
+| `task_message` | string | yes | -- | The task instruction to send |
+| `task_id` | string | no | auto uuid4 | Optional task ID |
+| `metadata` | object | no | `{}` | Optional metadata dict to include with the task |
+
+Constructor accepts `timeout` (default 60 seconds).
+
+Returns: `{"task_id", "status", "artifacts"}`.
+
+Requires httpx (`pip install quartermaster-tools[web]`).
+
+### a2a_check_status
+
+Check the status of a previously sent A2A task via JSON-RPC 2.0 `tasks/get`.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `agent_url` | string | yes | -- | Base URL of the remote A2A agent |
+| `task_id` | string | yes | -- | ID of the task to check |
+
+Returns: `{"task_id", "status", "artifacts"}`.
+
+### a2a_collect_result
+
+Collect and format results from a completed A2A task. Extracts text content from artifact parts.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `agent_url` | string | yes | -- | Base URL of the remote A2A agent |
+| `task_id` | string | yes | -- | ID of the task whose results to collect |
+
+Returns: `{"task_id", "completed": bool, "results": [{"type", "content"}], "status"}`.
+
+```python
+from quartermaster_tools.builtin.a2a.task import A2ASendTaskTool, A2ACollectResultTool
+
+send = A2ASendTaskTool(timeout=60)
+result = send.run(agent_url="https://agent.example.com", task_message="Summarize this report")
+task_id = result.data["task_id"]
+
+collect = A2ACollectResultTool(timeout=60)
+output = collect.run(agent_url="https://agent.example.com", task_id=task_id)
+# output.data["results"] == [{"type": "text", "content": "Summary: ..."}]
+```
+
+---
+
+## Agent Sessions
+
+Tools for managing parallel agent sessions with threading support. Sessions track status, messages, results, and support finish hooks. All tools share a `SessionManager` (default singleton or custom instance).
+
+Session statuses: `created`, `running`, `waiting`, `completed`, `failed`, `cancelled`.
+
+| Tool | Class | Description |
+|------|-------|-------------|
+| `spawn_agent` | `SpawnAgentTool` | Create and start an agent session in one step |
+| `create_agent_session` | `CreateSessionTool` | Create a session (without starting) |
+| `start_agent_session` | `StartSessionTool` | Start a previously created session with a task |
+| `inject_agent_message` | `InjectMessageTool` | Inject a message into a running session |
+| `get_agent_session_status` | `GetSessionStatusTool` | Get detailed status of a session |
+| `list_agent_sessions` | `ListSessionsTool` | List all sessions, optionally filtered by status |
+| `wait_agent_session` | `WaitSessionTool` | Block until a session completes |
+| `collect_agent_results` | `CollectResultsTool` | Wait for and collect results from multiple sessions |
+| `cancel_agent_session` | `CancelSessionTool` | Mark a session as cancelled |
+| `add_agent_finish_hook` | `AddFinishHookTool` | Register a callback for session completion |
+| `notify_parent` | `NotifyParentTool` | Send status updates from a sub-agent to its parent |
+
+### spawn_agent
+
+The preferred tool for simple agent spawning. Combines session creation and start into a single call. Supports an `allowed_agents` whitelist for security.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `agent_id` | string | yes | -- | Which agent to spawn (validated against allowed list) |
+| `task` | string | yes | -- | Task description/instructions for the agent |
+| `name` | string | no | `""` | Optional human-readable session name |
+| `system_prompt` | string | no | `""` | Optional system prompt override |
+| `allowed_agents` | string | no | `""` | Comma-separated agent IDs this agent can itself spawn |
+| `parent_session_id` | string | no | `""` | Parent session ID for notification routing |
+
+Constructor accepts optional `manager` (SessionManager) and `allowed_agents` (list of allowed agent IDs; empty means allow all).
+
+Returns: `{"session_id", "status": "running"}`.
+
+```python
+from quartermaster_tools.builtin.agents.tools import SpawnAgentTool
+
+tool = SpawnAgentTool(allowed_agents=["researcher", "writer"])
+result = tool.run(agent_id="researcher", task="Find recent papers on RAG")
+session_id = result.data["session_id"]
+```
+
+### create_agent_session / start_agent_session
+
+For advanced patterns where you need to pre-configure a session (inject messages, add hooks) before starting it.
+
+**create_agent_session:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `name` | string | no | `""` | Human-readable name |
+| `metadata` | string | no | `""` | JSON string of metadata key-value pairs |
+
+Returns: `{"session_id", "name", "status"}`.
+
+**start_agent_session:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `session_id` | string | yes | -- | The session ID to start |
+| `task` | string | yes | -- | Task description/instructions |
+| `system_prompt` | string | no | `""` | Optional system prompt |
+
+Returns: `{"session_id", "status": "running"}`.
+
+### inject_agent_message
+
+Add a message to a running session's history. Useful for providing additional context mid-execution.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `session_id` | string | yes | -- | The session ID to inject into |
+| `content` | string | yes | -- | Message content |
+| `role` | string | no | `"user"` | Message role: `user`, `assistant`, or `system` |
+
+Returns: `{"session_id", "injected": true, "message_count"}`.
+
+### get_agent_session_status
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `session_id` | string | yes | -- | The session ID to check |
+
+Returns: `{"session_id", "status", "name", "message_count", "created_at", "updated_at"}`.
+
+### list_agent_sessions
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `status` | string | no | `""` | Filter by status: `created`, `running`, `completed`, `failed`, `cancelled` |
+
+Returns: `{"sessions": [{id, name, status, message_count, created_at}], "count"}`.
+
+### wait_agent_session
+
+Blocks until the session finishes or the timeout expires.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `session_id` | string | yes | -- | The session ID to wait for |
+| `timeout` | number | no | 30 | Maximum seconds to wait |
+
+Returns: `{"session_id", "status", "result", "error"}`.
+
+### collect_agent_results
+
+Wait for multiple sessions and collect all results.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `session_ids` | string | yes | -- | Comma-separated list of session IDs |
+| `timeout` | number | no | 30 | Maximum seconds to wait per session |
+
+Returns: `{"results": [{session_id, status, result, error}], "all_completed": bool}`.
+
+### cancel_agent_session
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `session_id` | string | yes | -- | The session ID to cancel |
+
+Returns: `{"session_id", "cancelled": true}`.
+
+Note: Sets the status flag to cancelled. The underlying thread may still be running.
+
+### add_agent_finish_hook
+
+Register a callback that fires when a session completes.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `session_id` | string | yes | -- | The session ID to add a hook to |
+| `hook_type` | string | yes | -- | Type of hook: `log` or `notify` |
+| `hook_config` | string | no | `""` | Optional JSON string of hook configuration |
+
+Built-in hook types:
+- `log` -- Appends a line to a log file (config: `{"path": "agent_session.log"}`)
+- `notify` -- Stores a notification dict in session metadata
+
+Returns: `{"session_id", "hook_added": true, "hook_type"}`.
+
+### notify_parent
+
+Sub-agents running in background sessions call this to send status updates back to the parent agent.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `message` | string | yes | -- | Message to send to parent agent |
+| `status` | string | no | `"progress"` | Status: `progress`, `completed`, `failed` |
+| `data` | string | no | `""` | JSON string of additional data |
+
+Returns: `{"notification": {message, status, data, timestamp}, "status"}`.
+
+```python
+from quartermaster_tools.builtin.agents.tools import (
+    SpawnAgentTool, WaitSessionTool, CollectResultsTool,
+)
+
+spawn = SpawnAgentTool(allowed_agents=["researcher", "writer"])
+
+# Spawn two agents in parallel
+r1 = spawn.run(agent_id="researcher", task="Find papers on RAG")
+r2 = spawn.run(agent_id="writer", task="Draft an outline")
+
+# Collect all results
+collect = CollectResultsTool()
+results = collect.run(
+    session_ids=f"{r1.data['session_id']},{r2.data['session_id']}",
+    timeout=60,
+)
+# results.data["all_completed"] == True
+```
 
 ---
 
