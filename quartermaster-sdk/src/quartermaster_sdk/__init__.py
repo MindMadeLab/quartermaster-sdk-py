@@ -21,5 +21,5 @@ Optional extras:
 __version__ = "0.1.0"
 
 # Re-export the most common entry points for convenience
-from quartermaster_graph import Graph, GraphBuilder  # noqa: F401
+from quartermaster_graph import AgentGraph, Graph, GraphBuilder  # noqa: F401
 from quartermaster_graph.enums import NodeType  # noqa: F401
