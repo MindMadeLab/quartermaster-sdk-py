@@ -85,12 +85,11 @@ agent = (
 agent = (
     Graph("Registration")
     .start()
-    .user("Welcome!")
+    .text("Greeting", template="Welcome to our registration system!")
     .user_form("Details", parameters=[
         {"name": "full_name", "type": "text", "label": "Name", "required": "true"},
         {"name": "email",     "type": "email", "label": "Email", "required": "true"},
     ])
-    .var("Capture name", variable="name", expression="full_name")
     .text("Confirm", template="Thanks {{full_name}}, we'll email {{email}} with details.")
     .end()
 )
@@ -99,11 +98,9 @@ agent = (
 ### Custom Tools with @tool Decorator
 
 ```python
-from quartermaster_tools import ToolRegistry
+from quartermaster_tools import tool
 
-registry = ToolRegistry()
-
-@registry.tool()
+@tool()
 def get_weather(city: str, units: str = "celsius") -> dict:
     """Get current weather for a city.
 
@@ -113,8 +110,9 @@ def get_weather(city: str, units: str = "celsius") -> dict:
     """
     return {"city": city, "temperature": 22, "units": units}
 
-# Registered and discoverable -- export as JSON Schema for LLM function calling
-schemas = registry.to_json_schema()
+# That's it -- the decorator defines the tool. Call it directly or via LLM function calling.
+result = get_weather(city="Amsterdam")
+schema = get_weather.to_json_schema()  # Export for LLM
 ```
 
 See [`examples/`](./examples/) for 16 runnable examples covering every pattern.

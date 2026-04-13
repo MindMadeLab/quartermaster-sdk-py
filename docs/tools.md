@@ -4,7 +4,7 @@ The `quartermaster-tools` package provides a framework for defining, registering
 
 ## Quick Start: The @tool Decorator
 
-The fastest way to create a tool is with the `@tool` decorator, which turns a plain Python function into a `FunctionTool`:
+The `@tool` decorator turns a plain Python function into a tool. No separate registration step needed:
 
 ```python
 from quartermaster_tools import tool
@@ -19,19 +19,14 @@ def get_weather(city: str, units: str = "celsius") -> dict:
     """
     return {"city": city, "temperature": 22, "units": units}
 
-# get_weather is now a FunctionTool instance
-print(get_weather.name())        # "get_weather"
-print(get_weather.parameters())  # [ToolParameter(name="city", ...), ToolParameter(name="units", ...)]
-
-# Call it directly (the decorator preserves callable behavior)
-result = get_weather(city="Amsterdam")
-
-# Or via the tool interface
-result = get_weather.run(city="Amsterdam", units="fahrenheit")
-# result.success == True, result.data == {"city": "Amsterdam", ...}
+# That's it. The decorator defines the tool completely.
+result = get_weather(city="Amsterdam")          # Call directly
+schema = get_weather.to_json_schema()           # Export for LLM function calling
+print(get_weather.name())                       # "get_weather"
+print(get_weather.parameters())                 # [ToolParameter(name="city", ...), ...]
 ```
 
-You can also register tools directly with a `ToolRegistry`:
+To manage multiple tools together, use a `ToolRegistry`:
 
 ```python
 from quartermaster_tools import ToolRegistry
@@ -48,8 +43,13 @@ def search_database(query: str, limit: int = 10) -> dict:
     """
     return {"results": [f"Result for: {query}"], "count": 1}
 
-# Tool is registered and discoverable
-schemas = registry.to_json_schema()  # Export for LLM function calling
+@registry.tool()
+def send_email(to: str, subject: str, body: str) -> dict:
+    """Send an email."""
+    return {"sent": True, "to": to}
+
+# All tools are registered by the decorator -- no add_tool() calls needed
+schemas = registry.to_json_schema()  # Export all tools for LLM function calling
 ```
 
 The decorator extracts metadata from type hints and Google-style docstrings. It supports sync and async functions, all standard Python types (`str` -> `string`, `int` -> `integer`, `float` -> `number`, `bool` -> `boolean`, `list` -> `array`, `dict` -> `object`), and default values for optional parameters.

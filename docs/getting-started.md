@@ -190,14 +190,12 @@ registry.register("anthropic", AnthropicProvider, api_key=os.environ["ANTHROPIC_
 
 ### Step 6: Create Custom Tools
 
-Use the `@tool` decorator to turn plain functions into tools for agents:
+Use the `@tool` decorator to define tools from plain functions:
 
 ```python
-from quartermaster_tools import ToolRegistry
+from quartermaster_tools import tool
 
-registry = ToolRegistry()
-
-@registry.tool()
+@tool()
 def get_weather(city: str, units: str = "celsius") -> dict:
     """Get current weather for a city.
 
@@ -207,8 +205,9 @@ def get_weather(city: str, units: str = "celsius") -> dict:
     """
     return {"city": city, "temperature": 22, "units": units}
 
-# The function is now a FunctionTool registered in the registry
-print(registry.list_tools())  # [ToolDescriptor(name="get_weather", ...)]
+# That's it -- the decorator defines the tool. No extra registration needed.
+result = get_weather(city="Amsterdam")  # Call directly
+schema = get_weather.to_json_schema()   # Export for LLM function calling
 ```
 
 ## Next Steps

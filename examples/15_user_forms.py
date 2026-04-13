@@ -6,29 +6,31 @@ output with Jinja2 {{variable}} templates.
 
 Patterns shown
 --------------
+  - text() for static greetings (no user input needed)
   - user_form() with typed parameters (text, email, select, number)
-  - var() to capture and compute derived values
+  - var() to compute derived values from form data (not to re-capture existing ones)
   - if_node() with expressions referencing form variables
   - text() with Jinja2 templates displaying form data
   - write_memory() to persist form submissions
 
 Scenario: Event Registration
 -----------------------------
-1. User fills in a registration form (name, email, ticket type, quantity).
-2. System captures the data into variables.
-3. IF ticket type is "vip", show VIP perks; otherwise show standard info.
-4. Display a confirmation summary using Jinja2 templating.
-5. Store the registration in memory.
+1. Greet the user with a text node.
+2. User fills in a registration form (name, email, ticket type, quantity).
+3. Compute derived values (price) -- form variables are already available.
+4. IF ticket type is "vip", show VIP perks; otherwise show standard info.
+5. Display a confirmation summary using Jinja2 templating.
+6. Store the registration in memory.
 
 Architecture::
 
     START
       |
-    User("Welcome")
+    Text("Welcome")
       |
     UserForm(registration)
       |
-    VAR(ticket_type) -> VAR(total_price)
+    VAR(total_price)
       |
     IF(ticket_type == 'vip')
       |            |
@@ -62,8 +64,8 @@ agent = (
     Graph("Event Registration")
     .start()
 
-    # --- Step 1: Welcome the user ---------------------------------------------
-    .user("Welcome! Ready to register for TechConf 2026?")
+    # --- Step 1: Greet the user -------------------------------------------------
+    .text("Welcome", template="Welcome! Ready to register for TechConf 2026?")
 
     # --- Step 2: Structured form for registration data ------------------------
     .user_form("Registration form", parameters=[
@@ -74,8 +76,9 @@ agent = (
         {"name": "quantity",     "type": "number", "label": "Number of tickets", "default": "1"},
     ])
 
-    # --- Step 3: Capture form values into variables ---------------------------
-    .var("Get ticket type", variable="ticket_type", expression="ticket_type")
+    # --- Step 3: Compute derived value from form data -------------------------
+    # ticket_type, quantity, full_name, email, company are already available
+    # from the form -- no need to re-capture them with var().
     .var("Calculate price",
          variable="total_price",
          expression="int(quantity) * 500 if ticket_type == 'vip' else int(quantity) * 150")
@@ -139,7 +142,7 @@ feedback = (
     Graph("Feedback Collector")
     .start()
 
-    .user("We'd love your feedback!")
+    .text("Greeting", template="We'd love your feedback!")
 
     .user_form("Feedback form", parameters=[
         {"name": "rating",   "type": "number", "label": "Rating (1-5)",     "required": "true"},
@@ -147,7 +150,8 @@ feedback = (
         {"name": "contact",  "type": "email",  "label": "Follow-up email",  "required": "false"},
     ])
 
-    .var("Capture rating", variable="rating_num", expression="int(rating)")
+    # rating is already available from the form -- only compute derived values
+    .var("Parse rating", variable="rating_num", expression="int(rating)")
 
     # Branch on rating
     .if_node("Good rating?", expression="rating_num >= 4")
