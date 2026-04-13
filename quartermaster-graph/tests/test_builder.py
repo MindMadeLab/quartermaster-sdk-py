@@ -4,7 +4,7 @@ import pytest
 
 from quartermaster_graph.builder import GraphBuilder
 from quartermaster_graph.enums import NodeType
-from quartermaster_graph.models import AgentVersion
+from quartermaster_graph.models import AgentGraph
 from quartermaster_graph.validation import validate_graph
 
 
@@ -17,7 +17,7 @@ class TestBasicBuilder:
             .end()
             .build()
         )
-        assert isinstance(version, AgentVersion)
+        assert isinstance(version, AgentGraph)
         assert len(version.nodes) == 3
         assert len(version.edges) == 2
 
@@ -55,15 +55,15 @@ class TestBasicBuilder:
         )
         assert len(version.nodes) == 2
 
-    def test_version_string(self):
-        version = (
+    def test_to_graph(self):
+        graph = (
             GraphBuilder("Test")
             .start()
             .instruction("X")
             .end()
-            .to_version(version="2.0.0")
+            .to_graph()
         )
-        assert version.version == "2.0.0"
+        assert isinstance(graph, AgentGraph)
 
 
 class TestDecisionBuilder:

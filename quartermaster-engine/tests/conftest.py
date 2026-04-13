@@ -12,7 +12,7 @@ from quartermaster_engine.context.execution_context import ExecutionContext
 from quartermaster_engine.nodes import NodeResult, SimpleNodeRegistry
 from quartermaster_engine.stores.memory_store import InMemoryStore
 from quartermaster_engine.types import (
-    AgentVersion,
+    AgentGraph,
     ErrorStrategy,
     GraphEdge,
     GraphNode,
@@ -243,12 +243,11 @@ def make_edge(source: GraphNode, target: GraphNode, label: str = "") -> GraphEdg
 
 def make_graph(
     nodes: list[GraphNode], edges: list[GraphEdge], start_node: GraphNode
-) -> AgentVersion:
-    """Create an AgentVersion from nodes and edges."""
-    return AgentVersion(
+) -> AgentGraph:
+    """Create an AgentGraph from nodes and edges."""
+    return AgentGraph(
         id=uuid4(),
         agent_id=uuid4(),
-        version="1.0.0",
         start_node_id=start_node.id,
         nodes=nodes,
         edges=edges,
@@ -257,7 +256,7 @@ def make_graph(
 
 def make_linear_graph(
     node_types: list[NodeType], names: list[str] | None = None
-) -> tuple[AgentVersion, list[GraphNode]]:
+) -> tuple[AgentGraph, list[GraphNode]]:
     """Create a simple linear graph: node0 → node1 → node2 → ...
 
     First node always Start, last always End.

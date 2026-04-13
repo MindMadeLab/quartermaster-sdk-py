@@ -28,7 +28,6 @@ class TestSimpleYamlRoundtrip:
         restored = from_yaml(yaml_str)
 
         assert restored.agent_id == version.agent_id
-        assert restored.version == version.version
         assert restored.start_node_id == version.start_node_id
         assert len(restored.nodes) == len(version.nodes)
         assert len(restored.edges) == len(version.edges)

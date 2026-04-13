@@ -34,15 +34,14 @@ pip install quartermaster-engine[sqlite]
 from uuid import uuid4
 from quartermaster_engine import FlowRunner, InMemoryStore
 from quartermaster_engine.nodes import SimpleNodeRegistry, NodeResult
-from quartermaster_engine.types import AgentVersion, GraphNode, GraphEdge, NodeType, TraverseOut
+from quartermaster_engine.types import AgentGraph, GraphNode, GraphEdge, NodeType
 
 # 1. Define the graph
 start_id, process_id, end_id = uuid4(), uuid4(), uuid4()
 
-graph = AgentVersion(
+graph = AgentGraph(
     id=uuid4(),
     agent_id=uuid4(),
-    version="1.0.0",
     start_node_id=start_id,
     nodes=[
         GraphNode(id=start_id, type=NodeType.START, name="Start"),
@@ -50,13 +49,13 @@ graph = AgentVersion(
             id=process_id,
             type=NodeType.INSTRUCTION,
             name="Process",
-            metadata={"system_instruction": "Summarize the input."},
+            metadata={"llm_system_instruction": "Summarize the input.", "llm_model": "gpt-4o"},
         ),
         GraphNode(id=end_id, type=NodeType.END, name="End"),
     ],
     edges=[
-        GraphEdge(id=uuid4(), source_id=start_id, target_id=process_id),
-        GraphEdge(id=uuid4(), source_id=process_id, target_id=end_id),
+        GraphEdge(source_id=start_id, target_id=process_id),
+        GraphEdge(source_id=process_id, target_id=end_id),
     ],
 )
 
@@ -68,9 +67,31 @@ registry = SimpleNodeRegistry()
 runner = FlowRunner(graph=graph, node_registry=registry)
 result = runner.run("Please summarize this article about AI safety.")
 
-print(result.success)       # True/False
-print(result.final_output)  # The final text output
+print(result.success)          # True/False
+print(result.final_output)     # The final text output
 print(result.duration_seconds)
+```
+
+### Using GraphBuilder from quartermaster-graph
+
+```python
+from quartermaster_graph import GraphBuilder
+from quartermaster_engine import FlowRunner
+from quartermaster_engine.nodes import SimpleNodeRegistry
+
+graph = (
+    GraphBuilder("Support Agent")
+    .start()
+    .instruction("Classify", model="gpt-4o")
+    .decision("Route", options=["billing", "technical"])
+    .on("billing").instruction("Handle billing").end()
+    .on("technical").instruction("Handle technical").end()
+    .build()
+)
+
+registry = SimpleNodeRegistry()
+runner = FlowRunner(graph=graph, node_registry=registry)
+result = runner.run("I need help with my invoice")
 ```
 
 ### Stream Events in Real Time
@@ -96,7 +117,7 @@ result = runner.run("Hello!")
 
 ```python
 import asyncio
-from quartermaster_engine import FlowRunner, NodeStarted, TokenGenerated
+from quartermaster_engine import FlowRunner, TokenGenerated
 
 async def run_flow():
     runner = FlowRunner(graph=graph, node_registry=registry)
@@ -111,16 +132,20 @@ asyncio.run(run_flow())
 
 ### FlowRunner
 
-The core orchestration class.
+The core orchestration class. Accepts an `AgentGraph` from `quartermaster-graph`.
 
 ```python
+from quartermaster_engine import FlowRunner
+from quartermaster_engine.dispatchers.sync_dispatcher import SyncDispatcher
+from quartermaster_engine.messaging.context_manager import ContextManager
+
 runner = FlowRunner(
-    graph=agent_version,         # AgentVersion from quartermaster-graph
-    node_registry=registry,      # Maps node types to executors
-    store=InMemoryStore(),       # Execution state storage
-    dispatcher=SyncDispatcher(), # How branches are dispatched
+    graph=agent_graph,               # AgentGraph from quartermaster-graph
+    node_registry=registry,          # Maps node types to executors
+    store=InMemoryStore(),           # Execution state storage
+    dispatcher=SyncDispatcher(),     # How branches are dispatched
     context_manager=ContextManager(),  # LLM context window management
-    on_event=handle_event,       # Real-time event callback
+    on_event=handle_event,           # Real-time event callback
 )
 ```
 
@@ -255,12 +280,12 @@ Real-time events emitted during flow execution:
 
 | Event | Fields | Description |
 |-------|--------|-------------|
-| `NodeStarted` | `node_id`, `node_type`, `node_name` | Node begins execution |
-| `TokenGenerated` | `node_id`, `token` | Streaming token from LLM |
-| `NodeFinished` | `node_id`, `result`, `output_data` | Node completed |
-| `FlowFinished` | `final_output`, `output_data` | Entire flow completed |
-| `UserInputRequired` | `node_id`, `prompt`, `options` | Flow paused for user input |
-| `FlowError` | `node_id`, `error`, `recoverable` | Node failed |
+| `NodeStarted` | `flow_id`, `node_id`, `node_type`, `node_name` | Node begins execution |
+| `TokenGenerated` | `flow_id`, `node_id`, `token` | Streaming token from LLM |
+| `NodeFinished` | `flow_id`, `node_id`, `result`, `output_data` | Node completed |
+| `FlowFinished` | `flow_id`, `final_output`, `output_data` | Entire flow completed |
+| `UserInputRequired` | `flow_id`, `node_id`, `prompt`, `options` | Flow paused for user input |
+| `FlowError` | `flow_id`, `node_id`, `error`, `recoverable` | Node failed |
 
 ### ExecutionContext
 
@@ -270,12 +295,21 @@ The runtime context passed to each node executor:
 |-------|------|-------------|
 | `flow_id` | `UUID` | Flow execution identifier |
 | `node_id` | `UUID` | Current node identifier |
-| `graph` | `AgentVersion` | Full graph definition |
+| `graph` | `AgentGraph` | Full graph definition |
 | `current_node` | `GraphNode` | Current node definition |
 | `messages` | `list[Message]` | Conversation history |
 | `memory` | `dict[str, Any]` | Flow-scoped memory snapshot |
 | `metadata` | `dict[str, Any]` | Node metadata |
-| `on_token` | `Callable` | Callback for streaming tokens |
+| `on_token` | `Callable[[str], None] \| None` | Callback for streaming tokens |
+
+Helper methods:
+
+| Method | Description |
+|--------|-------------|
+| `get_meta(key, default=None)` | Get value from node metadata, falling back to context metadata |
+| `set_meta(key, value)` | Set a metadata value on this context |
+| `emit_token(token)` | Emit a streaming token via callback |
+| `emit_message(content)` | Emit a complete message via callback |
 
 ### Node Execution Protocol
 
@@ -287,7 +321,7 @@ from quartermaster_engine.context.execution_context import ExecutionContext
 
 class MyInstructionExecutor:
     async def execute(self, context: ExecutionContext) -> NodeResult:
-        system_instruction = context.get_meta("system_instruction", "")
+        system_instruction = context.get_meta("llm_system_instruction", "")
         # Call your LLM here...
         response_text = "Generated response"
 
@@ -302,46 +336,33 @@ class MyInstructionExecutor:
         )
 ```
 
-## Integration with Sibling Packages
-
-### With quartermaster-graph (graph definition)
-
-Use the GraphBuilder to create graphs, then execute them with FlowRunner:
+Register executors with `SimpleNodeRegistry`:
 
 ```python
-from quartermaster_graph import GraphBuilder
-from quartermaster_engine import FlowRunner
+from quartermaster_engine.nodes import SimpleNodeRegistry
 
-graph = (
-    GraphBuilder("Support Agent")
-    .start()
-    .instruction("Classify", model="gpt-4o")
-    .decision("Route", options=["billing", "technical"])
-    .on("billing").instruction("Handle billing").end()
-    .on("technical").instruction("Handle technical").end()
-    .build()
-)
+registry = SimpleNodeRegistry()
+registry.register("Instruction1", MyInstructionExecutor())
+registry.register("Decision1", MyDecisionExecutor())
 
-runner = FlowRunner(graph=graph, node_registry=registry)
-result = runner.run("I need help with my invoice")
+# List registered types
+registry.list_types()  # ["Instruction1", "Decision1"]
 ```
 
-### With quartermaster-nodes (node implementations)
+### NodeResult
 
-Bridge quartermaster-nodes node classes to the engine's NodeExecutor protocol:
+Returned by node executors after execution:
 
-```python
-from quartermaster_nodes import NodeRegistry as QMNodeRegistry
-from quartermaster_engine.nodes import SimpleNodeRegistry, NodeExecutor, NodeResult
-
-# Discover all quartermaster-nodes implementations
-node_registry = QMNodeRegistry()
-node_registry.discover("quartermaster_nodes.nodes")
-
-# Register them with the engine
-engine_registry = SimpleNodeRegistry()
-# Adapt each quartermaster-nodes class to the NodeExecutor protocol
-```
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | `bool` | Whether execution succeeded |
+| `data` | `dict[str, Any]` | Structured output data |
+| `error` | `str \| None` | Error message if failed |
+| `picked_node` | `str \| None` | For decision nodes: which successor to trigger |
+| `output_text` | `str \| None` | Main text output |
+| `wait_for_user` | `bool` | If True, flow pauses for user input |
+| `user_prompt` | `str \| None` | Prompt to show the user |
+| `user_options` | `list[str] \| None` | Options for user selection |
 
 ## Configuration
 

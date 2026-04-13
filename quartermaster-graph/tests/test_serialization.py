@@ -11,7 +11,6 @@ class TestJsonSerialization:
     def test_roundtrip(self, simple_graph):
         data = to_json(simple_graph)
         restored = from_json(data)
-        assert restored.version == simple_graph.version
         assert len(restored.nodes) == len(simple_graph.nodes)
         assert len(restored.edges) == len(simple_graph.edges)
 
@@ -27,7 +26,7 @@ class TestJsonSerialization:
         assert isinstance(json_str, str)
         parsed = json.loads(json_str)
         restored = from_json(parsed)
-        assert restored.version == simple_graph.version
+        assert len(restored.nodes) == len(simple_graph.nodes)
 
     def test_decision_graph_roundtrip(self, decision_graph):
         data = to_json(decision_graph)
@@ -40,19 +39,18 @@ class TestYamlSerialization:
     def test_roundtrip(self, simple_graph):
         yaml_str = to_yaml(simple_graph)
         restored = from_yaml(yaml_str)
-        assert restored.version == simple_graph.version
         assert len(restored.nodes) == len(simple_graph.nodes)
 
     def test_yaml_is_string(self, simple_graph):
         yaml_str = to_yaml(simple_graph)
         assert isinstance(yaml_str, str)
-        assert "version:" in yaml_str
+        assert "nodes:" in yaml_str
 
     def test_yaml_parseable(self, simple_graph):
         yaml_str = to_yaml(simple_graph)
         data = yaml.safe_load(yaml_str)
         assert isinstance(data, dict)
-        assert data["version"] == "0.1.0"
+        assert "nodes" in data
 
     def test_decision_graph_yaml_roundtrip(self, decision_graph):
         yaml_str = to_yaml(decision_graph)
@@ -78,5 +76,4 @@ class TestJsonSchema:
         props = schema.get("properties", {})
         assert "nodes" in props
         assert "edges" in props
-        assert "version" in props
         assert "start_node_id" in props

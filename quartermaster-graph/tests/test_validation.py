@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 
 from quartermaster_graph.enums import NodeType
-from quartermaster_graph.models import Agent, AgentVersion, GraphEdge, GraphNode
+from quartermaster_graph.models import Agent, AgentGraph, GraphEdge, GraphNode
 from quartermaster_graph.validation import validate_graph
 
 
@@ -27,7 +27,7 @@ class TestValidGraph:
 class TestStartNodeValidation:
     def test_no_start_node(self, agent):
         end = GraphNode(type=NodeType.END, name="End")
-        version = AgentVersion(
+        version = AgentGraph(
             agent_id=agent.id,
             start_node_id=end.id,
             nodes=[end],
@@ -45,7 +45,7 @@ class TestStartNodeValidation:
             GraphEdge(source_id=s1.id, target_id=end.id),
             GraphEdge(source_id=s2.id, target_id=end.id),
         ]
-        version = AgentVersion(
+        version = AgentGraph(
             agent_id=agent.id,
             start_node_id=s1.id,
             nodes=[s1, s2, end],
@@ -60,7 +60,7 @@ class TestStartNodeValidation:
         end = GraphNode(type=NodeType.END, name="End")
         edge = GraphEdge(source_id=start.id, target_id=end.id)
         fake_id = uuid4()
-        version = AgentVersion(
+        version = AgentGraph(
             agent_id=agent.id,
             start_node_id=fake_id,
             nodes=[start, end],
@@ -74,7 +74,7 @@ class TestStartNodeValidation:
         start = GraphNode(type=NodeType.START, name="Start")
         end = GraphNode(type=NodeType.END, name="End")
         edge = GraphEdge(source_id=start.id, target_id=end.id)
-        version = AgentVersion(
+        version = AgentGraph(
             agent_id=agent.id,
             start_node_id=end.id,  # points to End, not Start
             nodes=[start, end],
@@ -90,7 +90,7 @@ class TestEndNodeValidation:
         start = GraphNode(type=NodeType.START, name="Start")
         inst = GraphNode(type=NodeType.INSTRUCTION, name="Inst")
         edge = GraphEdge(source_id=start.id, target_id=inst.id)
-        version = AgentVersion(
+        version = AgentGraph(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, inst],
@@ -107,7 +107,7 @@ class TestEdgeValidation:
         end = GraphNode(type=NodeType.END, name="End")
         edge = GraphEdge(source_id=uuid4(), target_id=end.id)
         good_edge = GraphEdge(source_id=start.id, target_id=end.id)
-        version = AgentVersion(
+        version = AgentGraph(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, end],
@@ -122,7 +122,7 @@ class TestEdgeValidation:
         end = GraphNode(type=NodeType.END, name="End")
         bad_edge = GraphEdge(source_id=start.id, target_id=uuid4())
         good_edge = GraphEdge(source_id=start.id, target_id=end.id)
-        version = AgentVersion(
+        version = AgentGraph(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, end],
@@ -139,7 +139,7 @@ class TestOrphanDetection:
         end = GraphNode(type=NodeType.END, name="End")
         orphan = GraphNode(type=NodeType.INSTRUCTION, name="Orphan")
         edge = GraphEdge(source_id=start.id, target_id=end.id)
-        version = AgentVersion(
+        version = AgentGraph(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, end, orphan],
@@ -154,7 +154,7 @@ class TestOrphanDetection:
         end = GraphNode(type=NodeType.END, name="End")
         comment = GraphNode(type=NodeType.COMMENT, name="A comment")
         edge = GraphEdge(source_id=start.id, target_id=end.id)
-        version = AgentVersion(
+        version = AgentGraph(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, end, comment],
@@ -177,7 +177,7 @@ class TestCycleDetection:
             GraphEdge(source_id=b.id, target_id=a.id),  # cycle!
             GraphEdge(source_id=b.id, target_id=end.id),
         ]
-        version = AgentVersion(
+        version = AgentGraph(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, a, b, end],
@@ -198,7 +198,7 @@ class TestDecisionEdgeLabels:
             GraphEdge(source_id=decision.id, target_id=a.id),  # no label!
             GraphEdge(source_id=decision.id, target_id=b.id, label="No"),
         ]
-        version = AgentVersion(
+        version = AgentGraph(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, decision, a, b],
@@ -218,7 +218,7 @@ class TestDecisionEdgeLabels:
             GraphEdge(source_id=if_node.id, target_id=a.id, label="maybe"),
             GraphEdge(source_id=if_node.id, target_id=b.id, label="possibly"),
         ]
-        version = AgentVersion(
+        version = AgentGraph(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, if_node, a, b],
@@ -238,7 +238,7 @@ class TestDecisionEdgeLabels:
             GraphEdge(source_id=switch.id, target_id=a.id),  # no label
             GraphEdge(source_id=switch.id, target_id=b.id, label="case2"),
         ]
-        version = AgentVersion(
+        version = AgentGraph(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, switch, a, b],

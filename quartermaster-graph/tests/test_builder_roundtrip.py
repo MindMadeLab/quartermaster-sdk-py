@@ -29,7 +29,6 @@ class TestSimpleLinearRoundtrip:
         data = to_json(version)
         restored = from_json(data)
 
-        assert restored.version == version.version
         assert restored.agent_id == version.agent_id
         assert restored.start_node_id == version.start_node_id
         assert len(restored.nodes) == len(version.nodes)

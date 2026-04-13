@@ -1,10 +1,10 @@
 # quartermaster-providers
 
+Unified multi-LLM provider abstraction for Python. Write once, run against OpenAI, Anthropic, Google, Groq, xAI, or any OpenAI-compatible endpoint.
+
 [![PyPI version](https://img.shields.io/pypi/v/quartermaster-providers.svg)](https://pypi.org/project/quartermaster-providers/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
-
-Unified multi-LLM provider abstraction for Python. Write once, run against OpenAI, Anthropic, Google, Groq, xAI, or any OpenAI-compatible endpoint.
 
 ## Features
 
@@ -131,6 +131,28 @@ async def main():
     print(f"Usage: {response.usage.total_tokens} tokens")
 
 asyncio.run(main())
+```
+
+### Tool Calling with quartermaster-tools
+
+Tools created with `@tool()` integrate directly via `ToolDescriptor`:
+
+```python
+from quartermaster_tools import tool
+
+@tool()
+def get_weather(city: str) -> dict:
+    """Get current weather for a city.
+
+    Args:
+        city: The city name to look up.
+    """
+    return {"city": city, "temperature": 22}
+
+# Convert to provider-compatible format
+tool_def = get_weather.info().to_anthropic_tools()
+# Or for OpenAI:
+tool_def = get_weather.info().to_openai_tools()
 ```
 
 ### Streaming

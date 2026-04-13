@@ -8,12 +8,13 @@ Lightweight tool abstraction framework for AI agent orchestration.
 
 ## Features
 
-- **AbstractTool** base class with parameter validation, safe execution, and JSON Schema export
-- **AbstractLocalTool** for subprocess-based tools with timeout and output parsing
-- **Built-in tools**: ReadFileTool, WriteFileTool, WebRequestTool with security hardening
+- **`@tool()` decorator** -- the primary way to create tools from plain functions
+- **FunctionTool** instances with metadata introspection (`info()`, `parameters()`)
+- **Built-in tools**: file I/O, web requests, data parsing, math evaluation, code execution, and more
 - **ToolRegistry** with version-aware lookup, plugin discovery via entry points, and decorator registration
 - **Chain-of-Responsibility** pattern for composable data processing pipelines
 - **LLM bridge methods**: `to_openai_tools()`, `to_anthropic_tools()`, `to_mcp_tools()` on both ToolDescriptor and ToolRegistry
+- **AbstractTool** base class available for advanced use cases
 - **Zero required dependencies** (httpx optional for WebRequestTool)
 
 ## Installation
@@ -30,61 +31,77 @@ pip install quartermaster-tools[llm]
 
 ## Quick Start
 
-### Creating a Custom Tool
+### Creating a Tool with @tool()
+
+The `@tool()` decorator is the primary way to define tools. It extracts parameter metadata from the function signature, type hints, and Google-style docstring automatically.
 
 ```python
-from quartermaster_tools import AbstractTool, ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools import tool
 
-class SentimentTool(AbstractTool):
-    def name(self) -> str:
-        return "analyze_sentiment"
+@tool()
+def analyze_sentiment(text: str, language: str = "en") -> dict:
+    """Analyze text sentiment.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Returns positive, negative, or neutral sentiment with a confidence score.
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="text",
-                description="Text to analyze for sentiment",
-                type="string",
-                required=True,
-            ),
-        ]
+    Args:
+        text: Text to analyze for sentiment.
+        language: ISO language code for the input text.
+    """
+    # Your sentiment logic here
+    return {"sentiment": "positive", "score": 0.92}
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Analyze text sentiment",
-            long_description="Returns positive, negative, or neutral sentiment.",
-            version=self.version(),
-            parameters=self.parameters(),
-        )
+# Call it like a normal function
+result = analyze_sentiment(text="I love this product!")
 
-    def run(self, **kwargs) -> ToolResult:
-        text = kwargs.get("text", "")
-        # Your sentiment logic here
-        return ToolResult(success=True, data={"sentiment": "positive", "score": 0.92})
+# Or execute via the tool interface (returns ToolResult)
+tool_result = analyze_sentiment.run(text="I love this product!")
+print(tool_result.data)  # {"sentiment": "positive", "score": 0.92}
 
-# Execute the tool
-tool = SentimentTool()
-result = tool.safe_run(text="I love this product!")
-print(result.data)  # {"sentiment": "positive", "score": 0.92}
+# Introspect metadata
+print(analyze_sentiment.name())        # "analyze_sentiment"
+print(analyze_sentiment.parameters())  # [ToolParameter(name="text", ...), ToolParameter(name="language", ...)]
+
+# Export JSON Schema for LLM function calling
+schema = analyze_sentiment.info().to_input_schema()
+```
+
+You can override the tool name and description:
+
+```python
+@tool(name="sentiment_v2", description="Advanced sentiment analysis")
+def analyze(text: str) -> dict:
+    ...
 ```
 
 ### Using the Tool Registry
 
 ```python
-from quartermaster_tools import ToolRegistry, ReadFileTool, WriteFileTool, WebRequestTool
+from quartermaster_tools import ToolRegistry, tool
 
 registry = ToolRegistry()
-registry.register(ReadFileTool(allowed_base_dir="/tmp/sandbox"))
-registry.register(WriteFileTool(allowed_base_dir="/tmp/sandbox", create_dirs=True))
-registry.register(WebRequestTool(timeout=15))
+
+# Register existing FunctionTool instances (built-in tools are already FunctionTool instances)
+from quartermaster_tools import ReadFileTool, WriteFileTool, WebRequestTool
+
+registry.register(ReadFileTool)
+registry.register(WriteFileTool)
+registry.register(WebRequestTool)
+
+# Or use the registry's own @tool decorator to create and register in one step
+@registry.tool()
+def summarize(text: str, max_length: int = 100) -> dict:
+    """Summarize text to a given length.
+
+    Args:
+        text: The text to summarize.
+        max_length: Maximum length of the summary.
+    """
+    return {"summary": text[:max_length]}
 
 # Lookup by name (returns latest version)
 reader = registry.get("read_file")
-result = reader.run(path="/tmp/sandbox/data.txt")
+result = reader.run(path="/tmp/data.txt")
 
 # List all registered tools
 for desc in registry.list_tools():
@@ -94,6 +111,7 @@ for desc in registry.list_tools():
 openai_tools = registry.to_openai_tools()
 anthropic_tools = registry.to_anthropic_tools()
 mcp_tools = registry.to_mcp_tools()
+json_schemas = registry.to_json_schema()
 ```
 
 ### Building a Handler Chain
@@ -129,16 +147,75 @@ result = chain.run({"query": "  Hello World  "})
 # {"query": "hello world", "timestamp": "2025-01-15T10:30:00"}
 ```
 
+### Advanced: Creating a Tool with AbstractTool
+
+For cases where you need full control over tool construction (e.g., custom validation logic, stateful tools), subclass `AbstractTool` directly:
+
+```python
+from quartermaster_tools import AbstractTool, ToolDescriptor, ToolParameter, ToolResult
+
+class DatabaseQueryTool(AbstractTool):
+    def __init__(self, connection_string: str):
+        self._conn = connection_string
+
+    def name(self) -> str:
+        return "db_query"
+
+    def parameters(self) -> list[ToolParameter]:
+        return [
+            ToolParameter(name="sql", description="SQL query to execute", type="string", required=True),
+        ]
+
+    def info(self) -> ToolDescriptor:
+        return ToolDescriptor(
+            name=self.name(),
+            short_description="Execute a database query",
+            long_description="Runs a SQL query against the configured database.",
+            version=self.version(),
+            parameters=self.parameters(),
+        )
+
+    def run(self, **kwargs) -> ToolResult:
+        sql = kwargs.get("sql", "")
+        # Execute query...
+        return ToolResult(success=True, data={"rows": []})
+
+tool = DatabaseQueryTool(connection_string="sqlite:///mydb.db")
+result = tool.safe_run(sql="SELECT * FROM users LIMIT 10")
+```
+
 ## API Reference
+
+### @tool() Decorator
+
+Converts a plain function into a `FunctionTool` instance. Parameters are extracted from the function signature and type hints. Descriptions come from the Google-style docstring.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | `str \| None` | `None` | Override tool name (defaults to function `__name__`) |
+| `description` | `str \| None` | `None` | Override short description (defaults to docstring first line) |
+
+### FunctionTool
+
+A tool created by the `@tool()` decorator. Subclass of `AbstractTool`.
+
+| Method | Description |
+|--------|-------------|
+| `name() -> str` | Tool name |
+| `version() -> str` | Version string (always `"1.0.0"`) |
+| `parameters() -> list[ToolParameter]` | Parameter definitions extracted from the function |
+| `info() -> ToolDescriptor` | Full tool metadata |
+| `run(**kwargs) -> ToolResult` | Execute the tool, returning a ToolResult |
+| `__call__(*args, **kwargs)` | Call the underlying function directly |
 
 ### AbstractTool
 
-The base class all tools must implement.
+The base class for advanced tool implementations.
 
 | Method | Description |
 |--------|-------------|
 | `name() -> str` | Unique tool identifier |
-| `version() -> str` | Semantic version string |
+| `version() -> str` | Semantic version string (default: `"1.0.0"`) |
 | `parameters() -> list[ToolParameter]` | Parameter definitions |
 | `info() -> ToolDescriptor` | Tool metadata |
 | `run(**kwargs) -> ToolResult` | Execute the tool |
@@ -178,6 +255,7 @@ Central registry with version-aware lookup and plugin discovery.
 | `list_tools() -> list[ToolDescriptor]` | All registered tool descriptors |
 | `list_names() -> list[str]` | All registered tool names |
 | `unregister(name, version=None)` | Remove a tool |
+| `tool(name=None, description=None)` | Decorator to create and register a tool in one step |
 | `load_plugins()` | Discover tools from `quartermaster_tools` entry points |
 | `to_json_schema()` | Export all tools as JSON Schema |
 | `to_openai_tools()` | Export in OpenAI function-calling format |
@@ -186,11 +264,34 @@ Central registry with version-aware lookup and plugin discovery.
 
 ### Built-in Tools
 
-| Tool | Name | Description |
-|------|------|-------------|
-| `ReadFileTool` | `read_file` | Read file content with path validation, size limits, and SSRF protection |
-| `WriteFileTool` | `write_file` | Write/append to files with blocked paths and size enforcement |
-| `WebRequestTool` | `web_request` | HTTP GET/POST with SSRF protection and streaming response limits |
+All built-in tools are `FunctionTool` instances created with `@tool()`. The `*Tool` names (e.g., `ReadFileTool`) are backward-compatible aliases pointing to the same `FunctionTool` instance.
+
+| Alias | Function | Tool Name | Description |
+|-------|----------|-----------|-------------|
+| `ReadFileTool` | `read_file` | `read_file` | Read file content with path validation and size limits |
+| `WriteFileTool` | `write_file` | `write_file` | Write/append to files with blocked paths and size enforcement |
+| `WebRequestTool` | `web_request` | `web_request` | HTTP GET/POST with SSRF protection |
+| `EvalMathTool` | `eval_math` | `eval_math` | Safe mathematical expression evaluation via AST parsing |
+| `PythonExecutorTool` | `python_executor` | `python_executor` | Execute Python code |
+| `JavaScriptExecutorTool` | `javascript_executor` | `javascript_executor` | Execute JavaScript code |
+| `ShellExecutorTool` | `shell_executor` | `shell_executor` | Execute shell commands |
+| `ParseJSONTool` | `parse_json` | `parse_json` | Parse JSON strings |
+| `ParseXMLTool` | `parse_xml` | `parse_xml` | Parse XML strings |
+| `ParseCSVTool` | `parse_csv` | `parse_csv` | Parse CSV strings |
+| `ParseYAMLTool` | `parse_yaml` | `parse_yaml` | Parse YAML strings |
+| `ConvertFormatTool` | `convert_format` | `convert_format` | Convert between data formats |
+| `DataFilterTool` | `data_filter` | `data_filter` | Filter data with expressions |
+| `GrepTool` | `grep` | `grep` | Search file contents |
+| `FindFilesTool` | `find_files` | `find_files` | Find files by pattern |
+| `ListDirectoryTool` | `list_directory` | `list_directory` | List directory contents |
+| `CopyFileTool` | `copy_file` | `copy_file` | Copy files |
+| `MoveFileTool` | `move_file` | `move_file` | Move/rename files |
+| `DeleteFileTool` | `delete_file` | `delete_file` | Delete files |
+| `CreateDirectoryTool` | `create_directory` | `create_directory` | Create directories |
+| `FileInfoTool` | `file_info` | `file_info` | Get file metadata |
+| `DuckDuckGoSearchTool` | `duckduckgo_search` | `duckduckgo_search` | Web search via DuckDuckGo |
+| `WebScraperTool` | `web_scraper` | `web_scraper` | Scrape web pages |
+| `JsonApiTool` | `json_api` | `json_api` | Call JSON APIs |
 
 ### Decorator Registration
 
@@ -223,10 +324,9 @@ The registry discovers and loads these automatically on first access.
 
 ```python
 from quartermaster_tools import ToolRegistry, ReadFileTool
-from quartermaster_nodes.protocols import ProgramContainer, ParameterContainer
 
 registry = ToolRegistry()
-registry.register(ReadFileTool())
+registry.register(ReadFileTool)
 
 # Convert tool descriptors to node-compatible format
 for desc in registry.list_tools():
@@ -240,8 +340,8 @@ for desc in registry.list_tools():
 from quartermaster_tools import ToolRegistry, ReadFileTool, WriteFileTool
 
 registry = ToolRegistry()
-registry.register(ReadFileTool())
-registry.register(WriteFileTool())
+registry.register(ReadFileTool)
+registry.register(WriteFileTool)
 
 # Export tools in the format your LLM provider expects
 anthropic_tools = registry.to_anthropic_tools()

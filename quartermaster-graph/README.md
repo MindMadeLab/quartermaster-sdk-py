@@ -1,6 +1,6 @@
 # quartermaster-graph
 
-Framework-agnostic graph schema for defining AI agent workflows as directed acyclic graphs.
+Framework-agnostic graph schema for defining AI agent workflows as directed graphs.
 
 [![PyPI version](https://img.shields.io/pypi/v/quartermaster-graph)](https://pypi.org/project/quartermaster-graph/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
@@ -8,12 +8,11 @@ Framework-agnostic graph schema for defining AI agent workflows as directed acyc
 
 ## Features
 
-- **Pydantic-based models**: Agent, AgentVersion, GraphNode, GraphEdge with full validation
-- **GraphBuilder** fluent API for programmatic graph construction (`Graph` alias)
-- **40 node types** covering LLM, control flow, data, user interaction, memory, and utility
+- **Pydantic-based models**: `Agent`, `AgentGraph`, `GraphNode`, `GraphEdge` with full validation
+- **GraphBuilder** fluent API for programmatic graph construction (`Graph` convenience alias)
+- **40+ node types** covering LLM, control flow, data, user interaction, memory, and utility
 - **YAML/JSON serialization** with round-trip fidelity
 - **Graph validation**: start/end nodes, cycle detection, orphan detection, edge label checks
-- **Semantic versioning**: create, bump, fork, and diff agent versions
 - **Graph traversal**: topological sort, path finding, successor/predecessor queries
 - **Pre-built templates**: simple chat, decision tree, multi-agent supervisor, and more
 - **Typed metadata schemas** for each node type
@@ -33,7 +32,7 @@ pip install quartermaster-graph
 ```python
 from quartermaster_graph import Graph
 
-agent = (
+graph = (
     Graph("Customer Support Agent")
     .start()
     .user("How can I help you?")
@@ -46,11 +45,22 @@ agent = (
 )
 ```
 
+`Graph` is a convenience alias for `GraphBuilder`. Both `.build()` and `.to_graph()` return an `AgentGraph`:
+
+```python
+from quartermaster_graph import GraphBuilder
+
+builder = GraphBuilder("My Agent")
+builder.start().instruction("Process", model="gpt-4o").end()
+
+agent_graph = builder.build()       # returns AgentGraph
+agent_graph = builder.to_graph()    # same thing
+```
+
 ### Load a Graph from YAML
 
 ```yaml
 # agent.yaml
-version: "1.0.0"
 agent_id: "550e8400-e29b-41d4-a716-446655440000"
 start_node_id: "00000000-0000-0000-0000-000000000001"
 nodes:
@@ -64,8 +74,8 @@ nodes:
     type: "Instruction1"
     name: "Process"
     metadata:
-      system_instruction: "Analyze user input"
-      model: "gpt-4o"
+      llm_system_instruction: "Analyze user input"
+      llm_model: "gpt-4o"
   - id: "00000000-0000-0000-0000-000000000004"
     type: "End1"
     name: "End"
@@ -82,7 +92,7 @@ edges:
 from quartermaster_graph import from_yaml
 
 with open("agent.yaml") as f:
-    agent_version = from_yaml(f.read())
+    agent_graph = from_yaml(f.read())
 ```
 
 ## API Reference
@@ -92,49 +102,112 @@ with open("agent.yaml") as f:
 | Model | Description |
 |-------|-------------|
 | `Agent` | Top-level agent definition (name, description, tags) |
-| `AgentVersion` | Versioned snapshot: nodes, edges, start node, features |
+| `AgentGraph` | Graph definition: nodes, edges, start node, features |
 | `GraphNode` | A node with type, metadata, traversal config, error handling |
 | `GraphEdge` | Directed edge with optional label and routing points |
 | `NodePosition` | Visual position for editor rendering |
-| `GraphDiff` | Difference between two graph versions |
+
+> `AgentVersion` exists as a deprecated backward-compatibility alias for `AgentGraph`.
+
+### AgentGraph Methods
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `get_node(node_id)` | `GraphNode \| None` | Find a node by ID |
+| `get_start_node()` | `GraphNode \| None` | Get the start node |
+| `get_successors(node_id)` | `list[GraphNode]` | All successor nodes |
+| `get_predecessors(node_id)` | `list[GraphNode]` | All predecessor nodes |
+| `get_edges_from(node_id)` | `list[GraphEdge]` | All edges from a node |
+| `get_edges_to(node_id)` | `list[GraphEdge]` | All edges to a node |
 
 ### GraphBuilder Methods
 
-| Method | Description |
-|--------|-------------|
-| `.start()` | Add a Start node |
-| `.end()` | Add an End node (or close a branch) |
-| `.user(name)` | Add a user input node |
-| `.instruction(name, model, provider, temperature, system_instruction)` | Add an LLM instruction node |
-| `.decision(name, options)` | Add a decision node |
-| `.on(label) -> BranchBuilder` | Start building a named branch |
-| `.if_node(name, expression)` | Add a conditional branch |
-| `.switch(name, expression, cases)` | Add a multi-way switch |
-| `.static(name, content)` | Add a static content node |
-| `.code(name, code, language)` | Add a code execution node |
-| `.text(name, template)` | Add a text template node |
-| `.var(name, variable, expression)` | Add a variable node |
-| `.user_form(name, parameters)` | Add a user form node |
-| `.parallel(name)` | Add a parallel fork |
-| `.branch()` | Start a parallel branch |
-| `.static_merge(name)` | Merge parallel branches |
-| `.merge(name)` | Add a merge node |
-| `.reasoning(name, ...)` | Add a reasoning node |
-| `.summarize(name, ...)` | Add a summarize node |
-| `.write_memory(name, ...)` | Add a write memory node |
-| `.read_memory(name, ...)` | Add a read memory node |
-| `.use(sub_graph)` | Inline a sub-graph |
-| `.node(node_type, name, metadata)` | Add any node type |
-| `.edge(source_id, target_id, label)` | Manually add an edge |
-| `.build(validate) -> AgentVersion` | Build and optionally validate |
-| `.to_version(validate, version) -> AgentVersion` | Build with explicit version |
+**Start / End**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `.start()` | `GraphBuilder` | Add a Start node |
+| `.end()` | `GraphBuilder` | Add an End node (or close a branch) |
+
+**LLM Nodes**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `.instruction(name, model, provider, temperature, system_instruction, **kwargs)` | `GraphBuilder` | LLM text generation, no tools, streams response |
+| `.decision(name, model, provider, temperature, prefix_message, suffix_message, options, **kwargs)` | `GraphBuilder` | LLM picks one path via `pick_path` tool (non-streaming) |
+| `.reasoning(name, model, provider, **kwargs)` | `GraphBuilder` | Reasoning model node (o-series) |
+| `.summarize(name, model, provider, temperature, system_instruction, **kwargs)` | `GraphBuilder` | LLM condenses conversation history |
+| `.agent(name, model, provider, system_instruction, tools, max_iterations, **kwargs)` | `GraphBuilder` | Agentic loop with tools, up to `max_iterations` |
+| `.vision(name, model, provider, system_instruction, **kwargs)` | `GraphBuilder` | Image vision/analysis node |
+| `.merge(name, model, provider, temperature, system_instruction, prefix_message, suffix_message, **kwargs)` | `GraphBuilder` | LLM merges parallel branch outputs |
+
+**Control Flow**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `.on(label)` | `BranchBuilder` | Start a named branch for a decision/if/switch |
+| `.if_node(name, expression)` | `GraphBuilder` | Conditional branch via expression, no LLM |
+| `.static_decision(name, expression)` | `GraphBuilder` | Expression-based branching, no LLM |
+| `.user_decision(name)` | `GraphBuilder` | User picks which path to follow |
+| `.switch(name, cases, default_edge_id)` | `GraphBuilder` | Multi-way switch, first matching case wins |
+| `.parallel(name)` | `GraphBuilder` | Start a parallel fan-out |
+| `.branch()` | `BranchBuilder` | Start a parallel branch |
+| `.static_merge(name, text)` | `GraphBuilder` | Merge parallel branches without LLM |
+| `.break_node(name, targets)` | `GraphBuilder` | Stop backward message collection |
+
+**User Interaction**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `.user(name, prompts)` | `GraphBuilder` | Pause flow for user input |
+| `.user_form(name, parameters)` | `GraphBuilder` | Show a structured form to the user |
+
+**Data Nodes**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `.static(name, text)` | `GraphBuilder` | Fixed text content, no LLM |
+| `.code(name, code, filename)` | `GraphBuilder` | Code execution node |
+| `.text(name, template)` | `GraphBuilder` | Jinja2 template rendering |
+| `.var(name, variable, expression)` | `GraphBuilder` | Evaluate expression, store as variable |
+| `.text_to_variable(name, variable, source)` | `GraphBuilder` | Convert text output to a variable |
+| `.program_runner(name, program, **kwargs)` | `GraphBuilder` | Run a program/tool inline |
+
+**Memory**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `.read_memory(name, memory_name, memory_type, variable_names)` | `GraphBuilder` | Read from persistent memory |
+| `.write_memory(name, memory_name, memory_type, variables)` | `GraphBuilder` | Write to persistent memory |
+| `.update_memory(name, memory_name, memory_type, variables)` | `GraphBuilder` | Update existing memory variables |
+| `.flow_memory(name, memory_name, initial_data)` | `GraphBuilder` | Define flow-scoped memory |
+| `.user_memory(name, memory_name, initial_data)` | `GraphBuilder` | Define user-scoped persistent memory |
+
+**Composition / Utility**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `.sub_agent(name, graph_id)` | `GraphBuilder` | Call another agent graph synchronously |
+| `.use(sub_graph)` | `GraphBuilder` | Inline a sub-graph (accepts `AgentGraph` or `GraphBuilder`) |
+| `.comment(name, text)` | `GraphBuilder` | Documentation-only node, no runtime logic |
+| `.allowed_agents(*agent_ids)` | `GraphBuilder` | Restrict which sub-agents can be spawned |
+| `.node(node_type, name, metadata, **kwargs)` | `GraphBuilder` | Add any node type generically |
+| `.edge(source_id, target_id, label, is_main)` | `GraphBuilder` | Manually add an edge |
+
+**Build / Export**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `.build(validate=True)` | `AgentGraph` | Build the graph, optionally validate |
+| `.to_graph(validate=True, agent_id=None)` | `AgentGraph` | Build with optional explicit agent ID |
+| `.to_agent(validate=True)` | `Agent` | Export as a full `Agent` model |
 
 ### Validation
 
 ```python
 from quartermaster_graph import validate_graph
 
-errors = validate_graph(agent_version)
+errors = validate_graph(agent_graph)
 for err in errors:
     print(f"[{err.severity}] {err.code}: {err.message}")
 ```
@@ -152,25 +225,15 @@ Validation checks:
 from quartermaster_graph import to_json, from_json, to_yaml, from_yaml, json_schema
 
 # JSON round-trip
-data = to_json(agent_version)
+data = to_json(agent_graph)
 restored = from_json(data)
 
 # YAML round-trip
-yaml_str = to_yaml(agent_version)
+yaml_str = to_yaml(agent_graph)
 restored = from_yaml(yaml_str)
 
 # JSON Schema for cross-language validation
 schema = json_schema()
-```
-
-### Versioning
-
-```python
-from quartermaster_graph import create_version, fork, bump_major, bump_minor, bump_patch
-
-assert bump_patch("1.2.3") == "1.2.4"
-assert bump_minor("1.2.3") == "1.3.0"
-assert bump_major("1.2.3") == "2.0.0"
 ```
 
 ### Traversal Utilities
@@ -181,20 +244,22 @@ from quartermaster_graph import (
     get_path, topological_sort, find_merge_points, find_decision_points,
 )
 
-start = get_start_node(agent_version)
-ordered = topological_sort(agent_version)
+start = get_start_node(agent_graph)
+ordered = topological_sort(agent_graph)
+path = get_path(agent_graph, start_id, end_id)
 ```
 
 ### Enums
 
 | Enum | Values |
 |------|--------|
-| `NodeType` | 40 types: `START`, `END`, `INSTRUCTION`, `DECISION`, `IF`, `SWITCH`, `AGENT`, `USER`, `USER_FORM`, `CODE`, `MERGE`, `STATIC`, `STATIC_MERGE`, `VAR`, `TEXT`, etc. |
+| `NodeType` | 40+ types: `START`, `END`, `INSTRUCTION`, `DECISION`, `IF`, `SWITCH`, `AGENT`, `USER`, `USER_FORM`, `USER_DECISION`, `CODE`, `MERGE`, `STATIC`, `STATIC_MERGE`, `STATIC_DECISION`, `VAR`, `TEXT`, `REASONING`, `SUMMARIZE`, `SUB_ASSISTANT`, `BREAK`, `COMMENT`, etc. |
 | `TraverseIn` | `AWAIT_ALL`, `AWAIT_FIRST` |
 | `TraverseOut` | `SPAWN_ALL`, `SPAWN_NONE`, `SPAWN_START`, `SPAWN_PICKED` |
-| `ThoughtType` | `SKIP`, `NEW`, `NEW_HIDDEN`, `NEW_COLLAPSED`, `EDIT_OR_NEW`, `USE_PREVIOUS`, etc. |
+| `ThoughtType` | `SKIP`, `NEW`, `NEW_HIDDEN`, `NEW_COLLAPSED`, `INHERIT`, `CONTINUE`, `EDIT_OR_NEW`, `EDIT_SAME`, `APPEND`, `USE_PREVIOUS`, etc. |
 | `MessageType` | `AUTOMATIC`, `USER`, `ASSISTANT`, `SYSTEM`, `TOOL`, `VARIABLE` |
 | `ErrorStrategy` | `STOP`, `RETRY`, `SKIP`, `CONTINUE`, `CUSTOM` |
+| `ExceptionResolution` | `RETRY`, `BREAK`, `CONTINUE` |
 
 ## Integration with Sibling Packages
 
@@ -202,12 +267,12 @@ ordered = topological_sort(agent_version)
 # Build a graph (quartermaster-graph)
 from quartermaster_graph import Graph
 
-agent = Graph("Agent").start().user("Input").instruction("Process").end()
+graph = Graph("Agent").start().user("Input").instruction("Process").end()
 
 # Execute it (quartermaster-engine)
 from quartermaster_engine import FlowRunner
 
-runner = FlowRunner(graph=agent.build(), node_registry=registry)
+runner = FlowRunner(graph=graph.build(), node_registry=registry)
 result = runner.run("Hello!")
 ```
 

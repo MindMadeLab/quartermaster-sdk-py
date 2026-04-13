@@ -1,10 +1,10 @@
 # quartermaster-code-runner
 
+Secure sandboxed code execution service. Runs untrusted code in isolated Docker containers with support for Python, Node.js, Go, Rust, Deno, and Bun.
+
 [![PyPI version](https://img.shields.io/pypi/v/quartermaster-code-runner.svg)](https://pypi.org/project/quartermaster-code-runner/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
-
-Secure sandboxed code execution service. Runs untrusted code in isolated Docker containers with support for Python, Node.js, Go, Rust, Deno, and Bun.
 
 ## Features
 
@@ -18,6 +18,7 @@ Secure sandboxed code execution service. Runs untrusted code in isolated Docker 
 - **Auto Cleanup**: Orphaned containers and old images cleaned up automatically
 - **API Key Auth**: Optional authentication via `X-API-Key` header or Bearer token
 - **Health Checks**: Built-in `/health` endpoint with Docker connectivity status
+- **Standalone**: No dependency on other Quartermaster packages
 
 ## Supported Runtimes
 
@@ -122,6 +123,20 @@ curl -X POST http://localhost:8000/run \
       "helpers.py": "def greet(name): return f\"Hello, {name}!\""
     }
   }'
+```
+
+### Python Client Usage
+
+```python
+from quartermaster_code_runner import CodeExecutionRequest
+
+request = CodeExecutionRequest(
+    code="print('Hello from the sandbox')",
+    image="python",
+    timeout=10,
+    mem_limit="128m",
+    allow_network=False,
+)
 ```
 
 ## API Reference
@@ -246,6 +261,20 @@ All settings load from environment variables with sensible defaults. Use a `.env
 | `RUNTIME_DIR` | _(auto)_ | Path to runtime Dockerfile directories |
 
 When neither `AUTH_TOKEN` nor `CODE_RUNNER_API_KEYS` is set, authentication is disabled.
+
+### Error Types
+
+```python
+from quartermaster_code_runner import (
+    CodeRunnerError,          # Base exception
+    DockerError,              # Docker communication failure
+    ExecutionError,           # Code execution failure
+    InvalidLanguageError,     # Unsupported runtime
+    ResourceExhaustedError,   # Resource limit exceeded
+    RuntimeNotAvailableError, # Runtime image not found
+    TimeoutError,             # Execution timeout
+)
+```
 
 ## Contributing
 

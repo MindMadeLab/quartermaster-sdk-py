@@ -9,7 +9,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from quartermaster_engine.context.node_execution import NodeExecution
-from quartermaster_engine.types import AgentVersion, GraphNode, TraverseIn
+from quartermaster_engine.types import AgentGraph, GraphNode, TraverseIn
 
 
 class TraverseInGate:
@@ -18,7 +18,7 @@ class TraverseInGate:
     def should_execute(
         self,
         node_id: UUID,
-        graph: AgentVersion,
+        graph: AgentGraph,
         node_executions: dict[UUID, NodeExecution],
         strategy: TraverseIn,
     ) -> bool:

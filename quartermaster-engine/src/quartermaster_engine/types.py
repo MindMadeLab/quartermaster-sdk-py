@@ -21,7 +21,7 @@ from quartermaster_graph.enums import (  # noqa: F401
     TraverseOut,
 )
 from quartermaster_graph.models import (  # noqa: F401
-    AgentVersion,
+    AgentGraph,
     GraphEdge,
     GraphNode,
     NodePosition,

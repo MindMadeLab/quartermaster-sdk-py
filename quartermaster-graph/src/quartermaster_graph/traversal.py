@@ -6,10 +6,10 @@ from collections import deque
 from uuid import UUID
 
 from quartermaster_graph.enums import NodeType
-from quartermaster_graph.models import AgentVersion, GraphNode
+from quartermaster_graph.models import AgentGraph, GraphNode
 
 
-def _build_adj(version: AgentVersion) -> tuple[dict[UUID, list[UUID]], dict[UUID, list[UUID]]]:
+def _build_adj(version: AgentGraph) -> tuple[dict[UUID, list[UUID]], dict[UUID, list[UUID]]]:
     """Build forward and reverse adjacency lists."""
     forward: dict[UUID, list[UUID]] = {n.id: [] for n in version.nodes}
     reverse: dict[UUID, list[UUID]] = {n.id: [] for n in version.nodes}
@@ -21,11 +21,11 @@ def _build_adj(version: AgentVersion) -> tuple[dict[UUID, list[UUID]], dict[UUID
     return forward, reverse
 
 
-def _node_map(version: AgentVersion) -> dict[UUID, GraphNode]:
+def _node_map(version: AgentGraph) -> dict[UUID, GraphNode]:
     return {n.id: n for n in version.nodes}
 
 
-def get_start_node(version: AgentVersion) -> GraphNode:
+def get_start_node(version: AgentGraph) -> GraphNode:
     """Get the start node of the graph. Raises ValueError if not found."""
     nmap = _node_map(version)
     if version.start_node_id in nmap:
@@ -36,21 +36,21 @@ def get_start_node(version: AgentVersion) -> GraphNode:
     raise ValueError("No start node found in graph")
 
 
-def get_successors(version: AgentVersion, node_id: UUID) -> list[GraphNode]:
+def get_successors(version: AgentGraph, node_id: UUID) -> list[GraphNode]:
     """Get all direct successor nodes of a given node."""
     forward, _ = _build_adj(version)
     nmap = _node_map(version)
     return [nmap[nid] for nid in forward.get(node_id, []) if nid in nmap]
 
 
-def get_predecessors(version: AgentVersion, node_id: UUID) -> list[GraphNode]:
+def get_predecessors(version: AgentGraph, node_id: UUID) -> list[GraphNode]:
     """Get all direct predecessor nodes of a given node."""
     _, reverse = _build_adj(version)
     nmap = _node_map(version)
     return [nmap[nid] for nid in reverse.get(node_id, []) if nid in nmap]
 
 
-def get_path(version: AgentVersion, start_id: UUID, end_id: UUID) -> list[GraphNode]:
+def get_path(version: AgentGraph, start_id: UUID, end_id: UUID) -> list[GraphNode]:
     """Find the shortest path between two nodes using BFS.
 
     Returns a list of nodes from start to end (inclusive), or empty list if no path.
@@ -86,7 +86,7 @@ def get_path(version: AgentVersion, start_id: UUID, end_id: UUID) -> list[GraphN
     return []
 
 
-def topological_sort(version: AgentVersion) -> list[GraphNode]:
+def topological_sort(version: AgentGraph) -> list[GraphNode]:
     """Return nodes in topological order (Kahn's algorithm).
 
     Raises ValueError if the graph has a cycle.
@@ -117,14 +117,14 @@ def topological_sort(version: AgentVersion) -> list[GraphNode]:
     return result
 
 
-def find_merge_points(version: AgentVersion) -> list[GraphNode]:
+def find_merge_points(version: AgentGraph) -> list[GraphNode]:
     """Find nodes where branches converge (>1 incoming edge)."""
     _, reverse = _build_adj(version)
     nmap = _node_map(version)
     return [nmap[nid] for nid, preds in reverse.items() if len(preds) > 1]
 
 
-def find_decision_points(version: AgentVersion) -> list[GraphNode]:
+def find_decision_points(version: AgentGraph) -> list[GraphNode]:
     """Find nodes where branches diverge (>1 outgoing edge)."""
     forward, _ = _build_adj(version)
     nmap = _node_map(version)

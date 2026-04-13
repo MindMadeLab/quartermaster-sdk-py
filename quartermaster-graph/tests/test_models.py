@@ -13,11 +13,9 @@ from quartermaster_graph.enums import (
 )
 from quartermaster_graph.models import (
     Agent,
-    AgentVersion,
-    GraphDiff,
+    AgentGraph,
     GraphEdge,
     GraphNode,
-    NodeDiff,
     NodePosition,
 )
 
@@ -127,7 +125,6 @@ class TestAgent:
         assert agent.description == ""
         assert agent.tags == []
         assert isinstance(agent.created_at, datetime)
-        assert agent.current_version is None
 
     def test_with_tags(self):
         agent = Agent(name="Tagged", tags=["ai", "workflow"])
@@ -140,29 +137,13 @@ class TestAgent:
         assert restored.name == agent.name
 
 
-class TestAgentVersion:
+class TestAgentGraph:
     def test_creation(self, simple_graph):
-        assert simple_graph.version == "0.1.0"
         assert len(simple_graph.nodes) == 3
         assert len(simple_graph.edges) == 2
 
     def test_serialization_roundtrip(self, simple_graph):
         data = simple_graph.model_dump(mode="json")
-        restored = AgentVersion.model_validate(data)
-        assert restored.version == simple_graph.version
+        restored = AgentGraph.model_validate(data)
         assert len(restored.nodes) == len(simple_graph.nodes)
         assert len(restored.edges) == len(simple_graph.edges)
-
-
-class TestGraphDiff:
-    def test_empty_diff(self):
-        d = GraphDiff(version_from="0.1.0", version_to="0.2.0")
-        assert not d.has_changes
-
-    def test_with_changes(self):
-        d = GraphDiff(
-            version_from="0.1.0",
-            version_to="0.2.0",
-            node_diffs=[NodeDiff(node_id=uuid4(), change="added")],
-        )
-        assert d.has_changes

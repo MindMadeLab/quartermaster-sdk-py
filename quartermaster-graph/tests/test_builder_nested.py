@@ -9,11 +9,11 @@ import pytest
 from quartermaster_graph import Graph
 from quartermaster_graph.builder import GraphBuilder, _BranchBuilder
 from quartermaster_graph.enums import NodeType, TraverseIn
-from quartermaster_graph.models import AgentVersion
+from quartermaster_graph.models import AgentGraph
 from quartermaster_graph.validation import validate_graph
 
 
-def _no_errors(version: AgentVersion) -> list:
+def _no_errors(version: AgentGraph) -> list:
     """Return only real errors (not warnings) from validation."""
     return [e for e in validate_graph(version) if e.severity == "error"]
 

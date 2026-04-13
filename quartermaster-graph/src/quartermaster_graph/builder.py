@@ -11,7 +11,7 @@ from quartermaster_graph.enums import (
     TraverseIn,
     TraverseOut,
 )
-from quartermaster_graph.models import Agent, AgentVersion, GraphEdge, GraphNode, NodePosition
+from quartermaster_graph.models import Agent, AgentGraph, GraphEdge, GraphNode, NodePosition
 from quartermaster_graph.validation import validate_graph
 
 
@@ -47,7 +47,7 @@ def _llm_meta(
 
 
 def _inline_subgraph(
-    sub_graph: AgentVersion | GraphBuilder,
+    sub_graph: AgentGraph | GraphBuilder,
     nodes: list[GraphNode],
     edges: list[GraphEdge],
     connect_from_id: UUID | None,
@@ -59,7 +59,7 @@ def _inline_subgraph(
     "current node" for further chaining), or the original *connect_from_id*
     if the sub-graph was effectively empty.
 
-    Accepts either an ``AgentVersion`` or a ``GraphBuilder`` instance.
+    Accepts either an ``AgentGraph`` or a ``GraphBuilder`` instance.
     """
     if isinstance(sub_graph, GraphBuilder):
         sub_graph._finalize()
@@ -780,13 +780,13 @@ class _BranchBuilder:
         node = GraphNode(type=node_type, name=name, metadata=metadata or {}, **kwargs)
         return self._add_node(node)
 
-    def use(self, sub_graph: AgentVersion | GraphBuilder) -> _BranchBuilder:
+    def use(self, sub_graph: AgentGraph | GraphBuilder) -> _BranchBuilder:
         """Inline a sub-graph into this branch.
 
         Copies all nodes except START/END from the sub-graph, remaps their
         IDs, and connects them into the current branch chain.
 
-        Accepts either an ``AgentVersion`` or a ``GraphBuilder`` instance.
+        Accepts either an ``AgentGraph`` or a ``GraphBuilder`` instance.
         """
         # Detect whether this is the first call after on() — need to label the edge
         is_first = (
@@ -841,7 +841,7 @@ class GraphBuilder:
     The ``GraphBuilder`` itself IS the graph -- you can access ``.nodes``
     and ``.edges`` directly without calling ``.build()``.  The ``.build()``
     method is retained for backward compatibility and returns an
-    ``AgentVersion``.
+    ``AgentGraph``.
 
     Node semantics match the actual quartermaster-nodes implementations:
 
@@ -1608,7 +1608,7 @@ class GraphBuilder:
         self._last_node_id = merge_node.id
         return self
 
-    def use(self, sub_graph: AgentVersion | GraphBuilder) -> GraphBuilder:
+    def use(self, sub_graph: AgentGraph | GraphBuilder) -> GraphBuilder:
         """Inline a sub-graph into the current graph."""
         self._auto_merge_if_needed()
         new_last = _inline_subgraph(
@@ -1653,20 +1653,18 @@ class GraphBuilder:
     # Build / export
     # ------------------------------------------------------------------
 
-    def to_version(
+    def to_graph(
         self,
         validate: bool = True,
-        version: str = "0.1.0",
         agent_id: UUID | None = None,
-    ) -> AgentVersion:
-        """Export the graph as an ``AgentVersion``."""
+    ) -> AgentGraph:
+        """Export the graph as an ``AgentGraph``."""
         if self._start_node_id is None:
             raise ValueError("Graph has no start node — call .start() first")
         self._finalize()
-        ver = AgentVersion(
+        ver = AgentGraph(
             id=uuid4(),
             agent_id=agent_id or uuid4(),
-            version=version,
             nodes=list(self._nodes),
             edges=list(self._edges),
             start_node_id=self._start_node_id,
@@ -1676,18 +1674,17 @@ class GraphBuilder:
             validate_graph(ver)
         return ver
 
-    def build(self, validate: bool = True) -> AgentVersion:
-        """Build and return the ``AgentVersion``.  Alias for ``to_version()``."""
-        return self.to_version(validate=validate)
+    def build(self, validate: bool = True) -> AgentGraph:
+        """Build and return the ``AgentGraph``.  Alias for ``to_graph()``."""
+        return self.to_graph(validate=validate)
 
-    def to_agent(self, validate: bool = True, version: str = "0.1.0") -> Agent:
-        """Export as a full ``Agent`` (with a single version)."""
-        ver = self.to_version(validate=validate, version=version)
+    def to_agent(self, validate: bool = True) -> Agent:
+        """Export as a full ``Agent``."""
+        self.to_graph(validate=validate)
         return Agent(
             id=uuid4(),
             name=self._name,
             description=self._description,
-            versions=[ver],
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )

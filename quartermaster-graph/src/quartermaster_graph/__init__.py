@@ -43,8 +43,8 @@ from quartermaster_graph.metadata import (
 )
 from quartermaster_graph.models import (
     Agent,
-    AgentVersion,
-    GraphDiff,
+    AgentGraph,
+    AgentVersion,  # backward-compat alias
     GraphEdge,
     GraphNode,
     NodePosition,
@@ -61,7 +61,6 @@ from quartermaster_graph.traversal import (
     topological_sort,
 )
 from quartermaster_graph.validation import ValidationError, validate_graph
-from quartermaster_graph.versioning import bump_major, bump_minor, bump_patch, create_version, fork
 
 __version__ = "0.1.0"
 
@@ -76,8 +75,8 @@ __all__ = [
     "TraverseOut",
     # Models
     "Agent",
-    "AgentVersion",
-    "GraphDiff",
+    "AgentGraph",
+    "AgentVersion",  # deprecated alias for AgentGraph
     "GraphEdge",
     "GraphNode",
     "NodePosition",
@@ -111,12 +110,6 @@ __all__ = [
     # Validation
     "validate_graph",
     "ValidationError",
-    # Versioning
-    "bump_major",
-    "bump_minor",
-    "bump_patch",
-    "create_version",
-    "fork",
     # Serialization
     "from_json",
     "from_yaml",

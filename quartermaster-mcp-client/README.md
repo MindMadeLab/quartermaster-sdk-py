@@ -1,10 +1,10 @@
 # quartermaster-mcp-client
 
+Lightweight async/sync Python client for the Model Context Protocol (MCP), implementing JSON-RPC 2.0 over SSE or Streamable HTTP transports.
+
 [![PyPI version](https://img.shields.io/pypi/v/quartermaster-mcp-client.svg)](https://pypi.org/project/quartermaster-mcp-client/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
-
-Lightweight async/sync Python client for the Model Context Protocol (MCP), implementing JSON-RPC 2.0 over SSE or Streamable HTTP transports.
 
 ## Features
 
@@ -90,6 +90,40 @@ async def main():
         print(f"Auth failed: {e}")
     except McpServerError as e:
         print(f"Server error (code {e.code}): {e}")
+
+asyncio.run(main())
+```
+
+### Integration with quartermaster-tools
+
+MCP tools discovered via the client can be registered in a `ToolRegistry` for use alongside local tools:
+
+```python
+import asyncio
+from quartermaster_mcp_client import McpClient
+from quartermaster_tools import ToolRegistry, tool
+
+registry = ToolRegistry()
+
+# Register a local tool
+@registry.tool()
+def local_calculator(expression: str) -> dict:
+    """Evaluate a math expression.
+
+    Args:
+        expression: The expression to evaluate.
+    """
+    return {"result": eval(expression)}
+
+# Discover and use MCP remote tools
+async def main():
+    async with McpClient("http://localhost:8000/mcp") as client:
+        tools = await client.list_tools()
+        for t in tools:
+            print(f"Remote tool: {t.name} -- {t.description}")
+
+        result = await client.call_tool("weather", {"location": "Berlin"})
+        print(result)
 
 asyncio.run(main())
 ```

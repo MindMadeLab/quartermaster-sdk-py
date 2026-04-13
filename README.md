@@ -85,17 +85,18 @@ agent = (
 agent = (
     Graph("Registration")
     .start()
-    .text("Greeting", template="Welcome to our registration system!")
+    .user("Welcome!")
     .user_form("Details", parameters=[
         {"name": "full_name", "type": "text", "label": "Name", "required": "true"},
         {"name": "email",     "type": "email", "label": "Email", "required": "true"},
     ])
+    .var("Capture name", variable="name", expression="full_name")
     .text("Confirm", template="Thanks {{full_name}}, we'll email {{email}} with details.")
     .end()
 )
 ```
 
-### Custom Tools with @tool Decorator
+### Custom Tools with @tool()
 
 ```python
 from quartermaster_tools import tool
@@ -110,12 +111,21 @@ def get_weather(city: str, units: str = "celsius") -> dict:
     """
     return {"city": city, "temperature": 22, "units": units}
 
-# That's it -- the decorator defines the tool. Call it directly or via LLM function calling.
+# Call it directly
 result = get_weather(city="Amsterdam")
-schema = get_weather.to_json_schema()  # Export for LLM
+
+# Export JSON Schema for LLM function calling
+schema = get_weather.info().to_input_schema()
+
+# Or register in a ToolRegistry and export all at once
+from quartermaster_tools import ToolRegistry
+
+registry = ToolRegistry()
+registry.register(get_weather)
+schemas = registry.to_json_schema()
 ```
 
-See [`examples/`](./examples/) for 16 runnable examples covering every pattern.
+See [`examples/`](./examples/) for runnable examples covering every pattern.
 
 ## Packages
 
@@ -151,13 +161,14 @@ quartermaster-code-runner   Standalone Docker code execution
 ## Key Concepts
 
 - **Graph** -- A directed acyclic graph of nodes and edges. Built with the fluent `Graph("name").start().user("Input")...end()` API.
+- **AgentGraph** -- The serializable graph model (`AgentGraph` in quartermaster-graph). Produced by `Graph.build()`.
 - **User Node** -- Every graph starts with `.user()` after `.start()` to collect user input.
 - **Nodes** -- Units of work: LLM calls, decisions, user input, memory, tools, templates.
 - **Edges** -- Directed connections between nodes. Decision/IF/Switch edges carry labels.
 - **Thoughts** -- Runtime containers that carry text and variables (metadata) between nodes.
 - **Memory** -- Flow-scoped persistent storage accessible from any node via `write_memory`/`read_memory`.
 - **Providers** -- Pluggable LLM backends. Model name auto-resolves to the right provider.
-- **Tools** -- `@tool()` decorator for custom tools, built-in tools, JSON Schema export.
+- **Tools** -- `@tool()` decorator for custom tools, built-in tools, JSON Schema export via `tool.info().to_input_schema()`.
 
 ### Branching Rules
 

@@ -38,7 +38,7 @@ registry.register(InstructionNodeV1)
 registry.register(Decision1)
 registry.register(EndNodeV1)
 
-# Or auto-discover all 40 built-in nodes
+# Or auto-discover all built-in nodes
 registry = NodeRegistry()
 count = registry.discover("quartermaster_nodes.nodes")
 print(f"Discovered {count} nodes")
