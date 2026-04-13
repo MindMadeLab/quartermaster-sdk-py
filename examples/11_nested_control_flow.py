@@ -85,7 +85,7 @@ agent = (
         .static("Quality gate result", text="Quality gate complete")
     .end()
 
-    .merge("Combine all branches")
+    .static_merge("Combine all branches")
 
     # --- Final synthesis -------------------------------------------------------
     .summarize("Final synthesis", system_instruction="Combine all branch results into a coherent response")

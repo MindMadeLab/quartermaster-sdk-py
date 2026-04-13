@@ -164,7 +164,7 @@ agent = (
         .static("Coverage done", text="Coverage check complete")
     .end()
 
-    .merge("Quality review complete")
+    .static_merge("Quality review complete")
 
     # --- Synthesis and delivery -----------------------------------------------
     .reasoning("Synthesise findings")

@@ -75,7 +75,7 @@ it_flow = (
     .branch()
         .instruction("Performance check", system_instruction="Assess performance impact")
     .end()
-    .merge("Combine IT checks")
+    .static_merge("Combine IT checks")
 
     .instruction("Suggest fix", system_instruction="Provide troubleshooting steps based on diagnosis and checks")
     .end()

@@ -88,12 +88,18 @@ graph = (
 
 ### Merging Parallel Branches
 
-`.merge()` uses an LLM to combine outputs from **parallel** branches
-(all branches run concurrently). Do NOT use `.merge()` after decision or
-if nodes — those pick only one branch, so there is nothing to merge.
+Merge nodes rejoin **parallel** branches (where ALL branches run
+concurrently). Do NOT use merge after decision or if nodes — those pick
+only one branch, so there is nothing to merge.
 
-Use `.static_merge()` when you want to combine parallel outputs without
-an LLM call.
+Two flavours:
+
+* **`.static_merge()`** — joins branch outputs into one context without
+  calling an LLM. Use this when the **next** node is an LLM instruction
+  that will work with all the outputs. This is the most common case.
+* **`.merge()`** — calls an LLM to *compress* multiple branch outputs
+  into a single coherent message. Use only when you need the merge itself
+  to synthesize/summarize before continuing.
 
 ```python
 graph = (
@@ -107,8 +113,8 @@ graph = (
     .branch()
         .instruction("Path B")
     .end()
-    .merge("Combine results")  # LLM merges both parallel outputs
-    .instruction("Final step")
+    .static_merge("Combine results")  # joins parallel outputs into one context
+    .instruction("Final step")        # this LLM sees both outputs
     .end()
     .build()
 )
