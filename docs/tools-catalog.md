@@ -1207,3 +1207,10 @@ schemas = registry.to_json_schema()
 ```
 
 All export methods automatically convert `ToolParameter` type strings to JSON Schema types and include `required` arrays, `default` values, and `enum` options where applicable.
+
+## See Also
+
+- [Tool System](tools.md) -- Tool architecture, AbstractTool, ToolRegistry, custom tool development
+- [Graph Building](graph-building.md) -- Using tool nodes in agent graphs
+- [Security](security.md) -- Tool parameter validation and safe execution
+- [Engine](engine.md) -- How the engine executes tool nodes at runtime
