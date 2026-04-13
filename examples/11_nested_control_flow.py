@@ -72,7 +72,7 @@ agent = (
         .instruction("Quick check", system_instruction="Perform a fast independent assessment")
     .end()
 
-    # Branch C: conditional quality gate
+    # Branch C: conditional quality gate (IF picks one path — no merge needed)
     .branch()
         .if_node("Confidence high?", expression="confidence > 0.7")
         .on("true")
@@ -81,7 +81,8 @@ agent = (
         .on("false")
             .text("Flag for review", template="Low confidence -- manual review recommended")
         .end()
-        .merge("Quality gate merge")
+        # IF branches converge on this static node, which becomes the branch endpoint
+        .static("Quality gate result", text="Quality gate complete")
     .end()
 
     .merge("Combine all branches")

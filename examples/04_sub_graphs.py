@@ -42,7 +42,7 @@ agent = (
     .on("chat")
         .instruction("Chat", system_instruction="Have a helpful conversation")
     .end()
-    .merge("Collect results")
+    # No merge — decision picks ONE branch.
     .instruction("Deliver answer", system_instruction="Present the final result clearly")
     .end()
 )

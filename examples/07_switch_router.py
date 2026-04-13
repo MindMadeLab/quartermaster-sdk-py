@@ -24,7 +24,7 @@ agent = (
     .on("fr").instruction("French handler", system_instruction="Repondez en francais").end()
     .on("de").instruction("German handler", system_instruction="Antworten Sie auf Deutsch").end()
     .on("other").instruction("Fallback", system_instruction="Respond in English, note language").end()
-    .merge("Collect response")
+    # No merge — decision picks one language branch, they converge on End.
     .end()
 )
 

@@ -156,7 +156,7 @@ class _BranchBuilder:
     # ------------------------------------------------------------------
 
     def _add_node(self, node: GraphNode) -> _BranchBuilder:
-        self._auto_merge_if_needed()
+        self._wire_pending_endpoints(node)
         if node.position is None:
             node.position = self._graph._advance_position()
         self._graph._nodes.append(node)
@@ -166,21 +166,32 @@ class _BranchBuilder:
         self._last_node_id = node.id
         return self
 
-    def _auto_merge_if_needed(self) -> None:
-        """Auto-insert a static merge node if there are pending sub-branch endpoints."""
+    def _wire_pending_endpoints(self, target_node: GraphNode) -> None:
+        """Wire pending branch endpoints directly to *target_node*.
+
+        After a decision/if/switch only ONE branch fires, so there is
+        nothing to merge — the branches simply converge on the next node.
+        For parallel fan-out use ``.merge()`` or ``.static_merge()``
+        explicitly.
+        """
         if not self._branch_endpoints:
             return
-        merge_node = GraphNode(
-            type=NodeType.STATIC_MERGE,
-            name="Merge",
-            traverse_in=TraverseIn.AWAIT_ALL,
-            position=self._graph._advance_position(),
-        )
-        self._graph._nodes.append(merge_node)
         for ep in self._branch_endpoints:
-            self._graph._edges.append(GraphEdge(source_id=ep, target_id=merge_node.id))
+            self._graph._edges.append(
+                GraphEdge(source_id=ep, target_id=target_node.id)
+            )
         self._branch_endpoints.clear()
-        self._last_node_id = merge_node.id
+        # Clear _last_node_id so _add_node doesn't add a duplicate edge
+        self._last_node_id = None
+
+    def _auto_merge_if_needed(self) -> None:
+        """No-op — kept for call-site compatibility.
+
+        Branch endpoints are now wired directly to the next node in
+        ``_add_node`` / ``_wire_pending_endpoints``.  Explicit
+        ``.merge()`` or ``.static_merge()`` should be used after
+        ``parallel()`` when all branches run concurrently.
+        """
 
     # ------------------------------------------------------------------
     # LLM nodes
@@ -1041,23 +1052,31 @@ class GraphBuilder:
         return pos
 
     def _auto_merge_if_needed(self) -> None:
-        """If there are pending branch endpoints, auto-insert a static merge node."""
+        """No-op — kept for call-site compatibility.
+
+        Branch endpoints are now wired directly to the next node in
+        ``_add_node`` / ``_wire_pending_endpoints``.  Explicit
+        ``.merge()`` or ``.static_merge()`` should be used after
+        ``parallel()`` when all branches run concurrently.
+        """
+
+    def _wire_pending_endpoints(self, target_node: GraphNode) -> None:
+        """Wire pending branch endpoints directly to *target_node*.
+
+        After a decision/if/switch only ONE branch fires, so there is
+        nothing to merge — the branches simply converge on the next node.
+        """
         if not self._branch_endpoints:
             return
-        merge_node = GraphNode(
-            type=NodeType.STATIC_MERGE,
-            name="Merge",
-            traverse_in=TraverseIn.AWAIT_ALL,
-            position=self._advance_position(),
-        )
-        self._nodes.append(merge_node)
         for ep in self._branch_endpoints:
-            self._edges.append(GraphEdge(source_id=ep, target_id=merge_node.id))
+            self._edges.append(
+                GraphEdge(source_id=ep, target_id=target_node.id)
+            )
         self._branch_endpoints.clear()
-        self._last_node_id = merge_node.id
+        self._last_node_id = None
 
     def _add_node(self, node: GraphNode) -> GraphBuilder:
-        self._auto_merge_if_needed()
+        self._wire_pending_endpoints(node)
         if node.position is None:
             node.position = self._advance_position()
         self._nodes.append(node)

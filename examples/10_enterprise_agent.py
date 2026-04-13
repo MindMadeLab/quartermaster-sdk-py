@@ -51,7 +51,7 @@ hr_flow = (
     .on("false")
         .instruction("Direct HR response", system_instruction="Provide HR information from policy database")
     .end()
-    .merge("HR resolution")
+    # No merge — IF picks one branch, they converge here.
     .write_memory("Log HR query", memory_name="hr_query_log")
     .end()
 )
@@ -98,7 +98,7 @@ finance_flow = (
     .on("false")
         .instruction("Process directly", system_instruction="Handle finance request within standard limits")
     .end()
-    .merge("Finance resolution")
+    # No merge — IF picks one branch.
     .write_memory("Log finance query", memory_name="last_finance_query")
     .end()
 )
@@ -128,7 +128,7 @@ agent = (
     .on("general")
         .instruction("General help", system_instruction="Provide general assistance")
     .end()
-    .merge("Collect department response")
+    # No merge after decision — only one department branch runs.
 
     # --- Quality gate ---------------------------------------------------------
     .instruction("Quality check", system_instruction="Review the response for accuracy and completeness (0-1 score)")
@@ -140,7 +140,7 @@ agent = (
         .instruction("Improve", system_instruction="Rewrite the response to improve clarity and accuracy")
         .instruction("Re-deliver", system_instruction="Format and deliver the improved response")
     .end()
-    .merge("Final output")
+    # No merge after IF — only one branch runs.
 
     # --- Audit trail ----------------------------------------------------------
     .write_memory("Audit log", memory_name="audit_log", variables=[{"name": "audit", "value": "completed | dept:{{department}} | quality:{{quality_score}}"}])

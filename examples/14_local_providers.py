@@ -90,7 +90,7 @@ graph_mixed = (
             max_iterations=15,
         )
     .end()
-    .merge("Combine")
+    # No merge — decision picks one branch.
     .end()
 )
 

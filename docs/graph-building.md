@@ -38,7 +38,10 @@ graph = (
 
 ### Decision Branching
 
-Use `.decision()` followed by `.on(label)` to create conditional branches:
+Use `.decision()` followed by `.on(label)` to create conditional branches.
+Decision uses an LLM to pick ONE path — only one branch executes.
+No merge is needed after a decision; branches converge directly on the
+next node.
 
 ```python
 graph = (
@@ -59,6 +62,7 @@ graph = (
     .on("General")
         .instruction("General response", system_instruction="Give a general answer.")
         .end()
+    # No .merge() — only one branch fires, they converge on .end()
     .build()
 )
 ```
@@ -82,31 +86,32 @@ graph = (
 )
 ```
 
-### Merging Branches
+### Merging Parallel Branches
 
-Use `.merge()` and `.merge_to()` to rejoin branches:
+`.merge()` uses an LLM to combine outputs from **parallel** branches
+(all branches run concurrently). Do NOT use `.merge()` after decision or
+if nodes — those pick only one branch, so there is nothing to merge.
+
+Use `.static_merge()` when you want to combine parallel outputs without
+an LLM call.
 
 ```python
-builder = GraphBuilder("Merge Example")
-builder.start()
-builder.decision("Route?", options=["A", "B"])
-
-merge_node = builder.merge("Combine results")
-
-(builder
-    .on("A")
+graph = (
+    GraphBuilder("Parallel with Merge")
+    .start()
+    .instruction("Prepare")
+    .parallel()
+    .branch()
         .instruction("Path A")
-        .merge_to(merge_node.id))
-
-(builder
-    .on("B")
+    .end()
+    .branch()
         .instruction("Path B")
-        .merge_to(merge_node.id))
-
-# Continue after merge
-builder.instruction("Final step")
-builder.end()
-graph = builder.build()
+    .end()
+    .merge("Combine results")  # LLM merges both parallel outputs
+    .instruction("Final step")
+    .end()
+    .build()
+)
 ```
 
 ### Parallel Execution

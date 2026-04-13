@@ -175,14 +175,15 @@ class TestMultiDecision:
             .build()
         )
         assert isinstance(graph, AgentVersion)
-        # Should have: Start, User, Decision, A-instr, B-instr, Merge, Middle,
-        #              If, High-instr, Low-instr, Merge, End
+        # Decision picks one path — no merge needed.  Branches converge
+        # directly on the next node ("Middle step" / End).
         decision_nodes = [n for n in graph.nodes if n.type == NodeType.DECISION]
         if_nodes = [n for n in graph.nodes if n.type == NodeType.IF]
-        merge_nodes = [n for n in graph.nodes if n.type in (NodeType.MERGE, NodeType.STATIC_MERGE)]
         assert len(decision_nodes) == 1
         assert len(if_nodes) == 1
-        assert len(merge_nodes) >= 1  # at least one auto-merge
+        # No auto-merge nodes (decision/if only pick one branch)
+        merge_nodes = [n for n in graph.nodes if n.type in (NodeType.MERGE, NodeType.STATIC_MERGE)]
+        assert len(merge_nodes) == 0
         assert _no_errors(graph) == []
 
     def test_decision_merge_decision_chain(self):
@@ -279,31 +280,34 @@ class TestNestedDecisions:
 # ---------------------------------------------------------------------------
 # 10. Auto-merge after branches converge
 # ---------------------------------------------------------------------------
-class TestAutoMerge:
-    def test_auto_merge_on_next_instruction(self):
+class TestDecisionConvergence:
+    """Decision picks ONE branch — branches converge directly on the next
+    node without any merge node."""
+
+    def test_branches_converge_on_next_instruction(self):
         graph = (
-            GraphBuilder("AutoMerge")
+            GraphBuilder("Converge")
             .start()
             .decision("D", options=["a", "b"])
             .on("a").instruction("A").end()
             .on("b").instruction("B").end()
-            .instruction("After merge")
+            .instruction("After decision")
             .end()
             .build()
         )
+        # No merge node — branches wire directly to "After decision"
         merge_nodes = [n for n in graph.nodes if n.type in (NodeType.MERGE, NodeType.STATIC_MERGE)]
-        assert len(merge_nodes) == 1
-        assert merge_nodes[0].traverse_in == TraverseIn.AWAIT_ALL
-        # Both A and B should have edges to the merge node
-        merge_id = merge_nodes[0].id
-        edges_to_merge = [e for e in graph.edges if e.target_id == merge_id]
-        assert len(edges_to_merge) == 2
+        assert len(merge_nodes) == 0
+        # Both A and B should have edges to "After decision"
+        after = [n for n in graph.nodes if n.name == "After decision"][0]
+        edges_to_after = [e for e in graph.edges if e.target_id == after.id]
+        assert len(edges_to_after) == 2
         assert _no_errors(graph) == []
 
-    def test_auto_merge_on_end(self):
-        """Calling .end() on parent after branches should auto-merge then add End."""
+    def test_branches_converge_on_end(self):
+        """Calling .end() on parent after branches wires them to End directly."""
         graph = (
-            GraphBuilder("AutoMergeEnd")
+            GraphBuilder("ConvergeEnd")
             .start()
             .decision("D", options=["a", "b"])
             .on("a").instruction("A").end()
@@ -313,8 +317,12 @@ class TestAutoMerge:
         )
         merge_nodes = [n for n in graph.nodes if n.type in (NodeType.MERGE, NodeType.STATIC_MERGE)]
         end_nodes = [n for n in graph.nodes if n.type == NodeType.END]
-        assert len(merge_nodes) == 1
+        assert len(merge_nodes) == 0
         assert len(end_nodes) == 1
+        # Both branches connect to End
+        end_id = end_nodes[0].id
+        edges_to_end = [e for e in graph.edges if e.target_id == end_id]
+        assert len(edges_to_end) == 2
         assert _no_errors(graph) == []
 
 

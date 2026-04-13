@@ -28,7 +28,7 @@ agent = (
     .on("general")
         .instruction("General info", system_instruction="Provide general help")
     .end()
-    .merge("After categorization")
+    # No merge — decision picks ONE branch, they converge on the next node.
 
     # Second decision: urgency check (boolean if-node)
     .if_node("Is urgent?", expression="severity == 'high'")
@@ -39,7 +39,7 @@ agent = (
     .on("false")
         .instruction("Standard response", system_instruction="Provide standard help")
     .end()
-    .merge("After urgency check")
+    # No merge — IF picks ONE branch.
 
     # Third decision: user feedback (manual choice)
     .decision("Was this helpful?", options=["yes", "no"])

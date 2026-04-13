@@ -23,7 +23,8 @@ agent = (
     .on("negative")
         .instruction("Negative response", system_instruction="Generate an empathetic response")
     .end()
-    .merge("Combine results")
+    # No merge needed — decision picks ONE branch, so branches converge
+    # directly on the next node.
     .instruction("Final summary", system_instruction="Summarize the analysis")
     .end()
 )

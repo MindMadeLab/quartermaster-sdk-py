@@ -420,11 +420,14 @@ class TestEdgeLabelsInNestedBranches:
 # ---------------------------------------------------------------------------
 # 7. TestAutoMergeInNestedBranches
 # ---------------------------------------------------------------------------
-class TestAutoMergeInNestedBranches:
-    def test_auto_merge_after_nested_if(self):
-        """Auto-merge kicks in when if_node is followed by an instruction in a branch."""
+class TestConvergenceInNestedBranches:
+    """After decision/if only ONE branch fires — no merge needed.
+    Branches converge directly on the next node."""
+
+    def test_if_branches_converge_in_parallel_branch(self):
+        """IF branches converge directly on 'After IF' inside a parallel branch."""
         graph = (
-            Graph("AutoMergeNested")
+            Graph("ConvergeNested")
             .start()
             .parallel()
             .branch()
@@ -438,29 +441,31 @@ class TestAutoMergeInNestedBranches:
             .end()
             .build()
         )
-        # Auto-merge should be inserted between IF branches and "After IF"
+        # Only the explicit parallel merge — no auto-merge for IF
         merges = [n for n in graph.nodes if n.type in (NodeType.MERGE, NodeType.STATIC_MERGE)]
-        # At least 2 merges: auto-merge for IF + P merge
         merge_names = [m.name for m in merges]
         assert "P merge" in merge_names
-        # There should be an auto-inserted merge
-        assert len(merges) >= 2
+        assert len(merges) == 1
 
-        # "After IF" should exist and be reachable from the auto-merge
+        # "After IF" should be reachable from BOTH IF branches directly
         after_if = _node_by_name(graph, "After IF")
         edges_in = _edges_to(graph, after_if.id)
-        assert len(edges_in) == 1
-        # The source of that edge should be a merge node
-        source_id = edges_in[0].source_id
-        source_node = [n for n in graph.nodes if n.id == source_id][0]
-        assert source_node.type in (NodeType.MERGE, NodeType.STATIC_MERGE)
+        assert len(edges_in) == 2  # T path + F path converge here
+        source_names = sorted(
+            _node_by_name(graph, "").name  # get names via id lookup
+            if False else
+            [n for n in graph.nodes if n.id == e.source_id][0].name
+            for e in edges_in
+        )
+        assert "F path" in source_names
+        assert "T path" in source_names
 
         assert _no_errors(graph) == []
 
-    def test_auto_merge_decision_then_instruction_in_branch(self):
-        """Auto-merge when decision branches are followed by an instruction inside a branch."""
+    def test_decision_branches_converge_in_parallel_branch(self):
+        """Decision branches converge directly on 'Continue' inside a parallel branch."""
         graph = (
-            Graph("AutoMergeDec")
+            Graph("ConvergeDec")
             .start()
             .parallel()
             .branch()
@@ -474,14 +479,13 @@ class TestAutoMergeInNestedBranches:
             .end()
             .build()
         )
+        # Only the explicit parallel merge
         merges = [n for n in graph.nodes if n.type in (NodeType.MERGE, NodeType.STATIC_MERGE)]
-        assert len(merges) >= 2  # auto-merge for decision + P merge
+        assert len(merges) == 1
 
+        # Both decision branches converge directly on "Continue"
         cont = _node_by_name(graph, "Continue")
         edges_in = _edges_to(graph, cont.id)
-        assert len(edges_in) == 1
-        source_id = edges_in[0].source_id
-        source_node = [n for n in graph.nodes if n.id == source_id][0]
-        assert source_node.type in (NodeType.MERGE, NodeType.STATIC_MERGE)
+        assert len(edges_in) == 2  # A + B converge here
 
         assert _no_errors(graph) == []

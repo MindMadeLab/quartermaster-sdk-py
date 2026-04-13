@@ -125,7 +125,7 @@ agent = (
         .instruction("Benchmark review", system_instruction="Review benchmarks and performance comparisons")
     .end()
 
-    .merge("Collect research results")
+    # No merge — decision picks ONE research strategy.
 
     # --- Quality review: parallel checks with nested IF -----------------------
     .read_memory("Recall topic", memory_name="research_topic")
@@ -142,7 +142,8 @@ agent = (
         .on("false")
             .instruction("Fix errors", system_instruction="Correct any unverified or inaccurate claims")
         .end()
-        .merge("Fact-check resolved")
+        # IF branches converge on a result node
+        .static("Fact-check done", text="Fact-check complete")
     .end()
 
     # Branch 2: Bias assessment (no conditional, straight-through)
@@ -159,7 +160,8 @@ agent = (
         .on("false")
             .text("Coverage complete", template="Research covers all key aspects of {{research_topic}}")
         .end()
-        .merge("Coverage resolved")
+        # IF branches converge on a result node
+        .static("Coverage done", text="Coverage check complete")
     .end()
 
     .merge("Quality review complete")
