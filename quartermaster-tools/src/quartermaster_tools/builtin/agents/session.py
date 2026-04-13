@@ -60,12 +60,38 @@ class SessionManager:
     def __init__(self) -> None:
         self._sessions = {}
         self._lock = threading.Lock()
+        self._allowed_agents: set[str] = set()
+
+    def set_allowed_agents(self, agent_ids: list[str]) -> None:
+        """Set the list of allowed agent IDs. Empty set means allow all."""
+        self._allowed_agents = set(agent_ids)
+
+    def is_agent_allowed(self, agent_id: str) -> bool:
+        """Check if an agent ID is allowed. Empty set means allow all."""
+        if not self._allowed_agents:
+            return True
+        return agent_id in self._allowed_agents
 
     def create_session(
-        self, name: str = "", metadata: dict[str, Any] | None = None
+        self,
+        name: str = "",
+        metadata: dict[str, Any] | None = None,
+        agent_id: str = "",
     ) -> AgentSession:
-        """Create a new agent session."""
-        session = AgentSession(name=name, metadata=metadata or {})
+        """Create a new agent session.
+
+        If *agent_id* is provided it is validated against the allowed-agents
+        list (when one has been configured).  A ``ValueError`` is raised for
+        disallowed agent IDs.
+        """
+        if agent_id and not self.is_agent_allowed(agent_id):
+            raise ValueError(
+                f"Agent '{agent_id}' is not in the allowed agents list"
+            )
+        meta = metadata or {}
+        if agent_id:
+            meta["agent_id"] = agent_id
+        session = AgentSession(name=name, metadata=meta)
         with self._lock:
             self._sessions[session.id] = session
         return session

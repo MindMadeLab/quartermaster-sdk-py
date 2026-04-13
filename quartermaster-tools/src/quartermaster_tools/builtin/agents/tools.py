@@ -39,7 +39,13 @@ class _SessionManagerMixin:
 
 
 class CreateSessionTool(_SessionManagerMixin, AbstractTool):
-    """Create a new agent session."""
+    """Create a new agent session.
+
+    For simple use-cases prefer ``SpawnAgentTool`` (``spawn_agent``) which
+    combines session creation and start into a single call.  This tool is
+    useful for advanced patterns where you need to pre-configure a session
+    (e.g. inject messages or add hooks) before starting it.
+    """
 
     def name(self) -> str:
         return "create_agent_session"
@@ -103,7 +109,13 @@ class CreateSessionTool(_SessionManagerMixin, AbstractTool):
 
 
 class StartSessionTool(_SessionManagerMixin, AbstractTool):
-    """Start a session with a task."""
+    """Start a session with a task.
+
+    For simple use-cases prefer ``SpawnAgentTool`` (``spawn_agent``) which
+    combines session creation and start into a single call.  This tool is
+    useful for advanced patterns where you need to pre-configure a session
+    (e.g. inject messages or add hooks) before starting it.
+    """
 
     def name(self) -> str:
         return "start_agent_session"
@@ -702,4 +714,150 @@ class AddFinishHookTool(_SessionManagerMixin, AbstractTool):
                 "hook_added": True,
                 "hook_type": hook_type,
             },
+        )
+
+
+class SpawnAgentTool(_SessionManagerMixin, AbstractTool):
+    """Spawn a new agent session in a single step.
+
+    Combines session creation and start into one call.  This is the
+    preferred tool for simple agent spawning.  Use ``create_agent_session``
+    and ``start_agent_session`` separately only when you need to
+    pre-configure a session before starting it.
+    """
+
+    _allowed_agents: set[str]
+
+    def __init__(
+        self,
+        manager: SessionManager | None = None,
+        allowed_agents: list[str] | None = None,
+    ) -> None:
+        super().__init__(manager=manager)
+        self._allowed_agents = set(allowed_agents) if allowed_agents else set()
+
+    def name(self) -> str:
+        return "spawn_agent"
+
+    def version(self) -> str:
+        return "1.0.0"
+
+    def parameters(self) -> list[ToolParameter]:
+        return [
+            ToolParameter(
+                name="agent_id",
+                description="Which agent to spawn (must be in allowed list).",
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="task",
+                description="Task description/instructions for the agent.",
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="name",
+                description="Optional human-readable session name.",
+                type="string",
+                required=False,
+                default="",
+            ),
+            ToolParameter(
+                name="system_prompt",
+                description="Optional system prompt override for the agent.",
+                type="string",
+                required=False,
+                default="",
+            ),
+            ToolParameter(
+                name="allowed_agents",
+                description=(
+                    "Comma-separated list of agent IDs this spawned agent "
+                    "can itself spawn (for recursive control)."
+                ),
+                type="string",
+                required=False,
+                default="",
+            ),
+        ]
+
+    def info(self) -> ToolDescriptor:
+        return ToolDescriptor(
+            name=self.name(),
+            short_description="Spawn a new agent session in a single step.",
+            long_description=(
+                "Creates and immediately starts a new agent session with "
+                "the given task.  The agent_id must be in the allowed "
+                "agents list (if one is configured).  Returns the "
+                "session_id and a status of 'running'."
+            ),
+            version=self.version(),
+            parameters=self.parameters(),
+            is_local=True,
+        )
+
+    def run(self, **kwargs: Any) -> ToolResult:
+        agent_id = kwargs.get("agent_id", "")
+        task = kwargs.get("task", "")
+        session_name = kwargs.get("name", "")
+        system_prompt = kwargs.get("system_prompt", "")
+        allowed_agents_str = kwargs.get("allowed_agents", "")
+
+        if not agent_id:
+            return ToolResult(
+                success=False, error="Parameter 'agent_id' is required"
+            )
+        if not task:
+            return ToolResult(success=False, error="Parameter 'task' is required")
+
+        # Validate agent_id against allowed list (empty = allow all)
+        if self._allowed_agents and agent_id not in self._allowed_agents:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"Agent '{agent_id}' is not in the allowed agents list. "
+                    f"Allowed: {', '.join(sorted(self._allowed_agents))}"
+                ),
+            )
+
+        manager = self._get_manager()
+
+        # Build metadata
+        metadata: dict[str, Any] = {"agent_id": agent_id}
+        if allowed_agents_str:
+            child_allowed = [
+                a.strip() for a in allowed_agents_str.split(",") if a.strip()
+            ]
+            metadata["allowed_agents"] = child_allowed
+
+        # Create and start in one go
+        try:
+            session = manager.create_session(
+                name=session_name or agent_id,
+                metadata=metadata,
+                agent_id=agent_id,
+            )
+        except ValueError as exc:
+            return ToolResult(success=False, error=str(exc))
+
+        def task_fn(s: AgentSession) -> Any:
+            if system_prompt:
+                s.messages.append(
+                    AgentMessage(role="system", content=system_prompt)
+                )
+            s.messages.append(AgentMessage(role="user", content=task))
+            # Framework hook point: a real LLM loop would process here.
+            return {"task": task, "message_count": len(s.messages)}
+
+        started = manager.start_session(session.id, task_fn)
+        if not started:
+            return ToolResult(
+                success=False,
+                error=f"Could not start session '{session.id}'",
+            )
+
+        return ToolResult(
+            success=True,
+            data={"session_id": session.id, "status": "running"},
         )

@@ -19,6 +19,7 @@ from quartermaster_tools.builtin.agents.tools import (
     GetSessionStatusTool,
     InjectMessageTool,
     ListSessionsTool,
+    SpawnAgentTool,
     StartSessionTool,
     WaitSessionTool,
 )
@@ -351,6 +352,106 @@ class TestAddFinishHookTool:
         tool = AddFinishHookTool(manager=mgr)
         result = tool.run(session_id=session.id, hook_type="bad")
         assert result.success is False
+
+
+class TestSessionManagerAllowedAgents:
+    def test_empty_allowed_agents_allows_all(self):
+        mgr = SessionManager()
+        assert mgr.is_agent_allowed("any-agent") is True
+        assert mgr.is_agent_allowed("another") is True
+
+    def test_set_allowed_agents_restricts(self):
+        mgr = SessionManager()
+        mgr.set_allowed_agents(["agent-a", "agent-b"])
+        assert mgr.is_agent_allowed("agent-a") is True
+        assert mgr.is_agent_allowed("agent-b") is True
+        assert mgr.is_agent_allowed("agent-c") is False
+
+    def test_create_session_with_allowed_agent_id(self):
+        mgr = SessionManager()
+        mgr.set_allowed_agents(["agent-a"])
+        session = mgr.create_session(name="test", agent_id="agent-a")
+        assert session.metadata["agent_id"] == "agent-a"
+
+    def test_create_session_with_disallowed_agent_id(self):
+        mgr = SessionManager()
+        mgr.set_allowed_agents(["agent-a"])
+        with pytest.raises(ValueError, match="not in the allowed agents"):
+            mgr.create_session(name="test", agent_id="agent-x")
+
+
+class TestSpawnAgentTool:
+    def test_basic_spawn(self):
+        mgr = SessionManager()
+        tool = SpawnAgentTool(manager=mgr)
+        result = tool.run(agent_id="researcher", task="find information")
+        assert result.success is True
+        assert result.data["status"] == "running"
+        sid = result.data["session_id"]
+        mgr.wait_for_session(sid, timeout=1.0)
+        session = mgr.get_session(sid)
+        assert session.status == SessionStatus.COMPLETED
+        assert session.metadata["agent_id"] == "researcher"
+
+    def test_spawn_with_name_and_system_prompt(self):
+        mgr = SessionManager()
+        tool = SpawnAgentTool(manager=mgr)
+        result = tool.run(
+            agent_id="writer",
+            task="write a report",
+            name="my-writer",
+            system_prompt="You are a helpful writer.",
+        )
+        assert result.success is True
+        sid = result.data["session_id"]
+        mgr.wait_for_session(sid, timeout=1.0)
+        session = mgr.get_session(sid)
+        assert session.name == "my-writer"
+        # system prompt + user task = 2 messages
+        assert len(session.messages) == 2
+        assert session.messages[0].role == "system"
+
+    def test_spawn_rejects_disallowed_agent(self):
+        mgr = SessionManager()
+        tool = SpawnAgentTool(manager=mgr, allowed_agents=["agent-a", "agent-b"])
+        result = tool.run(agent_id="agent-c", task="do stuff")
+        assert result.success is False
+        assert "not in the allowed agents list" in result.error
+
+    def test_spawn_empty_allowed_list_allows_all(self):
+        mgr = SessionManager()
+        tool = SpawnAgentTool(manager=mgr, allowed_agents=[])
+        result = tool.run(agent_id="any-agent", task="do anything")
+        assert result.success is True
+        assert result.data["status"] == "running"
+        mgr.wait_for_session(result.data["session_id"], timeout=1.0)
+
+    def test_spawn_with_allowed_agents_metadata(self):
+        mgr = SessionManager()
+        tool = SpawnAgentTool(manager=mgr)
+        result = tool.run(
+            agent_id="orchestrator",
+            task="coordinate",
+            allowed_agents="worker-a, worker-b",
+        )
+        assert result.success is True
+        sid = result.data["session_id"]
+        session = mgr.get_session(sid)
+        assert session.metadata["allowed_agents"] == ["worker-a", "worker-b"]
+
+    def test_spawn_missing_agent_id(self):
+        mgr = SessionManager()
+        tool = SpawnAgentTool(manager=mgr)
+        result = tool.run(agent_id="", task="do stuff")
+        assert result.success is False
+        assert "agent_id" in result.error
+
+    def test_spawn_missing_task(self):
+        mgr = SessionManager()
+        tool = SpawnAgentTool(manager=mgr)
+        result = tool.run(agent_id="agent-a", task="")
+        assert result.success is False
+        assert "task" in result.error
 
 
 class TestParallelSessions:

@@ -20,6 +20,7 @@ from quartermaster_tools.builtin.agents.tools import (
     GetSessionStatusTool,
     InjectMessageTool,
     ListSessionsTool,
+    SpawnAgentTool,
     StartSessionTool,
     WaitSessionTool,
 )
@@ -35,6 +36,7 @@ __all__ = [
     "InjectMessageTool",
     "ListSessionsTool",
     "SessionManager",
+    "SpawnAgentTool",
     "SessionStatus",
     "StartSessionTool",
     "WaitSessionTool",
