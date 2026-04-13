@@ -15,6 +15,37 @@ from quartermaster_graph.models import Agent, AgentVersion, GraphEdge, GraphNode
 from quartermaster_graph.validation import validate_graph
 
 
+# ── Helpers ──────────────────────────────────────────────────────────
+
+def _llm_meta(
+    model: str = "gpt-4o",
+    provider: str = "openai",
+    temperature: float = 0.5,
+    system_instruction: str = "",
+    stream: bool = True,
+    max_output_tokens: int = 2048,
+    max_input_tokens: int = 16385,
+    vision: bool = False,
+    thinking_level: str = "off",
+    **extra: Any,
+) -> dict[str, Any]:
+    """Build a metadata dict using the ``llm_*`` key names that match
+    the actual quartermaster-nodes ``AbstractLLMAssistantNode``."""
+    meta: dict[str, Any] = {
+        "llm_model": model,
+        "llm_provider": provider,
+        "llm_temperature": temperature,
+        "llm_system_instruction": system_instruction,
+        "llm_stream": stream,
+        "llm_max_output_tokens": max_output_tokens,
+        "llm_max_input_tokens": max_input_tokens,
+        "llm_vision": vision,
+        "llm_thinking_level": thinking_level,
+    }
+    meta.update(extra)
+    return meta
+
+
 def _inline_subgraph(
     sub_graph: AgentVersion | GraphBuilder,
     nodes: list[GraphNode],
@@ -136,11 +167,11 @@ class _BranchBuilder:
         return self
 
     def _auto_merge_if_needed(self) -> None:
-        """Auto-insert a merge node if there are pending sub-branch endpoints."""
+        """Auto-insert a static merge node if there are pending sub-branch endpoints."""
         if not self._branch_endpoints:
             return
         merge_node = GraphNode(
-            type=NodeType.MERGE,
+            type=NodeType.STATIC_MERGE,
             name="Merge",
             traverse_in=TraverseIn.AWAIT_ALL,
             position=self._graph._advance_position(),
@@ -160,38 +191,36 @@ class _BranchBuilder:
         name: str,
         model: str = "gpt-4o",
         provider: str = "openai",
-        temperature: float = 0.7,
+        temperature: float = 0.5,
         system_instruction: str = "",
         **kwargs: Any,
     ) -> _BranchBuilder:
-        """Add an instruction node to this branch."""
-        meta = {
-            "system_instruction": system_instruction,
-            "model": model,
-            "provider": provider,
-            "temperature": temperature,
-            **kwargs,
-        }
+        """Add an Instruction node — pure LLM text generation, NO tools.
+
+        Streams the LLM response. Use ``agent()`` instead if you need tool use.
+        """
+        meta = _llm_meta(
+            model=model, provider=provider, temperature=temperature,
+            system_instruction=system_instruction, **kwargs,
+        )
         node = GraphNode(type=NodeType.INSTRUCTION, name=name, metadata=meta)
         return self._add_node(node)
 
     def reasoning(
         self,
         name: str,
-        model: str = "gpt-4o",
+        model: str = "o1-mini",
         provider: str = "openai",
-        temperature: float = 0.7,
-        system_instruction: str = "",
         **kwargs: Any,
     ) -> _BranchBuilder:
-        """Add a reasoning/chain-of-thought node."""
-        meta = {
-            "system_instruction": system_instruction,
-            "model": model,
-            "provider": provider,
-            "temperature": temperature,
-            **kwargs,
-        }
+        """Add a Reasoning node — specialized for o-series reasoning models.
+
+        Does NOT use system instructions (reasoning models handle internally).
+        """
+        meta = _llm_meta(
+            model=model, provider=provider, temperature=0.0,
+            system_instruction="", **kwargs,
+        )
         node = GraphNode(type=NodeType.REASONING, name=name, metadata=meta)
         return self._add_node(node)
 
@@ -200,18 +229,15 @@ class _BranchBuilder:
         name: str,
         model: str = "gpt-4o",
         provider: str = "openai",
-        temperature: float = 0.7,
-        system_instruction: str = "",
+        temperature: float = 0.5,
+        system_instruction: str = "Summarize the given conversation concisely.",
         **kwargs: Any,
     ) -> _BranchBuilder:
-        """Add a summarization node."""
-        meta = {
-            "system_instruction": system_instruction,
-            "model": model,
-            "provider": provider,
-            "temperature": temperature,
-            **kwargs,
-        }
+        """Add a Summarize node — LLM condenses conversation history."""
+        meta = _llm_meta(
+            model=model, provider=provider, temperature=temperature,
+            system_instruction=system_instruction, **kwargs,
+        )
         node = GraphNode(type=NodeType.SUMMARIZE, name=name, metadata=meta)
         return self._add_node(node)
 
@@ -225,24 +251,21 @@ class _BranchBuilder:
         max_iterations: int = 25,
         **kwargs: Any,
     ) -> _BranchBuilder:
-        """Add an autonomous agent node (agentic loop with tool use).
+        """Add an Agent node — autonomous agentic loop WITH tools.
+
+        Iterates up to *max_iterations* times. Each iteration the LLM
+        may call tools; the loop continues until no tool calls are returned.
 
         Args:
-            name: Display name for this node.
-            model: LLM model identifier.
-            provider: LLM provider name.
-            system_instruction: System prompt (mapped to ``llm_system_instruction`` at runtime).
-            tools: List of program-version IDs the agent may call.
-            max_iterations: Maximum agentic-loop iterations before forced stop.
+            tools: List of tool/program-version IDs the agent may call.
+            max_iterations: Maximum loop iterations before forced stop.
         """
-        meta = {
-            "system_instruction": system_instruction,
-            "model": model,
-            "provider": provider,
-            "program_version_ids": tools or [],
-            "max_iterations": max_iterations,
-            **kwargs,
-        }
+        meta = _llm_meta(
+            model=model, provider=provider,
+            system_instruction=system_instruction, **kwargs,
+        )
+        meta["program_version_ids"] = tools or []
+        meta["max_iterations"] = max_iterations
         node = GraphNode(type=NodeType.AGENT, name=name, metadata=meta)
         return self._add_node(node)
 
@@ -255,35 +278,97 @@ class _BranchBuilder:
         **kwargs: Any,
     ) -> _BranchBuilder:
         """Add an image vision/analysis node."""
-        meta = {
-            "system_instruction": system_instruction,
-            "model": model,
-            "provider": provider,
-            **kwargs,
-        }
+        meta = _llm_meta(
+            model=model, provider=provider,
+            system_instruction=system_instruction, vision=True, **kwargs,
+        )
         node = GraphNode(type=NodeType.INSTRUCTION_IMAGE_VISION, name=name, metadata=meta)
         return self._add_node(node)
 
     # ------------------------------------------------------------------
-    # Simple nodes
+    # User interaction nodes
     # ------------------------------------------------------------------
 
-    def user(self, name: str = "User Input") -> _BranchBuilder:
-        """Add a user input node to this branch."""
-        node = GraphNode(type=NodeType.USER, name=name)
+    def user(self, name: str = "User Input", prompts: list[str] | None = None) -> _BranchBuilder:
+        """Add a User input node — pauses flow and awaits user response.
+
+        Args:
+            prompts: Optional text snippets to show the user.
+        """
+        meta: dict[str, Any] = {}
+        if prompts:
+            meta["text_snippets"] = prompts
+        node = GraphNode(type=NodeType.USER, name=name, metadata=meta)
         return self._add_node(node)
 
-    def static(self, name: str, content: str = "") -> _BranchBuilder:
-        """Add a static content node."""
-        node = GraphNode(type=NodeType.STATIC, name=name, metadata={"content": content})
-        return self._add_node(node)
+    def user_form(
+        self, name: str, parameters: list[dict] | None = None,
+    ) -> _BranchBuilder:
+        """Show a structured form to the user — pauses flow until submitted.
 
-    def code(self, name: str, code: str = "", language: str = "python") -> _BranchBuilder:
-        """Add a code execution node."""
+        Args:
+            parameters: List of form field definitions.
+        """
         node = GraphNode(
-            type=NodeType.CODE,
-            name=name,
-            metadata={"language": language, "code": code},
+            type=NodeType.USER_FORM, name=name,
+            metadata={"parameters": parameters or []},
+        )
+        return self._add_node(node)
+
+    # ------------------------------------------------------------------
+    # Data nodes
+    # ------------------------------------------------------------------
+
+    def static(self, name: str, text: str = "") -> _BranchBuilder:
+        """Add a Static node — outputs fixed text content, NO LLM."""
+        node = GraphNode(
+            type=NodeType.STATIC, name=name,
+            metadata={"static_text": text},
+        )
+        return self._add_node(node)
+
+    def text(self, name: str, template: str = "") -> _BranchBuilder:
+        """Add a Text node — renders Jinja2 template using thought metadata."""
+        node = GraphNode(
+            type=NodeType.TEXT, name=name,
+            metadata={"text": template},
+        )
+        return self._add_node(node)
+
+    def var(self, name: str, variable: str = "", expression: str = "") -> _BranchBuilder:
+        """Add a Var node — evaluates Python expression, stores result in metadata.
+
+        Args:
+            variable: Name of the variable to create.
+            expression: Python expression to evaluate.
+        """
+        node = GraphNode(
+            type=NodeType.VAR, name=name,
+            metadata={"name": variable, "expression": expression},
+        )
+        return self._add_node(node)
+
+    def code(self, name: str, code: str = "", filename: str = "") -> _BranchBuilder:
+        """Add a Code node — code execution (handled by runtime environment)."""
+        node = GraphNode(
+            type=NodeType.CODE, name=name,
+            metadata={"code": code, "filename": filename},
+        )
+        return self._add_node(node)
+
+    def text_to_variable(self, name: str, variable: str = "", source: str = "") -> _BranchBuilder:
+        """Convert text output to a variable."""
+        node = GraphNode(
+            type=NodeType.TEXT_TO_VARIABLE, name=name,
+            metadata={"variable": variable, "source": source},
+        )
+        return self._add_node(node)
+
+    def program_runner(self, name: str, program: str = "", **kwargs: Any) -> _BranchBuilder:
+        """Run a program/tool inline."""
+        node = GraphNode(
+            type=NodeType.PROGRAM_RUNNER, name=name,
+            metadata={"program": program, **kwargs},
         )
         return self._add_node(node)
 
@@ -291,34 +376,93 @@ class _BranchBuilder:
     # Control flow (nested)
     # ------------------------------------------------------------------
 
-    def if_node(self, name: str, expression: str = "", variable: str = "") -> _BranchBuilder:
-        """Add an IF conditional node inside this branch.
+    def if_node(self, name: str, expression: str = "") -> _BranchBuilder:
+        """Add an IF node — evaluates Python expression, picks true/false branch.
 
-        Use ``.on("true")`` / ``.on("false")`` for the branches.
+        NO LLM call. Use ``.on("true")`` / ``.on("false")`` for branches.
+
+        Args:
+            expression: Python expression that evaluates to truthy/falsy.
         """
         self._auto_merge_if_needed()
         node = GraphNode(
-            type=NodeType.IF,
-            name=name,
+            type=NodeType.IF, name=name,
             traverse_out=TraverseOut.SPAWN_PICKED,
-            metadata={"expression": expression, "variable": variable},
+            metadata={"if_expression": expression},
         )
         self._add_node(node)
         self._decision_node_id = node.id
         self._last_node_id = None
         return self
 
-    def decision(self, name: str, options: list[str] | None = None) -> _BranchBuilder:
-        """Add a decision node inside this branch.
+    def decision(
+        self,
+        name: str,
+        model: str = "gpt-4o",
+        provider: str = "openai",
+        temperature: float = 0.5,
+        prefix_message: str = "",
+        suffix_message: str = "",
+        options: list[str] | None = None,
+        **kwargs: Any,
+    ) -> _BranchBuilder:
+        """Add a Decision node — LLM picks ONE path via ``pick_path`` tool.
+
+        The LLM sees the available edge labels and calls an internal tool
+        to select which branch to follow. Does NOT stream.
+
+        Use ``.on(label)`` for each option.
+        """
+        self._auto_merge_if_needed()
+        meta = _llm_meta(
+            model=model, provider=provider, temperature=temperature,
+            stream=False, **kwargs,
+        )
+        meta["prefix_message"] = prefix_message
+        meta["suffix_message"] = suffix_message
+        node = GraphNode(
+            type=NodeType.DECISION, name=name,
+            traverse_out=TraverseOut.SPAWN_PICKED,
+            metadata=meta,
+        )
+        self._add_node(node)
+        self._decision_node_id = node.id
+        self._last_node_id = None
+        return self
+
+    def static_decision(self, name: str, expression: str = "") -> _BranchBuilder:
+        """Add a StaticDecision node — expression-based branching, NO LLM.
+
+        Like ``if_node()`` but uses ``StaticDecision1`` node type.
+        Use ``.on("true")`` / ``.on("false")`` for branches.
+
+        Args:
+            expression: Python expression that evaluates to truthy/falsy.
+        """
+        self._auto_merge_if_needed()
+        node = GraphNode(
+            type=NodeType.STATIC_DECISION, name=name,
+            traverse_out=TraverseOut.SPAWN_PICKED,
+            metadata={"expression": expression},
+        )
+        self._add_node(node)
+        self._decision_node_id = node.id
+        self._last_node_id = None
+        return self
+
+    def user_decision(self, name: str) -> _BranchBuilder:
+        """Add a UserDecision node — presents choices to user, user picks path.
+
+        Waits for ALL incoming branches (traverse_in=AwaitAll), then
+        pauses flow until the user selects a path.
 
         Use ``.on(label)`` for each option.
         """
         self._auto_merge_if_needed()
         node = GraphNode(
-            type=NodeType.DECISION,
-            name=name,
+            type=NodeType.USER_DECISION, name=name,
+            traverse_in=TraverseIn.AWAIT_ALL,
             traverse_out=TraverseOut.SPAWN_PICKED,
-            metadata={"decision_prompt": name},
         )
         self._add_node(node)
         self._decision_node_id = node.id
@@ -328,7 +472,7 @@ class _BranchBuilder:
     def on(self, label: str) -> _BranchBuilder:
         """Start a sub-branch for a decision/if option inside this branch."""
         if self._decision_node_id is None:
-            raise ValueError("on() must be called after if_node() or decision()")
+            raise ValueError("on() must be called after if_node(), decision(), static_decision(), or user_decision()")
         decision_id = self._decision_node_id
         sub = _BranchBuilder(self._graph, self, label)
         sub._last_node_id = decision_id
@@ -357,20 +501,41 @@ class _BranchBuilder:
         sub._add_node = labeled_add  # type: ignore[method-assign]
         return sub
 
-    def switch(self, name: str, cases: list[str] | None = None) -> _BranchBuilder:
-        """Add a switch/multi-way decision node."""
-        meta: dict[str, Any] = {"cases": cases or []}
+    def switch(
+        self, name: str,
+        cases: list[dict[str, str]] | None = None,
+        default_edge_id: str = "",
+    ) -> _BranchBuilder:
+        """Add a Switch node — evaluates multiple cases, first match wins. NO LLM.
+
+        Args:
+            cases: List of ``{"expression": "...", "edge_id": "..."}`` dicts.
+            default_edge_id: Fallback edge ID if no case matches.
+        """
+        meta: dict[str, Any] = {
+            "cases": cases or [],
+            "default_edge_id": default_edge_id,
+        }
         node = GraphNode(
-            type=NodeType.SWITCH,
-            name=name,
+            type=NodeType.SWITCH, name=name,
             traverse_out=TraverseOut.SPAWN_PICKED,
             metadata=meta,
         )
-        return self._add_node(node)
+        self._add_node(node)
+        self._decision_node_id = node.id
+        self._last_node_id = None
+        return self
 
-    def break_node(self, name: str = "Break") -> _BranchBuilder:
-        """Add a break node (exits a loop)."""
-        node = GraphNode(type=NodeType.BREAK, name=name)
+    def break_node(self, name: str = "Break", targets: list[str] | None = None) -> _BranchBuilder:
+        """Add a Break node — stops backward message collection.
+
+        Args:
+            targets: What to clear: ``[]`` (full break), ``['tools']``, ``['thinking']``.
+        """
+        node = GraphNode(
+            type=NodeType.BREAK, name=name,
+            metadata={"break_targets": targets or []},
+        )
         return self._add_node(node)
 
     def parallel(self, name: str = "Parallel") -> _BranchBuilder:
@@ -397,13 +562,57 @@ class _BranchBuilder:
         sub._last_node_id = self._decision_node_id
         return sub
 
-    def merge(self, name: str = "Merge") -> _BranchBuilder:
-        """Add a merge node that collects all pending sub-branch endpoints."""
+    def merge(
+        self, name: str = "Merge",
+        model: str = "gpt-4o",
+        provider: str = "openai",
+        temperature: float = 0.5,
+        system_instruction: str = "",
+        prefix_message: str = "Compress following conversations into one",
+        suffix_message: str = "",
+        **kwargs: Any,
+    ) -> _BranchBuilder:
+        """Add a Merge node — LLM combines all parallel branch outputs.
+
+        Waits for ALL branches (traverse_in=AwaitAll), then sends the
+        combined content to the LLM for compression into one message.
+
+        Use ``static_merge()`` if you don't need LLM processing.
+        """
+        meta = _llm_meta(
+            model=model, provider=provider, temperature=temperature,
+            system_instruction=system_instruction, **kwargs,
+        )
+        meta["prefix_message"] = prefix_message
+        meta["suffix_message"] = suffix_message
         merge_node = GraphNode(
-            type=NodeType.MERGE,
-            name=name,
+            type=NodeType.MERGE, name=name,
             traverse_in=TraverseIn.AWAIT_ALL,
             position=self._graph._advance_position(),
+            metadata=meta,
+        )
+        self._graph._nodes.append(merge_node)
+        for ep in self._branch_endpoints:
+            self._graph._edges.append(GraphEdge(source_id=ep, target_id=merge_node.id))
+        self._branch_endpoints.clear()
+        if self._last_node_id is not None:
+            self._graph._edges.append(
+                GraphEdge(source_id=self._last_node_id, target_id=merge_node.id)
+            )
+        self._last_node_id = merge_node.id
+        return self
+
+    def static_merge(self, name: str = "Merge", text: str = "") -> _BranchBuilder:
+        """Add a StaticMerge node — combines branches WITHOUT LLM.
+
+        Waits for ALL branches (traverse_in=AwaitAll), appends static text,
+        then continues. No LLM call involved.
+        """
+        merge_node = GraphNode(
+            type=NodeType.STATIC_MERGE, name=name,
+            traverse_in=TraverseIn.AWAIT_ALL,
+            position=self._graph._advance_position(),
+            metadata={"static_text": text},
         )
         self._graph._nodes.append(merge_node)
         for ep in self._branch_endpoints:
@@ -417,100 +626,103 @@ class _BranchBuilder:
         return self
 
     # ------------------------------------------------------------------
-    # Data nodes
-    # ------------------------------------------------------------------
-
-    def var(self, name: str, variable: str = "", value: str = "") -> _BranchBuilder:
-        """Add a variable assignment node."""
-        node = GraphNode(
-            type=NodeType.VAR,
-            name=name,
-            metadata={"variable": variable, "value": value},
-        )
-        return self._add_node(node)
-
-    def text(self, name: str, template: str = "") -> _BranchBuilder:
-        """Add a text template node."""
-        node = GraphNode(
-            type=NodeType.TEXT,
-            name=name,
-            metadata={"template": template},
-        )
-        return self._add_node(node)
-
-    def text_to_variable(self, name: str, variable: str = "", source: str = "") -> _BranchBuilder:
-        """Convert text output to a variable."""
-        node = GraphNode(
-            type=NodeType.TEXT_TO_VARIABLE,
-            name=name,
-            metadata={"variable": variable, "source": source},
-        )
-        return self._add_node(node)
-
-    def program_runner(self, name: str, program: str = "", **kwargs: Any) -> _BranchBuilder:
-        """Run a program/tool inline."""
-        node = GraphNode(
-            type=NodeType.PROGRAM_RUNNER,
-            name=name,
-            metadata={"program": program, **kwargs},
-        )
-        return self._add_node(node)
-
-    # ------------------------------------------------------------------
     # Memory nodes
     # ------------------------------------------------------------------
 
-    def read_memory(self, name: str, key: str = "") -> _BranchBuilder:
-        """Read from persistent memory."""
+    def read_memory(
+        self, name: str,
+        memory_name: str = "",
+        memory_type: str = "flow",
+        variable_names: list[str] | None = None,
+    ) -> _BranchBuilder:
+        """Read variables from persistent memory into thought metadata.
+
+        Args:
+            memory_name: Name of the memory store.
+            memory_type: ``"flow"`` (scoped to this flow) or ``"user"`` (persists across flows).
+            variable_names: Which variables to load.
+        """
         node = GraphNode(
-            type=NodeType.READ_MEMORY,
-            name=name,
-            metadata={"key": key},
+            type=NodeType.READ_MEMORY, name=name,
+            metadata={
+                "memory_name": memory_name,
+                "memory_type": memory_type,
+                "variable_names": variable_names or [],
+            },
         )
         return self._add_node(node)
 
-    def write_memory(self, name: str, key: str = "", value: str = "") -> _BranchBuilder:
-        """Write to persistent memory."""
+    def write_memory(
+        self, name: str,
+        memory_name: str = "",
+        memory_type: str = "flow",
+        variables: list[dict[str, str]] | None = None,
+    ) -> _BranchBuilder:
+        """Write variables from thought metadata to persistent memory.
+
+        Args:
+            memory_name: Name of the memory store.
+            memory_type: ``"flow"`` or ``"user"``.
+            variables: List of ``{"name": "...", "expression": "..."}`` dicts.
+        """
         node = GraphNode(
-            type=NodeType.WRITE_MEMORY,
-            name=name,
-            metadata={"key": key, "value": value},
+            type=NodeType.WRITE_MEMORY, name=name,
+            metadata={
+                "memory_name": memory_name,
+                "memory_type": memory_type,
+                "variables": variables or [],
+            },
         )
         return self._add_node(node)
 
-    def update_memory(self, name: str, key: str = "") -> _BranchBuilder:
-        """Update existing memory."""
+    def update_memory(
+        self, name: str,
+        memory_name: str = "",
+        memory_type: str = "flow",
+        variables: list[dict[str, str]] | None = None,
+    ) -> _BranchBuilder:
+        """Update existing persistent memory variables."""
         node = GraphNode(
-            type=NodeType.UPDATE_MEMORY,
-            name=name,
-            metadata={"key": key},
+            type=NodeType.UPDATE_MEMORY, name=name,
+            metadata={
+                "memory_name": memory_name,
+                "memory_type": memory_type,
+                "variables": variables or [],
+            },
         )
         return self._add_node(node)
 
-    def flow_memory(self, name: str = "Flow Memory") -> _BranchBuilder:
-        """Access flow-level memory."""
-        node = GraphNode(type=NodeType.FLOW_MEMORY, name=name)
-        return self._add_node(node)
+    def flow_memory(
+        self, name: str = "Flow Memory",
+        memory_name: str = "",
+        initial_data: list[dict[str, str]] | None = None,
+    ) -> _BranchBuilder:
+        """Define flow-scoped persistent memory (not connected to flow edges).
 
-    # ------------------------------------------------------------------
-    # User interaction
-    # ------------------------------------------------------------------
-
-    def user_decision(self, name: str, options: list[str] | None = None) -> _BranchBuilder:
-        """Prompt user to make a decision (shows buttons/options)."""
+        This is a *definition* node — the Start node initialises it at
+        runtime via ``_memory_initializer``.
+        """
         node = GraphNode(
-            type=NodeType.USER_DECISION,
-            name=name,
-            metadata={"options": options or []},
+            type=NodeType.FLOW_MEMORY, name=name,
+            metadata={
+                "memory_name": memory_name,
+                "initial_data": initial_data or [],
+            },
         )
         return self._add_node(node)
 
-    def user_form(self, name: str, fields: list[dict] | None = None) -> _BranchBuilder:
-        """Show a form to the user for structured input."""
+    def user_memory(
+        self, name: str = "User Memory",
+        memory_name: str = "",
+        initial_data: list[dict[str, str]] | None = None,
+    ) -> _BranchBuilder:
+        """Define user-scoped persistent memory (survives across flow executions)."""
         node = GraphNode(
-            type=NodeType.USER_FORM,
-            name=name,
-            metadata={"fields": fields or []},
+            type=NodeType.USER_MEMORY, name=name,
+            metadata={
+                "memory_name": memory_name,
+                "initial_data": initial_data or [],
+            },
         )
         return self._add_node(node)
 
@@ -519,19 +731,17 @@ class _BranchBuilder:
     # ------------------------------------------------------------------
 
     def comment(self, name: str, text: str = "") -> _BranchBuilder:
-        """Add a comment node (no-op, for documentation)."""
+        """Add a Comment node — documentation only, no runtime logic."""
         node = GraphNode(
-            type=NodeType.COMMENT,
-            name=name,
-            metadata={"text": text},
+            type=NodeType.COMMENT, name=name,
+            metadata={"comment": text},
         )
         return self._add_node(node)
 
     def webhook(self, name: str, url: str = "", method: str = "POST") -> _BranchBuilder:
         """Add a webhook call node."""
         node = GraphNode(
-            type=NodeType.WEBHOOK,
-            name=name,
+            type=NodeType.WEBHOOK, name=name,
             metadata={"url": url, "method": method},
         )
         return self._add_node(node)
@@ -539,8 +749,7 @@ class _BranchBuilder:
     def api_call(self, name: str, url: str = "", method: str = "GET", **kwargs: Any) -> _BranchBuilder:
         """Add an API call node."""
         node = GraphNode(
-            type=NodeType.API_CALL,
-            name=name,
+            type=NodeType.API_CALL, name=name,
             metadata={"url": url, "method": method, **kwargs},
         )
         return self._add_node(node)
@@ -548,8 +757,7 @@ class _BranchBuilder:
     def log(self, name: str, message: str = "", level: str = "info") -> _BranchBuilder:
         """Add a logging node."""
         node = GraphNode(
-            type=NodeType.LOG,
-            name=name,
+            type=NodeType.LOG, name=name,
             metadata={"message": message, "level": level},
         )
         return self._add_node(node)
@@ -557,8 +765,7 @@ class _BranchBuilder:
     def error_handler(self, name: str, strategy: str = "retry") -> _BranchBuilder:
         """Add an error handler node."""
         node = GraphNode(
-            type=NodeType.ERROR_HANDLER,
-            name=name,
+            type=NodeType.ERROR_HANDLER, name=name,
             metadata={"strategy": strategy},
         )
         return self._add_node(node)
@@ -566,8 +773,7 @@ class _BranchBuilder:
     def router(self, name: str, routes: list[str] | None = None) -> _BranchBuilder:
         """Add a router node (dynamic dispatch)."""
         node = GraphNode(
-            type=NodeType.ROUTER,
-            name=name,
+            type=NodeType.ROUTER, name=name,
             metadata={"routes": routes or []},
         )
         return self._add_node(node)
@@ -575,8 +781,7 @@ class _BranchBuilder:
     def validator(self, name: str, schema: dict | None = None) -> _BranchBuilder:
         """Add a data validation node."""
         node = GraphNode(
-            type=NodeType.VALIDATOR,
-            name=name,
+            type=NodeType.VALIDATOR, name=name,
             metadata={"schema": schema or {}},
         )
         return self._add_node(node)
@@ -584,8 +789,7 @@ class _BranchBuilder:
     def transformer(self, name: str, transform: str = "") -> _BranchBuilder:
         """Add a data transformation node."""
         node = GraphNode(
-            type=NodeType.TRANSFORMER,
-            name=name,
+            type=NodeType.TRANSFORMER, name=name,
             metadata={"transform": transform},
         )
         return self._add_node(node)
@@ -593,8 +797,7 @@ class _BranchBuilder:
     def filter_node(self, name: str, condition: str = "") -> _BranchBuilder:
         """Add a data filter node."""
         node = GraphNode(
-            type=NodeType.FILTER,
-            name=name,
+            type=NodeType.FILTER, name=name,
             metadata={"condition": condition},
         )
         return self._add_node(node)
@@ -602,8 +805,7 @@ class _BranchBuilder:
     def notification(self, name: str, channel: str = "", message: str = "") -> _BranchBuilder:
         """Add a notification node."""
         node = GraphNode(
-            type=NodeType.NOTIFICATION,
-            name=name,
+            type=NodeType.NOTIFICATION, name=name,
             metadata={"channel": channel, "message": message},
         )
         return self._add_node(node)
@@ -611,8 +813,7 @@ class _BranchBuilder:
     def timer(self, name: str, delay: float = 0, schedule: str = "") -> _BranchBuilder:
         """Add a timer/delay node."""
         node = GraphNode(
-            type=NodeType.TIMER,
-            name=name,
+            type=NodeType.TIMER, name=name,
             metadata={"delay": delay, "schedule": schedule},
         )
         return self._add_node(node)
@@ -620,8 +821,7 @@ class _BranchBuilder:
     def tool(self, name: str, tool_name: str = "", **tool_args: str) -> _BranchBuilder:
         """Add a tool invocation node."""
         node = GraphNode(
-            type=NodeType.TOOL,
-            name=name,
+            type=NodeType.TOOL, name=name,
             metadata={"tool_name": tool_name, "tool_args": tool_args},
         )
         return self._add_node(node)
@@ -634,12 +834,10 @@ class _BranchBuilder:
         their result to the current flow.
 
         Args:
-            name: Display name for this node.
             graph_id: ID of the agent graph to execute as a sub-flow.
         """
         node = GraphNode(
-            type=NodeType.SUB_ASSISTANT,
-            name=name,
+            type=NodeType.SUB_ASSISTANT, name=name,
             metadata={"sub_assistant_id": graph_id},
         )
         return self._add_node(node)
@@ -722,19 +920,30 @@ class GraphBuilder:
     method is retained for backward compatibility and returns an
     ``AgentVersion``.
 
+    Node semantics match the actual quartermaster-nodes implementations:
+
+    * **Instruction** — pure LLM text generation, NO tools, streams response.
+    * **Decision** — LLM picks ONE path via internal ``pick_path`` tool (non-streaming).
+    * **StaticDecision** — evaluates Python expression, picks true/false. NO LLM.
+    * **UserDecision** — user picks which path to follow.
+    * **Merge** — LLM combines parallel branch outputs into one message.
+    * **StaticMerge** — combines branches WITHOUT LLM (just joins thoughts).
+    * **Agent** — autonomous agentic loop WITH tools, iterates up to max_iterations.
+    * **SubAssistant** — calls another graph synchronously, blocks until complete.
+    * **If** / **Switch** — expression evaluation, NO LLM call.
+
     Example::
 
         graph = (
             GraphBuilder("My Agent")
             .start()
             .instruction("Analyze input", model="gpt-4o")
-            .decision("Is it positive?", options=["Yes", "No"])
+            .decision("Route?")
             .on("Yes").instruction("Positive response").end()
             .on("No").instruction("Negative response").end()
+            .merge("Combine")
             .end()
         )
-        # Access directly -- no .build() needed
-        print(len(graph.nodes))
     """
 
     def __init__(self, name: str, description: str = "") -> None:
@@ -832,12 +1041,11 @@ class GraphBuilder:
         return pos
 
     def _auto_merge_if_needed(self) -> None:
-        """If there are pending branch endpoints, auto-insert a merge node
-        and connect all endpoints to it, making it the current node."""
+        """If there are pending branch endpoints, auto-insert a static merge node."""
         if not self._branch_endpoints:
             return
         merge_node = GraphNode(
-            type=NodeType.MERGE,
+            type=NodeType.STATIC_MERGE,
             name="Merge",
             traverse_in=TraverseIn.AWAIT_ALL,
             position=self._advance_position(),
@@ -887,38 +1095,36 @@ class GraphBuilder:
         name: str,
         model: str = "gpt-4o",
         provider: str = "openai",
-        temperature: float = 0.7,
+        temperature: float = 0.5,
         system_instruction: str = "",
         **kwargs: Any,
     ) -> GraphBuilder:
-        """Add an instruction (LLM call) node."""
-        meta = {
-            "system_instruction": system_instruction,
-            "model": model,
-            "provider": provider,
-            "temperature": temperature,
-            **kwargs,
-        }
+        """Add an Instruction node — pure LLM text generation, NO tools.
+
+        Streams the LLM response. Use ``agent()`` instead if you need tool use.
+        """
+        meta = _llm_meta(
+            model=model, provider=provider, temperature=temperature,
+            system_instruction=system_instruction, **kwargs,
+        )
         node = GraphNode(type=NodeType.INSTRUCTION, name=name, metadata=meta)
         return self._add_node(node)
 
     def reasoning(
         self,
         name: str,
-        model: str = "gpt-4o",
+        model: str = "o1-mini",
         provider: str = "openai",
-        temperature: float = 0.7,
-        system_instruction: str = "",
         **kwargs: Any,
     ) -> GraphBuilder:
-        """Add a reasoning/chain-of-thought node."""
-        meta = {
-            "system_instruction": system_instruction,
-            "model": model,
-            "provider": provider,
-            "temperature": temperature,
-            **kwargs,
-        }
+        """Add a Reasoning node — specialized for o-series reasoning models.
+
+        Does NOT use system instructions (reasoning models handle internally).
+        """
+        meta = _llm_meta(
+            model=model, provider=provider, temperature=0.0,
+            system_instruction="", **kwargs,
+        )
         node = GraphNode(type=NodeType.REASONING, name=name, metadata=meta)
         return self._add_node(node)
 
@@ -927,18 +1133,15 @@ class GraphBuilder:
         name: str,
         model: str = "gpt-4o",
         provider: str = "openai",
-        temperature: float = 0.7,
-        system_instruction: str = "",
+        temperature: float = 0.5,
+        system_instruction: str = "Summarize the given conversation concisely.",
         **kwargs: Any,
     ) -> GraphBuilder:
-        """Add a summarization node."""
-        meta = {
-            "system_instruction": system_instruction,
-            "model": model,
-            "provider": provider,
-            "temperature": temperature,
-            **kwargs,
-        }
+        """Add a Summarize node — LLM condenses conversation history."""
+        meta = _llm_meta(
+            model=model, provider=provider, temperature=temperature,
+            system_instruction=system_instruction, **kwargs,
+        )
         node = GraphNode(type=NodeType.SUMMARIZE, name=name, metadata=meta)
         return self._add_node(node)
 
@@ -952,24 +1155,21 @@ class GraphBuilder:
         max_iterations: int = 25,
         **kwargs: Any,
     ) -> GraphBuilder:
-        """Add an autonomous agent node (agentic loop with tool use).
+        """Add an Agent node — autonomous agentic loop WITH tools.
+
+        Iterates up to *max_iterations* times. Each iteration the LLM
+        may call tools; the loop continues until no tool calls are returned.
 
         Args:
-            name: Display name for this node.
-            model: LLM model identifier.
-            provider: LLM provider name.
-            system_instruction: System prompt (mapped to ``llm_system_instruction`` at runtime).
-            tools: List of program-version IDs the agent may call.
-            max_iterations: Maximum agentic-loop iterations before forced stop.
+            tools: List of tool/program-version IDs the agent may call.
+            max_iterations: Maximum loop iterations before forced stop.
         """
-        meta = {
-            "system_instruction": system_instruction,
-            "model": model,
-            "provider": provider,
-            "program_version_ids": tools or [],
-            "max_iterations": max_iterations,
-            **kwargs,
-        }
+        meta = _llm_meta(
+            model=model, provider=provider,
+            system_instruction=system_instruction, **kwargs,
+        )
+        meta["program_version_ids"] = tools or []
+        meta["max_iterations"] = max_iterations
         node = GraphNode(type=NodeType.AGENT, name=name, metadata=meta)
         return self._add_node(node)
 
@@ -982,12 +1182,10 @@ class GraphBuilder:
         **kwargs: Any,
     ) -> GraphBuilder:
         """Add an image vision/analysis node (INSTRUCTION_IMAGE_VISION)."""
-        meta = {
-            "system_instruction": system_instruction,
-            "model": model,
-            "provider": provider,
-            **kwargs,
-        }
+        meta = _llm_meta(
+            model=model, provider=provider,
+            system_instruction=system_instruction, vision=True, **kwargs,
+        )
         node = GraphNode(type=NodeType.INSTRUCTION_IMAGE_VISION, name=name, metadata=meta)
         return self._add_node(node)
 
@@ -995,14 +1193,35 @@ class GraphBuilder:
     # Control flow
     # ------------------------------------------------------------------
 
-    def decision(self, name: str, options: list[str] | None = None) -> GraphBuilder:
-        """Add a decision node. Use ``.on(label)`` to build each branch."""
+    def decision(
+        self,
+        name: str,
+        model: str = "gpt-4o",
+        provider: str = "openai",
+        temperature: float = 0.5,
+        prefix_message: str = "",
+        suffix_message: str = "",
+        options: list[str] | None = None,
+        **kwargs: Any,
+    ) -> GraphBuilder:
+        """Add a Decision node — LLM picks ONE path via ``pick_path`` tool.
+
+        The LLM sees the available edge labels and calls an internal tool
+        to select which branch to follow. Does NOT stream.
+
+        Use ``.on(label)`` to define each branch.
+        """
         self._auto_merge_if_needed()
+        meta = _llm_meta(
+            model=model, provider=provider, temperature=temperature,
+            stream=False, **kwargs,
+        )
+        meta["prefix_message"] = prefix_message
+        meta["suffix_message"] = suffix_message
         node = GraphNode(
-            type=NodeType.DECISION,
-            name=name,
+            type=NodeType.DECISION, name=name,
             traverse_out=TraverseOut.SPAWN_PICKED,
-            metadata={"decision_prompt": name},
+            metadata=meta,
         )
         node.position = self._advance_position()
         self._nodes.append(node)
@@ -1016,14 +1235,50 @@ class GraphBuilder:
                 self._pending_branches[opt] = node.id
         return self
 
-    def switch(self, name: str, cases: list[str] | None = None) -> GraphBuilder:
-        """Add a switch/multi-way decision node. Use ``.on()`` for each case."""
+    def static_decision(self, name: str, expression: str = "") -> GraphBuilder:
+        """Add a StaticDecision node — expression-based branching, NO LLM.
+
+        Evaluates a Python expression and picks the true/false branch.
+        Use ``.on("true")`` / ``.on("false")`` for branches.
+
+        Args:
+            expression: Python expression that evaluates to truthy/falsy.
+        """
         self._auto_merge_if_needed()
         node = GraphNode(
-            type=NodeType.SWITCH,
-            name=name,
+            type=NodeType.STATIC_DECISION, name=name,
             traverse_out=TraverseOut.SPAWN_PICKED,
-            metadata={"cases": cases or []},
+            metadata={"expression": expression},
+        )
+        node.position = self._advance_position()
+        self._nodes.append(node)
+        if self._last_node_id is not None:
+            edge = GraphEdge(source_id=self._last_node_id, target_id=node.id)
+            self._edges.append(edge)
+        self._decision_node_id = node.id
+        self._last_node_id = None
+        return self
+
+    def switch(
+        self, name: str,
+        cases: list[dict[str, str]] | None = None,
+        default_edge_id: str = "",
+    ) -> GraphBuilder:
+        """Add a Switch node — evaluates multiple cases, first match wins. NO LLM.
+
+        Args:
+            cases: List of ``{"expression": "...", "edge_id": "..."}`` dicts.
+            default_edge_id: Fallback edge ID if no case matches.
+        """
+        self._auto_merge_if_needed()
+        meta: dict[str, Any] = {
+            "cases": cases or [],
+            "default_edge_id": default_edge_id,
+        }
+        node = GraphNode(
+            type=NodeType.SWITCH, name=name,
+            traverse_out=TraverseOut.SPAWN_PICKED,
+            metadata=meta,
         )
         node.position = self._advance_position()
         self._nodes.append(node)
@@ -1034,13 +1289,14 @@ class GraphBuilder:
         self._last_node_id = None
         if cases:
             for c in cases:
-                self._pending_branches[c] = node.id
+                label = c.get("expression", "")
+                self._pending_branches[label] = node.id
         return self
 
     def on(self, label: str) -> _BranchBuilder:
-        """Start building a branch for a decision option."""
+        """Start building a branch for a decision/if/switch option."""
         if self._decision_node_id is None:
-            raise ValueError("on() must be called after decision()")
+            raise ValueError("on() must be called after decision(), if_node(), static_decision(), or user_decision()")
         decision_id = self._decision_node_id
         branch = _BranchBuilder(self, self, label)
         # The first node added to this branch will be connected from the decision node
@@ -1070,14 +1326,19 @@ class GraphBuilder:
         branch._add_node = labeled_add  # type: ignore[method-assign]
         return branch
 
-    def if_node(self, name: str, expression: str = "", variable: str = "") -> GraphBuilder:
-        """Add an If conditional node. Use ``.on("true")`` / ``.on("false")`` for branches."""
+    def if_node(self, name: str, expression: str = "") -> GraphBuilder:
+        """Add an If node — evaluates Python expression, picks true/false branch.
+
+        NO LLM call. Use ``.on("true")`` / ``.on("false")`` for branches.
+
+        Args:
+            expression: Python expression that evaluates to truthy/falsy.
+        """
         self._auto_merge_if_needed()
         node = GraphNode(
-            type=NodeType.IF,
-            name=name,
+            type=NodeType.IF, name=name,
             traverse_out=TraverseOut.SPAWN_PICKED,
-            metadata={"expression": expression, "variable": variable},
+            metadata={"if_expression": expression},
         )
         node.position = self._advance_position()
         self._nodes.append(node)
@@ -1088,52 +1349,63 @@ class GraphBuilder:
         self._last_node_id = None
         return self
 
-    def break_node(self, name: str = "Break") -> GraphBuilder:
-        """Add a break node (exits a loop)."""
-        node = GraphNode(type=NodeType.BREAK, name=name)
+    def break_node(self, name: str = "Break", targets: list[str] | None = None) -> GraphBuilder:
+        """Add a Break node — stops backward message collection.
+
+        Args:
+            targets: What to clear: ``[]`` (full break), ``['tools']``, ``['thinking']``.
+        """
+        node = GraphNode(
+            type=NodeType.BREAK, name=name,
+            metadata={"break_targets": targets or []},
+        )
         return self._add_node(node)
 
     # ------------------------------------------------------------------
     # Data nodes
     # ------------------------------------------------------------------
 
-    def static(self, name: str, content: str = "") -> GraphBuilder:
-        """Add a static content node."""
-        node = GraphNode(type=NodeType.STATIC, name=name, metadata={"content": content})
-        return self._add_node(node)
-
-    def code(self, name: str, code: str = "", language: str = "python") -> GraphBuilder:
-        """Add a code execution node."""
+    def static(self, name: str, text: str = "") -> GraphBuilder:
+        """Add a Static node — outputs fixed text content, NO LLM."""
         node = GraphNode(
-            type=NodeType.CODE,
-            name=name,
-            metadata={"language": language, "code": code},
+            type=NodeType.STATIC, name=name,
+            metadata={"static_text": text},
         )
         return self._add_node(node)
 
-    def var(self, name: str, variable: str = "", value: str = "") -> GraphBuilder:
-        """Add a variable assignment node."""
+    def code(self, name: str, code: str = "", filename: str = "") -> GraphBuilder:
+        """Add a Code node — code execution (handled by runtime environment)."""
         node = GraphNode(
-            type=NodeType.VAR,
-            name=name,
-            metadata={"variable": variable, "value": value},
+            type=NodeType.CODE, name=name,
+            metadata={"code": code, "filename": filename},
+        )
+        return self._add_node(node)
+
+    def var(self, name: str, variable: str = "", expression: str = "") -> GraphBuilder:
+        """Add a Var node — evaluates Python expression, stores result in metadata.
+
+        Args:
+            variable: Name of the variable to create.
+            expression: Python expression to evaluate.
+        """
+        node = GraphNode(
+            type=NodeType.VAR, name=name,
+            metadata={"name": variable, "expression": expression},
         )
         return self._add_node(node)
 
     def text(self, name: str, template: str = "") -> GraphBuilder:
-        """Add a text template node."""
+        """Add a Text node — renders Jinja2 template using thought metadata."""
         node = GraphNode(
-            type=NodeType.TEXT,
-            name=name,
-            metadata={"template": template},
+            type=NodeType.TEXT, name=name,
+            metadata={"text": template},
         )
         return self._add_node(node)
 
     def text_to_variable(self, name: str, variable: str = "", source: str = "") -> GraphBuilder:
         """Convert text output to a variable."""
         node = GraphNode(
-            type=NodeType.TEXT_TO_VARIABLE,
-            name=name,
+            type=NodeType.TEXT_TO_VARIABLE, name=name,
             metadata={"variable": variable, "source": source},
         )
         return self._add_node(node)
@@ -1141,8 +1413,7 @@ class GraphBuilder:
     def program_runner(self, name: str, program: str = "", **kwargs: Any) -> GraphBuilder:
         """Run a program/tool inline."""
         node = GraphNode(
-            type=NodeType.PROGRAM_RUNNER,
-            name=name,
+            type=NodeType.PROGRAM_RUNNER, name=name,
             metadata={"program": program, **kwargs},
         )
         return self._add_node(node)
@@ -1151,62 +1422,137 @@ class GraphBuilder:
     # Memory nodes
     # ------------------------------------------------------------------
 
-    def read_memory(self, name: str, key: str = "") -> GraphBuilder:
-        """Read from persistent memory."""
+    def read_memory(
+        self, name: str,
+        memory_name: str = "",
+        memory_type: str = "flow",
+        variable_names: list[str] | None = None,
+    ) -> GraphBuilder:
+        """Read variables from persistent memory into thought metadata."""
         node = GraphNode(
-            type=NodeType.READ_MEMORY,
-            name=name,
-            metadata={"key": key},
+            type=NodeType.READ_MEMORY, name=name,
+            metadata={
+                "memory_name": memory_name,
+                "memory_type": memory_type,
+                "variable_names": variable_names or [],
+            },
         )
         return self._add_node(node)
 
-    def write_memory(self, name: str, key: str = "", value: str = "") -> GraphBuilder:
-        """Write to persistent memory."""
+    def write_memory(
+        self, name: str,
+        memory_name: str = "",
+        memory_type: str = "flow",
+        variables: list[dict[str, str]] | None = None,
+    ) -> GraphBuilder:
+        """Write variables from thought metadata to persistent memory."""
         node = GraphNode(
-            type=NodeType.WRITE_MEMORY,
-            name=name,
-            metadata={"key": key, "value": value},
+            type=NodeType.WRITE_MEMORY, name=name,
+            metadata={
+                "memory_name": memory_name,
+                "memory_type": memory_type,
+                "variables": variables or [],
+            },
         )
         return self._add_node(node)
 
-    def update_memory(self, name: str, key: str = "") -> GraphBuilder:
-        """Update existing memory."""
+    def update_memory(
+        self, name: str,
+        memory_name: str = "",
+        memory_type: str = "flow",
+        variables: list[dict[str, str]] | None = None,
+    ) -> GraphBuilder:
+        """Update existing persistent memory variables."""
         node = GraphNode(
-            type=NodeType.UPDATE_MEMORY,
-            name=name,
-            metadata={"key": key},
+            type=NodeType.UPDATE_MEMORY, name=name,
+            metadata={
+                "memory_name": memory_name,
+                "memory_type": memory_type,
+                "variables": variables or [],
+            },
         )
         return self._add_node(node)
 
-    def flow_memory(self, name: str = "Flow Memory") -> GraphBuilder:
-        """Access flow-level memory."""
-        node = GraphNode(type=NodeType.FLOW_MEMORY, name=name)
+    def flow_memory(
+        self, name: str = "Flow Memory",
+        memory_name: str = "",
+        initial_data: list[dict[str, str]] | None = None,
+    ) -> GraphBuilder:
+        """Define flow-scoped persistent memory."""
+        node = GraphNode(
+            type=NodeType.FLOW_MEMORY, name=name,
+            metadata={
+                "memory_name": memory_name,
+                "initial_data": initial_data or [],
+            },
+        )
+        return self._add_node(node)
+
+    def user_memory(
+        self, name: str = "User Memory",
+        memory_name: str = "",
+        initial_data: list[dict[str, str]] | None = None,
+    ) -> GraphBuilder:
+        """Define user-scoped persistent memory (survives across flow executions)."""
+        node = GraphNode(
+            type=NodeType.USER_MEMORY, name=name,
+            metadata={
+                "memory_name": memory_name,
+                "initial_data": initial_data or [],
+            },
+        )
         return self._add_node(node)
 
     # ------------------------------------------------------------------
     # User interaction nodes
     # ------------------------------------------------------------------
 
-    def user(self, name: str = "User Input") -> GraphBuilder:
-        """Add a user input node."""
-        node = GraphNode(type=NodeType.USER, name=name)
+    def user(self, name: str = "User Input", prompts: list[str] | None = None) -> GraphBuilder:
+        """Add a User input node — pauses flow and awaits user response.
+
+        Args:
+            prompts: Optional text snippets to show the user.
+        """
+        meta: dict[str, Any] = {}
+        if prompts:
+            meta["text_snippets"] = prompts
+        node = GraphNode(type=NodeType.USER, name=name, metadata=meta)
         return self._add_node(node)
 
-    def user_decision(self, name: str, options: list[str] | None = None) -> GraphBuilder:
-        """Prompt user to make a decision (shows buttons/options)."""
+    def user_decision(self, name: str) -> GraphBuilder:
+        """Add a UserDecision node — presents choices to user, user picks path.
+
+        Waits for ALL incoming branches (traverse_in=AwaitAll), then
+        pauses flow until the user selects a path.
+
+        Use ``.on(label)`` for each option.
+        """
+        self._auto_merge_if_needed()
         node = GraphNode(
-            type=NodeType.USER_DECISION,
-            name=name,
-            metadata={"options": options or []},
+            type=NodeType.USER_DECISION, name=name,
+            traverse_in=TraverseIn.AWAIT_ALL,
+            traverse_out=TraverseOut.SPAWN_PICKED,
         )
-        return self._add_node(node)
+        node.position = self._advance_position()
+        self._nodes.append(node)
+        if self._last_node_id is not None:
+            edge = GraphEdge(source_id=self._last_node_id, target_id=node.id)
+            self._edges.append(edge)
+        self._decision_node_id = node.id
+        self._last_node_id = None
+        return self
 
-    def user_form(self, name: str, fields: list[dict] | None = None) -> GraphBuilder:
-        """Show a form to the user for structured input."""
+    def user_form(
+        self, name: str, parameters: list[dict] | None = None,
+    ) -> GraphBuilder:
+        """Show a structured form to the user — pauses flow until submitted.
+
+        Args:
+            parameters: List of form field definitions.
+        """
         node = GraphNode(
-            type=NodeType.USER_FORM,
-            name=name,
-            metadata={"fields": fields or []},
+            type=NodeType.USER_FORM, name=name,
+            metadata={"parameters": parameters or []},
         )
         return self._add_node(node)
 
@@ -1215,19 +1561,17 @@ class GraphBuilder:
     # ------------------------------------------------------------------
 
     def comment(self, name: str, text: str = "") -> GraphBuilder:
-        """Add a comment node (no-op, for documentation)."""
+        """Add a Comment node — documentation only, no runtime logic."""
         node = GraphNode(
-            type=NodeType.COMMENT,
-            name=name,
-            metadata={"text": text},
+            type=NodeType.COMMENT, name=name,
+            metadata={"comment": text},
         )
         return self._add_node(node)
 
     def webhook(self, name: str, url: str = "", method: str = "POST") -> GraphBuilder:
         """Add a webhook call node."""
         node = GraphNode(
-            type=NodeType.WEBHOOK,
-            name=name,
+            type=NodeType.WEBHOOK, name=name,
             metadata={"url": url, "method": method},
         )
         return self._add_node(node)
@@ -1235,8 +1579,7 @@ class GraphBuilder:
     def api_call(self, name: str, url: str = "", method: str = "GET", **kwargs: Any) -> GraphBuilder:
         """Add an API call node."""
         node = GraphNode(
-            type=NodeType.API_CALL,
-            name=name,
+            type=NodeType.API_CALL, name=name,
             metadata={"url": url, "method": method, **kwargs},
         )
         return self._add_node(node)
@@ -1244,8 +1587,7 @@ class GraphBuilder:
     def log(self, name: str, message: str = "", level: str = "info") -> GraphBuilder:
         """Add a logging node."""
         node = GraphNode(
-            type=NodeType.LOG,
-            name=name,
+            type=NodeType.LOG, name=name,
             metadata={"message": message, "level": level},
         )
         return self._add_node(node)
@@ -1253,8 +1595,7 @@ class GraphBuilder:
     def error_handler(self, name: str, strategy: str = "retry") -> GraphBuilder:
         """Add an error handler node."""
         node = GraphNode(
-            type=NodeType.ERROR_HANDLER,
-            name=name,
+            type=NodeType.ERROR_HANDLER, name=name,
             metadata={"strategy": strategy},
         )
         return self._add_node(node)
@@ -1262,8 +1603,7 @@ class GraphBuilder:
     def router(self, name: str, routes: list[str] | None = None) -> GraphBuilder:
         """Add a router node (dynamic dispatch)."""
         node = GraphNode(
-            type=NodeType.ROUTER,
-            name=name,
+            type=NodeType.ROUTER, name=name,
             metadata={"routes": routes or []},
         )
         return self._add_node(node)
@@ -1271,8 +1611,7 @@ class GraphBuilder:
     def validator(self, name: str, schema: dict | None = None) -> GraphBuilder:
         """Add a data validation node."""
         node = GraphNode(
-            type=NodeType.VALIDATOR,
-            name=name,
+            type=NodeType.VALIDATOR, name=name,
             metadata={"schema": schema or {}},
         )
         return self._add_node(node)
@@ -1280,8 +1619,7 @@ class GraphBuilder:
     def transformer(self, name: str, transform: str = "") -> GraphBuilder:
         """Add a data transformation node."""
         node = GraphNode(
-            type=NodeType.TRANSFORMER,
-            name=name,
+            type=NodeType.TRANSFORMER, name=name,
             metadata={"transform": transform},
         )
         return self._add_node(node)
@@ -1289,8 +1627,7 @@ class GraphBuilder:
     def filter_node(self, name: str, condition: str = "") -> GraphBuilder:
         """Add a data filter node."""
         node = GraphNode(
-            type=NodeType.FILTER,
-            name=name,
+            type=NodeType.FILTER, name=name,
             metadata={"condition": condition},
         )
         return self._add_node(node)
@@ -1298,8 +1635,7 @@ class GraphBuilder:
     def notification(self, name: str, channel: str = "", message: str = "") -> GraphBuilder:
         """Add a notification node."""
         node = GraphNode(
-            type=NodeType.NOTIFICATION,
-            name=name,
+            type=NodeType.NOTIFICATION, name=name,
             metadata={"channel": channel, "message": message},
         )
         return self._add_node(node)
@@ -1307,8 +1643,7 @@ class GraphBuilder:
     def timer(self, name: str, delay: float = 0, schedule: str = "") -> GraphBuilder:
         """Add a timer/delay node."""
         node = GraphNode(
-            type=NodeType.TIMER,
-            name=name,
+            type=NodeType.TIMER, name=name,
             metadata={"delay": delay, "schedule": schedule},
         )
         return self._add_node(node)
@@ -1320,8 +1655,7 @@ class GraphBuilder:
     def tool(self, name: str, tool_name: str = "", **tool_args: str) -> GraphBuilder:
         """Add a tool invocation node."""
         node = GraphNode(
-            type=NodeType.TOOL,
-            name=name,
+            type=NodeType.TOOL, name=name,
             metadata={"tool_name": tool_name, "tool_args": tool_args},
         )
         return self._add_node(node)
@@ -1334,12 +1668,10 @@ class GraphBuilder:
         their result to the current flow.
 
         Args:
-            name: Display name for this node.
             graph_id: ID of the agent graph to execute as a sub-flow.
         """
         node = GraphNode(
-            type=NodeType.SUB_ASSISTANT,
-            name=name,
+            type=NodeType.SUB_ASSISTANT, name=name,
             metadata={"sub_assistant_id": graph_id},
         )
         return self._add_node(node)
@@ -1347,54 +1679,23 @@ class GraphBuilder:
     def parallel(self, name: str = "Parallel") -> GraphBuilder:
         """Start a parallel fan-out from the current node.
 
-        Unlike ``.decision()`` (which picks ONE branch), ``.parallel()``
-        executes ALL branches concurrently.  Use ``.branch()`` to define
-        each parallel path and ``.merge()`` to await them all.
-
-        Example::
-
-            graph = (
-                Graph("Parallel")
-                .start()
-                .user("Input")
-                .parallel()
-                .branch()                          # path 1 (direct)
-                .end()
-                .branch()                          # path 2
-                    .instruction("Research")
-                .end()
-                .branch()                          # path 3
-                    .instruction("Analyze")
-                .end()
-                .merge("Await all")
-                .end()
-            )
-
-        The resulting graph fans out from the User node into 3 parallel
-        paths and the Merge node waits for all 3 to finish.
+        Unlike ``.decision()`` (which picks ONE branch via LLM),
+        ``.parallel()`` executes ALL branches concurrently.  Use
+        ``.branch()`` to define each parallel path and ``.merge()``
+        (LLM-based) or ``.static_merge()`` (no LLM) to rejoin.
         """
         self._auto_merge_if_needed()
-        # Mark the current node as the parallel fan-out point.
-        # Unlike decision (which creates a new DECISION node), parallel
-        # reuses the LAST node as the fork — the runtime dispatches all
-        # outgoing edges when traverse_out == SPAWN_ALL.
         if self._last_node_id is not None:
-            # Set traverse_out on the fork node so the runtime spawns all
             for n in self._nodes:
                 if n.id == self._last_node_id:
                     n.traverse_out = TraverseOut.SPAWN_ALL
                     break
         self._decision_node_id = self._last_node_id
-        self._last_node_id = None   # branches take over
+        self._last_node_id = None
         return self
 
     def branch(self) -> _BranchBuilder:
-        """Start a parallel branch from the current fan-out point.
-
-        Use after ``.parallel()``.  Each ``.branch()`` creates an
-        independent execution path.  Call ``.end()`` to close the branch
-        and ``.merge()`` on the parent to rejoin all branches.
-        """
+        """Start a parallel branch from the current fan-out point."""
         if self._decision_node_id is None:
             raise ValueError("branch() must be called after parallel()")
         b = _BranchBuilder(self, self, "")
@@ -1406,30 +1707,67 @@ class GraphBuilder:
     ) -> GraphBuilder:
         """Add a loop node."""
         node = GraphNode(
-            type=NodeType.LOOP,
-            name=name,
+            type=NodeType.LOOP, name=name,
             metadata={"max_iterations": max_iterations, "break_condition": break_condition},
         )
         return self._add_node(node)
 
-    def merge(self, name: str = "Merge") -> GraphBuilder:
-        """Add a merge node that collects all pending branch endpoints.
+    def merge(
+        self, name: str = "Merge",
+        model: str = "gpt-4o",
+        provider: str = "openai",
+        temperature: float = 0.5,
+        system_instruction: str = "",
+        prefix_message: str = "Compress following conversations into one",
+        suffix_message: str = "",
+        **kwargs: Any,
+    ) -> GraphBuilder:
+        """Add a Merge node — LLM combines all parallel branch outputs.
 
-        All branch endpoints are connected to this merge node, which becomes
-        the new current node for further chaining.
+        Waits for ALL branches (traverse_in=AwaitAll), then sends the
+        combined content to the LLM for compression into one message.
+
+        Use ``static_merge()`` instead if you don't need LLM processing.
         """
+        meta = _llm_meta(
+            model=model, provider=provider, temperature=temperature,
+            system_instruction=system_instruction, **kwargs,
+        )
+        meta["prefix_message"] = prefix_message
+        meta["suffix_message"] = suffix_message
         merge_node = GraphNode(
-            type=NodeType.MERGE,
-            name=name,
+            type=NodeType.MERGE, name=name,
             traverse_in=TraverseIn.AWAIT_ALL,
             position=self._advance_position(),
+            metadata=meta,
         )
         self._nodes.append(merge_node)
-        # Connect all pending branch endpoints
         for ep in self._branch_endpoints:
             self._edges.append(GraphEdge(source_id=ep, target_id=merge_node.id))
         self._branch_endpoints.clear()
-        # Also connect from current node if set (backward compat with merge_to pattern)
+        if self._last_node_id is not None:
+            self._edges.append(
+                GraphEdge(source_id=self._last_node_id, target_id=merge_node.id)
+            )
+        self._last_node_id = merge_node.id
+        return self
+
+    def static_merge(self, name: str = "Merge", text: str = "") -> GraphBuilder:
+        """Add a StaticMerge node — combines branches WITHOUT LLM.
+
+        Waits for ALL branches (traverse_in=AwaitAll), appends static text,
+        then continues. No LLM call involved.
+        """
+        merge_node = GraphNode(
+            type=NodeType.STATIC_MERGE, name=name,
+            traverse_in=TraverseIn.AWAIT_ALL,
+            position=self._advance_position(),
+            metadata={"static_text": text},
+        )
+        self._nodes.append(merge_node)
+        for ep in self._branch_endpoints:
+            self._edges.append(GraphEdge(source_id=ep, target_id=merge_node.id))
+        self._branch_endpoints.clear()
         if self._last_node_id is not None:
             self._edges.append(
                 GraphEdge(source_id=self._last_node_id, target_id=merge_node.id)
@@ -1438,13 +1776,7 @@ class GraphBuilder:
         return self
 
     def use(self, sub_graph: AgentVersion | GraphBuilder) -> GraphBuilder:
-        """Inline a sub-graph into the current graph.
-
-        Copies all nodes except START/END from the sub-graph, remaps their
-        IDs, and connects them into the main chain.
-
-        Accepts either an ``AgentVersion`` or a ``GraphBuilder`` instance.
-        """
+        """Inline a sub-graph into the current graph."""
         self._auto_merge_if_needed()
         new_last = _inline_subgraph(
             sub_graph,
@@ -1488,45 +1820,41 @@ class GraphBuilder:
     # Build / export
     # ------------------------------------------------------------------
 
-    def to_version(self, validate: bool = True, version: str = "0.1.0") -> AgentVersion:
-        """Export the graph as an ``AgentVersion``.
-
-        This is the explicit way to get an ``AgentVersion`` object. The older
-        ``.build()`` method delegates here for backward compatibility.
-        """
+    def to_version(
+        self,
+        validate: bool = True,
+        version: str = "0.1.0",
+        agent_id: UUID | None = None,
+    ) -> AgentVersion:
+        """Export the graph as an ``AgentVersion``."""
         if self._start_node_id is None:
-            raise ValueError("Graph must have a Start node -- call .start() first")
-
-        # Finalize any pending branches
+            raise ValueError("Graph has no start node — call .start() first")
         self._finalize()
-
-        agent = Agent(name=self._name, description=self._description)
-        agent_version = AgentVersion(
-            agent_id=agent.id,
+        ver = AgentVersion(
+            id=uuid4(),
+            agent_id=agent_id or uuid4(),
             version=version,
-            start_node_id=self._start_node_id,
             nodes=list(self._nodes),
             edges=list(self._edges),
+            start_node_id=self._start_node_id,
             created_at=datetime.now(timezone.utc),
         )
-
         if validate:
-            errors = validate_graph(agent_version)
-            real_errors = [e for e in errors if e.severity == "error"]
-            if real_errors:
-                msg = "; ".join(e.message for e in real_errors)
-                raise ValueError(f"Graph validation failed: {msg}")
+            validate_graph(ver)
+        return ver
 
-        return agent_version
+    def build(self, validate: bool = True) -> AgentVersion:
+        """Build and return the ``AgentVersion``.  Alias for ``to_version()``."""
+        return self.to_version(validate=validate)
 
-    def build(self, validate: bool = True, version: str = "0.1.0") -> AgentVersion:
-        """Build the AgentVersion, optionally validating the graph.
-
-        .. deprecated::
-            Prefer accessing ``.nodes`` / ``.edges`` directly on the
-            ``GraphBuilder``, or use ``.to_version()`` when you explicitly
-            need an ``AgentVersion``.
-
-        Raises ValueError if validation fails and validate=True.
-        """
-        return self.to_version(validate=validate, version=version)
+    def to_agent(self, validate: bool = True, version: str = "0.1.0") -> Agent:
+        """Export as a full ``Agent`` (with a single version)."""
+        ver = self.to_version(validate=validate, version=version)
+        return Agent(
+            id=uuid4(),
+            name=self._name,
+            description=self._description,
+            versions=[ver],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
