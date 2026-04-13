@@ -7,7 +7,7 @@ with the fluent builder.
 from __future__ import annotations
 
 try:
-    from quartermaster_graph import GraphBuilder as Graph
+    from quartermaster_graph import Graph
 except ImportError:
     raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
 
@@ -18,7 +18,6 @@ agent = (
     .user("Ask me anything")
     .instruction("Respond", model="gpt-4o", system_instruction="You are a helpful assistant.")
     .end()
-    .build(version="1.0.0")
 )
 
 print(f"Nodes: {len(agent.nodes)}")

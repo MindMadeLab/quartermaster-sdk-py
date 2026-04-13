@@ -8,8 +8,7 @@ building a production-style multi-department support agent.
 from __future__ import annotations
 
 try:
-    from quartermaster_graph import GraphBuilder as Graph
-    from quartermaster_graph.enums import NodeType
+    from quartermaster_graph import Graph
 except ImportError:
     raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
 
@@ -21,14 +20,13 @@ hr_flow = (
     .instruction("HR analysis", system_instruction="Analyze HR-related query")
     .if_node("Needs approval?", expression="requires_manager_approval")
     .on("true")
-        .node(NodeType.NOTIFICATION, "Alert manager", metadata={"channel": "email"})
+        .notification("Alert manager", channel="email")
         .user("Awaiting manager response")
     .end()
     .on("false")
         .instruction("Direct response", system_instruction="Provide HR information")
     .end()
     .end()
-    .build(version="1.0.0")
 )
 
 it_flow = (
@@ -37,7 +35,6 @@ it_flow = (
     .instruction("IT diagnosis", system_instruction="Diagnose the IT issue")
     .instruction("Suggest fix", system_instruction="Provide troubleshooting steps")
     .end()
-    .build(version="1.0.0")
 )
 
 # --- Main enterprise agent --------------------------------------------------
@@ -53,7 +50,7 @@ agent = (
     .on("it").use(it_flow).end()
     .on("finance")
         .instruction("Finance query", system_instruction="Handle finance questions")
-        .node(NodeType.WRITE_MEMORY, "Log query", metadata={"key": "last_finance_query"})
+        .write_memory("Log query", key="last_finance_query")
     .end()
     .on("general")
         .instruction("General help", system_instruction="Provide general assistance")
@@ -72,9 +69,8 @@ agent = (
     .end()
     .merge("Final output")
 
-    .node(NodeType.LOG, "Audit", metadata={"message": "Request completed", "level": "info"})
+    .log("Audit", message="Request completed", level="info")
     .end()
-    .build(version="1.0.0")
 )
 
 # --- Print graph stats -------------------------------------------------------

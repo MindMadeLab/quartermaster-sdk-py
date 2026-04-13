@@ -8,7 +8,7 @@ stripped and the internal nodes are wired into the parent chain.
 from __future__ import annotations
 
 try:
-    from quartermaster_graph import GraphBuilder as Graph
+    from quartermaster_graph import Graph
 except ImportError:
     raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
 
@@ -20,7 +20,6 @@ research_flow = (
     .instruction("Search web", system_instruction="Find relevant information")
     .instruction("Summarize findings", system_instruction="Create a concise summary")
     .end()
-    .build(version="1.0.0")
 )
 
 code_review_flow = (
@@ -29,7 +28,6 @@ code_review_flow = (
     .instruction("Analyze code", system_instruction="Review code for bugs and style")
     .instruction("Generate suggestions", system_instruction="Suggest improvements")
     .end()
-    .build(version="1.0.0")
 )
 
 # --- Compose into a main agent ---------------------------------------------
@@ -47,7 +45,6 @@ agent = (
     .merge("Collect results")
     .instruction("Deliver answer", system_instruction="Present the final result clearly")
     .end()
-    .build(version="1.0.0")
 )
 
 print(f"Dev Assistant: {len(agent.nodes)} nodes, {len(agent.edges)} edges")

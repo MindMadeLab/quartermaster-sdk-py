@@ -8,8 +8,7 @@ decision for user feedback -- all in a single graph.
 from __future__ import annotations
 
 try:
-    from quartermaster_graph import GraphBuilder as Graph
-    from quartermaster_graph.enums import NodeType
+    from quartermaster_graph import Graph
 except ImportError:
     raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
 
@@ -35,7 +34,7 @@ agent = (
     .if_node("Is urgent?", expression="severity == 'high'")
     .on("true")
         .instruction("Escalate", system_instruction="Create urgent ticket")
-        .node(NodeType.NOTIFICATION, "Alert team", metadata={"channel": "slack", "message": "Urgent issue!"})
+        .notification("Alert team", channel="slack", message="Urgent issue!")
     .end()
     .on("false")
         .instruction("Standard response", system_instruction="Provide standard help")
@@ -51,7 +50,6 @@ agent = (
         .instruction("Escalate to human", system_instruction="Transfer to human agent")
     .end()
     .end()
-    .build(version="1.0.0")
 )
 
 print(f"Built multi-decision agent with {len(agent.nodes)} nodes and {len(agent.edges)} edges")

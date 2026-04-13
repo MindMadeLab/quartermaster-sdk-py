@@ -7,7 +7,7 @@ labelled options, then merge back into a single flow.
 from __future__ import annotations
 
 try:
-    from quartermaster_graph import GraphBuilder as Graph
+    from quartermaster_graph import Graph
 except ImportError:
     raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
 
@@ -26,7 +26,6 @@ agent = (
     .merge("Combine results")
     .instruction("Final summary", system_instruction="Summarize the analysis")
     .end()
-    .build(version="1.0.0")
 )
 
 print(f"Nodes: {len(agent.nodes)}   Edges: {len(agent.edges)}")

@@ -8,7 +8,7 @@ model a switch/case pattern.
 from __future__ import annotations
 
 try:
-    from quartermaster_graph import GraphBuilder as Graph
+    from quartermaster_graph import Graph
 except ImportError:
     raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
 
@@ -26,7 +26,6 @@ agent = (
     .on("other").instruction("Fallback", system_instruction="Respond in English, note language").end()
     .merge("Collect response")
     .end()
-    .build(version="1.0.0")
 )
 
 print(f"Language agent: {len(agent.nodes)} nodes, {len(agent.edges)} edges")

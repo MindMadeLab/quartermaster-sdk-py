@@ -1,15 +1,14 @@
 """Variable management and memory nodes.
 
 Demonstrates storing values in variables, writing them to long-term
-memory, and reading them back in later nodes. Uses the generic
-.node() method for memory/variable node types.
+memory, and reading them back in later nodes using dedicated fluent
+methods.
 """
 
 from __future__ import annotations
 
 try:
-    from quartermaster_graph import GraphBuilder as Graph
-    from quartermaster_graph.enums import NodeType
+    from quartermaster_graph import Graph
 except ImportError:
     raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
 
@@ -17,14 +16,13 @@ agent = (
     Graph("Memory Agent")
     .start()
     .user("What's your name?")
-    .node(NodeType.VAR, "Store name", metadata={"variable": "user_name"})
+    .var("Store name", variable="user_name")
     .instruction("Greet user", system_instruction="Greet {{user_name}} warmly")
-    .node(NodeType.WRITE_MEMORY, "Remember user", metadata={"key": "user_name"})
+    .write_memory("Remember user", key="user_name")
     .user("Ask me something")
-    .node(NodeType.READ_MEMORY, "Recall user", metadata={"key": "user_name"})
+    .read_memory("Recall user", key="user_name")
     .instruction("Personalized response", system_instruction="Respond using the user's name")
     .end()
-    .build(version="1.0.0")
 )
 
 print(f"Memory Agent: {len(agent.nodes)} nodes, {len(agent.edges)} edges")
