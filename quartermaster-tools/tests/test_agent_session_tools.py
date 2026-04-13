@@ -12,17 +12,18 @@ from quartermaster_tools.builtin.agents.session import (
     SessionStatus,
 )
 from quartermaster_tools.builtin.agents.tools import (
-    AddFinishHookTool,
-    CancelSessionTool,
-    CollectResultsTool,
-    CreateSessionTool,
-    GetSessionStatusTool,
-    InjectMessageTool,
-    ListSessionsTool,
-    NotifyParentTool,
-    SpawnAgentTool,
-    StartSessionTool,
-    WaitSessionTool,
+    add_agent_finish_hook,
+    cancel_agent_session,
+    collect_agent_results,
+    create_agent_session,
+    get_agent_session_status,
+    inject_agent_message,
+    list_agent_sessions,
+    notify_parent,
+    set_manager,
+    spawn_agent,
+    start_agent_session,
+    wait_agent_session,
 )
 
 
@@ -48,36 +49,45 @@ def _slow_task(session: AgentSession):
     return "slow done"
 
 
+@pytest.fixture(autouse=True)
+def _fresh_manager():
+    """Install a fresh SessionManager for every test, then reset."""
+    mgr = SessionManager()
+    set_manager(mgr)
+    yield mgr
+    set_manager(None)
+
+
 # ---------------------------------------------------------------------------
 # SessionManager unit tests
 # ---------------------------------------------------------------------------
 
 class TestSessionManager:
-    def test_create_session(self):
-        mgr = SessionManager()
+    def test_create_session(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session(name="test")
         assert session.name == "test"
         assert session.status == SessionStatus.CREATED
         assert session.id in [s.id for s in mgr.list_sessions()]
 
-    def test_get_session_by_id(self):
-        mgr = SessionManager()
+    def test_get_session_by_id(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session(name="lookup")
         found = mgr.get_session(session.id)
         assert found is session
 
-    def test_get_session_not_found(self):
-        mgr = SessionManager()
+    def test_get_session_not_found(self, _fresh_manager):
+        mgr = _fresh_manager
         assert mgr.get_session("nonexistent") is None
 
-    def test_list_all_sessions(self):
-        mgr = SessionManager()
+    def test_list_all_sessions(self, _fresh_manager):
+        mgr = _fresh_manager
         mgr.create_session(name="a")
         mgr.create_session(name="b")
         assert len(mgr.list_sessions()) == 2
 
-    def test_list_sessions_filtered_by_status(self):
-        mgr = SessionManager()
+    def test_list_sessions_filtered_by_status(self, _fresh_manager):
+        mgr = _fresh_manager
         s1 = mgr.create_session(name="a")
         s2 = mgr.create_session(name="b")
         s2.status = SessionStatus.RUNNING
@@ -85,8 +95,8 @@ class TestSessionManager:
         assert len(created) == 1
         assert created[0].id == s1.id
 
-    def test_inject_message(self):
-        mgr = SessionManager()
+    def test_inject_message(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
         ok = mgr.inject_message(session.id, "user", "hello")
         assert ok is True
@@ -94,35 +104,35 @@ class TestSessionManager:
         assert session.messages[0].content == "hello"
         assert session.messages[0].role == "user"
 
-    def test_inject_message_invalid_session(self):
-        mgr = SessionManager()
+    def test_inject_message_invalid_session(self, _fresh_manager):
+        mgr = _fresh_manager
         assert mgr.inject_message("nope", "user", "hi") is False
 
-    def test_start_session_with_task(self):
-        mgr = SessionManager()
+    def test_start_session_with_task(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
         started = mgr.start_session(session.id, _quick_task)
         assert started is True
         assert session.status == SessionStatus.RUNNING
 
-    def test_session_completes_successfully(self):
-        mgr = SessionManager()
+    def test_session_completes_successfully(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
         mgr.start_session(session.id, _quick_task)
         mgr.wait_for_session(session.id, timeout=1.0)
         assert session.status == SessionStatus.COMPLETED
         assert session.result == "done"
 
-    def test_session_fails(self):
-        mgr = SessionManager()
+    def test_session_fails(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
         mgr.start_session(session.id, _failing_task)
         mgr.wait_for_session(session.id, timeout=1.0)
         assert session.status == SessionStatus.FAILED
         assert "task failed on purpose" in session.error
 
-    def test_finish_hook_fires_on_completion(self):
-        mgr = SessionManager()
+    def test_finish_hook_fires_on_completion(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
         hook_called = []
         mgr.add_finish_hook(session.id, lambda s: hook_called.append(s.status))
@@ -130,8 +140,8 @@ class TestSessionManager:
         mgr.wait_for_session(session.id, timeout=1.0)
         assert hook_called == [SessionStatus.COMPLETED]
 
-    def test_finish_hook_fires_on_failure(self):
-        mgr = SessionManager()
+    def test_finish_hook_fires_on_failure(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
         hook_called = []
         mgr.add_finish_hook(session.id, lambda s: hook_called.append(s.status))
@@ -139,27 +149,27 @@ class TestSessionManager:
         mgr.wait_for_session(session.id, timeout=1.0)
         assert hook_called == [SessionStatus.FAILED]
 
-    def test_cancel_session(self):
-        mgr = SessionManager()
+    def test_cancel_session(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
         ok = mgr.cancel_session(session.id)
         assert ok is True
         assert session.status == SessionStatus.CANCELLED
 
-    def test_cancel_nonexistent(self):
-        mgr = SessionManager()
+    def test_cancel_nonexistent(self, _fresh_manager):
+        mgr = _fresh_manager
         assert mgr.cancel_session("nope") is False
 
-    def test_wait_for_session(self):
-        mgr = SessionManager()
+    def test_wait_for_session(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
         mgr.start_session(session.id, _quick_task)
         result = mgr.wait_for_session(session.id, timeout=1.0)
         assert result is not None
         assert result.status == SessionStatus.COMPLETED
 
-    def test_wait_all_multiple(self):
-        mgr = SessionManager()
+    def test_wait_all_multiple(self, _fresh_manager):
+        mgr = _fresh_manager
         s1 = mgr.create_session(name="w1")
         s2 = mgr.create_session(name="w2")
         mgr.start_session(s1.id, _quick_task)
@@ -168,8 +178,8 @@ class TestSessionManager:
         assert len(results) == 2
         assert all(s.status == SessionStatus.COMPLETED for s in results)
 
-    def test_clear_completed(self):
-        mgr = SessionManager()
+    def test_clear_completed(self, _fresh_manager):
+        mgr = _fresh_manager
         s1 = mgr.create_session()
         s2 = mgr.create_session()
         mgr.start_session(s1.id, _quick_task)
@@ -185,10 +195,9 @@ class TestSessionManager:
 # ---------------------------------------------------------------------------
 
 class TestCreateSessionTool:
-    def test_creates_session(self):
-        mgr = SessionManager()
-        tool = CreateSessionTool(manager=mgr)
-        result = tool.run(name="my-session")
+    def test_creates_session(self, _fresh_manager):
+        mgr = _fresh_manager
+        result = create_agent_session.run(name="my-session")
         assert result.success is True
         assert result.data["name"] == "my-session"
         assert result.data["status"] == "created"
@@ -196,13 +205,11 @@ class TestCreateSessionTool:
 
 
 class TestStartSessionTool:
-    def test_starts_session(self):
-        mgr = SessionManager()
-        tool_create = CreateSessionTool(manager=mgr)
-        tool_start = StartSessionTool(manager=mgr)
-        r = tool_create.run(name="starter")
+    def test_starts_session(self, _fresh_manager):
+        mgr = _fresh_manager
+        r = create_agent_session.run(name="starter")
         sid = r.data["session_id"]
-        result = tool_start.run(session_id=sid, task="do something")
+        result = start_agent_session.run(session_id=sid, task="do something")
         assert result.success is True
         assert result.data["status"] == "running"
         # Wait for completion
@@ -211,121 +218,106 @@ class TestStartSessionTool:
         assert session.status == SessionStatus.COMPLETED
 
     def test_start_missing_session(self):
-        mgr = SessionManager()
-        tool = StartSessionTool(manager=mgr)
-        result = tool.run(session_id="nonexistent", task="x")
+        result = start_agent_session.run(session_id="nonexistent", task="x")
         assert result.success is False
 
 
 class TestInjectMessageTool:
-    def test_injects_message(self):
-        mgr = SessionManager()
+    def test_injects_message(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
-        tool = InjectMessageTool(manager=mgr)
-        result = tool.run(session_id=session.id, content="hello world")
+        result = inject_agent_message.run(session_id=session.id, content="hello world")
         assert result.success is True
         assert result.data["injected"] is True
         assert result.data["message_count"] == 1
 
     def test_invalid_session_returns_error(self):
-        mgr = SessionManager()
-        tool = InjectMessageTool(manager=mgr)
-        result = tool.run(session_id="bad-id", content="hello")
+        result = inject_agent_message.run(session_id="bad-id", content="hello")
         assert result.success is False
 
 
 class TestGetSessionStatusTool:
-    def test_returns_status(self):
-        mgr = SessionManager()
+    def test_returns_status(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session(name="status-check")
-        tool = GetSessionStatusTool(manager=mgr)
-        result = tool.run(session_id=session.id)
+        result = get_agent_session_status.run(session_id=session.id)
         assert result.success is True
         assert result.data["status"] == "created"
         assert result.data["name"] == "status-check"
 
     def test_nonexistent_session(self):
-        mgr = SessionManager()
-        tool = GetSessionStatusTool(manager=mgr)
-        result = tool.run(session_id="does-not-exist")
+        result = get_agent_session_status.run(session_id="does-not-exist")
         assert result.success is False
 
 
 class TestListSessionsTool:
-    def test_lists_all(self):
-        mgr = SessionManager()
+    def test_lists_all(self, _fresh_manager):
+        mgr = _fresh_manager
         mgr.create_session(name="a")
         mgr.create_session(name="b")
-        tool = ListSessionsTool(manager=mgr)
-        result = tool.run()
+        result = list_agent_sessions.run()
         assert result.success is True
         assert result.data["count"] == 2
 
-    def test_filters_by_status(self):
-        mgr = SessionManager()
+    def test_filters_by_status(self, _fresh_manager):
+        mgr = _fresh_manager
         s1 = mgr.create_session(name="a")
         s2 = mgr.create_session(name="b")
         s2.status = SessionStatus.RUNNING
-        tool = ListSessionsTool(manager=mgr)
-        result = tool.run(status="running")
+        result = list_agent_sessions.run(status="running")
         assert result.success is True
         assert result.data["count"] == 1
         assert result.data["sessions"][0]["name"] == "b"
 
 
 class TestWaitSessionTool:
-    def test_waits_and_returns_result(self):
-        mgr = SessionManager()
+    def test_waits_and_returns_result(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
         mgr.start_session(session.id, _quick_task)
-        tool = WaitSessionTool(manager=mgr)
-        result = tool.run(session_id=session.id, timeout=1.0)
+        result = wait_agent_session.run(session_id=session.id, timeout=1.0)
         assert result.success is True
         assert result.data["status"] == "completed"
         assert result.data["result"] == "done"
 
-    def test_timeout_handling(self):
-        mgr = SessionManager()
+    def test_timeout_handling(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
         mgr.start_session(session.id, _slow_task)
-        tool = WaitSessionTool(manager=mgr)
-        result = tool.run(session_id=session.id, timeout=0.1)
+        result = wait_agent_session.run(session_id=session.id, timeout=0.1)
         assert result.success is True
         # Should still be running after short timeout
         assert result.data["status"] == "running"
 
 
 class TestCollectResultsTool:
-    def test_collects_from_multiple(self):
-        mgr = SessionManager()
+    def test_collects_from_multiple(self, _fresh_manager):
+        mgr = _fresh_manager
         s1 = mgr.create_session()
         s2 = mgr.create_session()
         mgr.start_session(s1.id, _quick_task)
         mgr.start_session(s2.id, _quick_task)
-        tool = CollectResultsTool(manager=mgr)
-        result = tool.run(session_ids=f"{s1.id},{s2.id}", timeout=1.0)
+        result = collect_agent_results.run(session_ids=f"{s1.id},{s2.id}", timeout=1.0)
         assert result.success is True
         assert result.data["all_completed"] is True
         assert len(result.data["results"]) == 2
 
 
 class TestCancelSessionTool:
-    def test_cancels_session(self):
-        mgr = SessionManager()
+    def test_cancels_session(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
-        tool = CancelSessionTool(manager=mgr)
-        result = tool.run(session_id=session.id)
+        result = cancel_agent_session.run(session_id=session.id)
         assert result.success is True
         assert result.data["cancelled"] is True
         assert session.status == SessionStatus.CANCELLED
 
 
 class TestAddFinishHookTool:
-    def test_adds_log_hook(self):
-        mgr = SessionManager()
+    def test_adds_log_hook(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
-        tool = AddFinishHookTool(manager=mgr)
-        result = tool.run(
+        result = add_agent_finish_hook.run(
             session_id=session.id,
             hook_type="log",
             hook_config='{"path": "/tmp/test_agent.log"}',
@@ -335,11 +327,10 @@ class TestAddFinishHookTool:
         assert result.data["hook_type"] == "log"
         assert len(session._on_finish) == 1
 
-    def test_adds_notify_hook(self):
-        mgr = SessionManager()
+    def test_adds_notify_hook(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
-        tool = AddFinishHookTool(manager=mgr)
-        result = tool.run(session_id=session.id, hook_type="notify")
+        result = add_agent_finish_hook.run(session_id=session.id, hook_type="notify")
         assert result.success is True
         # Run session and verify notification fires
         mgr.start_session(session.id, _quick_task)
@@ -347,45 +338,43 @@ class TestAddFinishHookTool:
         assert "notification" in session.metadata
         assert session.metadata["notification"]["status"] == "completed"
 
-    def test_invalid_hook_type(self):
-        mgr = SessionManager()
+    def test_invalid_hook_type(self, _fresh_manager):
+        mgr = _fresh_manager
         session = mgr.create_session()
-        tool = AddFinishHookTool(manager=mgr)
-        result = tool.run(session_id=session.id, hook_type="bad")
+        result = add_agent_finish_hook.run(session_id=session.id, hook_type="bad")
         assert result.success is False
 
 
 class TestSessionManagerAllowedAgents:
-    def test_empty_allowed_agents_allows_all(self):
-        mgr = SessionManager()
+    def test_empty_allowed_agents_allows_all(self, _fresh_manager):
+        mgr = _fresh_manager
         assert mgr.is_agent_allowed("any-agent") is True
         assert mgr.is_agent_allowed("another") is True
 
-    def test_set_allowed_agents_restricts(self):
-        mgr = SessionManager()
+    def test_set_allowed_agents_restricts(self, _fresh_manager):
+        mgr = _fresh_manager
         mgr.set_allowed_agents(["agent-a", "agent-b"])
         assert mgr.is_agent_allowed("agent-a") is True
         assert mgr.is_agent_allowed("agent-b") is True
         assert mgr.is_agent_allowed("agent-c") is False
 
-    def test_create_session_with_allowed_agent_id(self):
-        mgr = SessionManager()
+    def test_create_session_with_allowed_agent_id(self, _fresh_manager):
+        mgr = _fresh_manager
         mgr.set_allowed_agents(["agent-a"])
         session = mgr.create_session(name="test", agent_id="agent-a")
         assert session.metadata["agent_id"] == "agent-a"
 
-    def test_create_session_with_disallowed_agent_id(self):
-        mgr = SessionManager()
+    def test_create_session_with_disallowed_agent_id(self, _fresh_manager):
+        mgr = _fresh_manager
         mgr.set_allowed_agents(["agent-a"])
         with pytest.raises(ValueError, match="not in the allowed agents"):
             mgr.create_session(name="test", agent_id="agent-x")
 
 
 class TestSpawnAgentTool:
-    def test_basic_spawn(self):
-        mgr = SessionManager()
-        tool = SpawnAgentTool(manager=mgr)
-        result = tool.run(agent_id="researcher", task="find information")
+    def test_basic_spawn(self, _fresh_manager):
+        mgr = _fresh_manager
+        result = spawn_agent.run(agent_id="researcher", task="find information")
         assert result.success is True
         assert result.data["status"] == "running"
         sid = result.data["session_id"]
@@ -394,10 +383,9 @@ class TestSpawnAgentTool:
         assert session.status == SessionStatus.COMPLETED
         assert session.metadata["agent_id"] == "researcher"
 
-    def test_spawn_with_name_and_system_prompt(self):
-        mgr = SessionManager()
-        tool = SpawnAgentTool(manager=mgr)
-        result = tool.run(
+    def test_spawn_with_name_and_system_prompt(self, _fresh_manager):
+        mgr = _fresh_manager
+        result = spawn_agent.run(
             agent_id="writer",
             task="write a report",
             name="my-writer",
@@ -412,25 +400,23 @@ class TestSpawnAgentTool:
         assert len(session.messages) == 2
         assert session.messages[0].role == "system"
 
-    def test_spawn_rejects_disallowed_agent(self):
-        mgr = SessionManager()
-        tool = SpawnAgentTool(manager=mgr, allowed_agents=["agent-a", "agent-b"])
-        result = tool.run(agent_id="agent-c", task="do stuff")
+    def test_spawn_rejects_disallowed_agent(self, _fresh_manager):
+        mgr = _fresh_manager
+        mgr.set_allowed_agents(["agent-a", "agent-b"])
+        result = spawn_agent.run(agent_id="agent-c", task="do stuff")
         assert result.success is False
-        assert "not in the allowed agents list" in result.error
+        assert "not in the allowed agents" in result.error
 
-    def test_spawn_empty_allowed_list_allows_all(self):
-        mgr = SessionManager()
-        tool = SpawnAgentTool(manager=mgr, allowed_agents=[])
-        result = tool.run(agent_id="any-agent", task="do anything")
+    def test_spawn_empty_allowed_list_allows_all(self, _fresh_manager):
+        mgr = _fresh_manager
+        result = spawn_agent.run(agent_id="any-agent", task="do anything")
         assert result.success is True
         assert result.data["status"] == "running"
         mgr.wait_for_session(result.data["session_id"], timeout=1.0)
 
-    def test_spawn_with_allowed_agents_metadata(self):
-        mgr = SessionManager()
-        tool = SpawnAgentTool(manager=mgr)
-        result = tool.run(
+    def test_spawn_with_allowed_agents_metadata(self, _fresh_manager):
+        mgr = _fresh_manager
+        result = spawn_agent.run(
             agent_id="orchestrator",
             task="coordinate",
             allowed_agents="worker-a, worker-b",
@@ -441,52 +427,43 @@ class TestSpawnAgentTool:
         assert session.metadata["allowed_agents"] == ["worker-a", "worker-b"]
 
     def test_spawn_missing_agent_id(self):
-        mgr = SessionManager()
-        tool = SpawnAgentTool(manager=mgr)
-        result = tool.run(agent_id="", task="do stuff")
+        result = spawn_agent.run(agent_id="", task="do stuff")
         assert result.success is False
         assert "agent_id" in result.error
 
     def test_spawn_missing_task(self):
-        mgr = SessionManager()
-        tool = SpawnAgentTool(manager=mgr)
-        result = tool.run(agent_id="agent-a", task="")
+        result = spawn_agent.run(agent_id="agent-a", task="")
         assert result.success is False
         assert "task" in result.error
 
 
 class TestNotifyParentTool:
     def test_basic_notification(self):
-        tool = NotifyParentTool()
-        result = tool.run(message="Task 50% complete", status="progress")
+        result = notify_parent.run(message="Task 50% complete", status="progress")
         assert result.success
         assert result.data["status"] == "progress"
         assert result.data["notification"]["message"] == "Task 50% complete"
 
     def test_missing_message(self):
-        tool = NotifyParentTool()
-        result = tool.run()
+        result = notify_parent.run()
         assert not result.success
 
     def test_completed_status(self):
-        tool = NotifyParentTool()
-        result = tool.run(message="All done", status="completed", data='{"items": 5}')
+        result = notify_parent.run(message="All done", status="completed", data='{"items": 5}')
         assert result.success
         assert result.data["status"] == "completed"
         assert result.data["notification"]["data"]["items"] == 5
 
     def test_invalid_json_data(self):
-        tool = NotifyParentTool()
-        result = tool.run(message="update", data="not-json")
+        result = notify_parent.run(message="update", data="not-json")
         assert result.success
         assert result.data["notification"]["data"] == {"raw": "not-json"}
 
 
 class TestSpawnAgentWithParentSession:
-    def test_parent_session_id_stored(self):
-        mgr = SessionManager()
-        tool = SpawnAgentTool(manager=mgr)
-        result = tool.run(
+    def test_parent_session_id_stored(self, _fresh_manager):
+        mgr = _fresh_manager
+        result = spawn_agent.run(
             agent_id="child",
             task="do work",
             parent_session_id="parent-123",
@@ -496,10 +473,9 @@ class TestSpawnAgentWithParentSession:
         session = mgr.get_session(sid)
         assert session.metadata["parent_session_id"] == "parent-123"
 
-    def test_no_parent_session_id(self):
-        mgr = SessionManager()
-        tool = SpawnAgentTool(manager=mgr)
-        result = tool.run(agent_id="child", task="do work")
+    def test_no_parent_session_id(self, _fresh_manager):
+        mgr = _fresh_manager
+        result = spawn_agent.run(agent_id="child", task="do work")
         assert result.success
         sid = result.data["session_id"]
         session = mgr.get_session(sid)
@@ -507,8 +483,8 @@ class TestSpawnAgentWithParentSession:
 
 
 class TestParallelSessions:
-    def test_three_concurrent_sessions(self):
-        mgr = SessionManager()
+    def test_three_concurrent_sessions(self, _fresh_manager):
+        mgr = _fresh_manager
         sessions = [mgr.create_session(name=f"parallel-{i}") for i in range(3)]
         for s in sessions:
             mgr.start_session(s.id, _quick_task)
@@ -519,49 +495,41 @@ class TestParallelSessions:
 
 
 class TestOrchestratorPattern:
-    """End-to-end test of the orchestrator → spawn N agents → collect pattern."""
+    """End-to-end test of the orchestrator -> spawn N agents -> collect pattern."""
 
-    def test_spawn_three_and_collect(self):
+    def test_spawn_three_and_collect(self, _fresh_manager):
         """Orchestrator spawns researcher, writer, reviewer; collects all."""
-        mgr = SessionManager()
-        spawn = SpawnAgentTool(
-            manager=mgr,
-            allowed_agents=["researcher", "writer", "reviewer"],
-        )
-        collect = CollectResultsTool(manager=mgr)
+        mgr = _fresh_manager
+        mgr.set_allowed_agents(["researcher", "writer", "reviewer"])
 
         # Spawn three agents (simulates three tool_calls in one LLM turn)
-        r1 = spawn.run(agent_id="researcher", task="Research AI trends")
-        r2 = spawn.run(agent_id="writer", task="Draft blog post on AI")
-        r3 = spawn.run(agent_id="reviewer", task="Review checklist for AI post")
+        r1 = spawn_agent.run(agent_id="researcher", task="Research AI trends")
+        r2 = spawn_agent.run(agent_id="writer", task="Draft blog post on AI")
+        r3 = spawn_agent.run(agent_id="reviewer", task="Review checklist for AI post")
         assert r1.success and r2.success and r3.success
 
         sid1, sid2, sid3 = r1.data["session_id"], r2.data["session_id"], r3.data["session_id"]
 
         # Collect (simulates second LLM turn)
-        result = collect.run(session_ids=f"{sid1},{sid2},{sid3}", timeout=5)
+        result = collect_agent_results.run(session_ids=f"{sid1},{sid2},{sid3}", timeout=5)
         assert result.success
         assert result.data["all_completed"]
         assert len(result.data["results"]) == 3
 
-    def test_spawn_blocked_agent_fails(self):
+    def test_spawn_blocked_agent_fails(self, _fresh_manager):
         """Orchestrator cannot spawn agents not in allowed_agents."""
-        mgr = SessionManager()
-        spawn = SpawnAgentTool(
-            manager=mgr,
-            allowed_agents=["researcher", "writer"],
-        )
-        result = spawn.run(agent_id="hacker", task="do bad things")
+        mgr = _fresh_manager
+        mgr.set_allowed_agents(["researcher", "writer"])
+        result = spawn_agent.run(agent_id="hacker", task="do bad things")
         assert not result.success
-        assert "not in the allowed agents list" in result.error
+        assert "not in the allowed agents" in result.error
 
-    def test_partial_collect_with_timeout(self):
+    def test_partial_collect_with_timeout(self, _fresh_manager):
         """collect_agent_results returns partial results on timeout."""
-        mgr = SessionManager()
-        spawn = SpawnAgentTool(manager=mgr)
+        mgr = _fresh_manager
 
-        # Spawn a fast agent and a "hanging" one
-        r_fast = spawn.run(agent_id="fast", task="quick job")
+        # Spawn a fast agent
+        r_fast = spawn_agent.run(agent_id="fast", task="quick job")
         assert r_fast.success
 
         # Create a slow session manually
@@ -573,8 +541,7 @@ class TestOrchestratorPattern:
 
         mgr.start_session(slow_session.id, slow_task)
 
-        collect = CollectResultsTool(manager=mgr)
-        result = collect.run(
+        result = collect_agent_results.run(
             session_ids=f"{r_fast.data['session_id']},{slow_session.id}",
             timeout=1,
         )
@@ -582,17 +549,16 @@ class TestOrchestratorPattern:
         # Not all completed because the slow one timed out
         assert not result.data["all_completed"]
 
-    def test_spawn_with_parent_and_notify(self):
+    def test_spawn_with_parent_and_notify(self, _fresh_manager):
         """Sub-agent notifies parent session after completing."""
-        mgr = SessionManager()
+        mgr = _fresh_manager
 
         # Create parent session
         parent = mgr.create_session(name="orchestrator")
         mgr.start_session(parent.id, _quick_task)
 
         # Spawn child with parent reference
-        spawn = SpawnAgentTool(manager=mgr)
-        r = spawn.run(
+        r = spawn_agent.run(
             agent_id="worker",
             task="do work",
             parent_session_id=parent.id,
@@ -603,22 +569,17 @@ class TestOrchestratorPattern:
         assert child_session.metadata["parent_session_id"] == parent.id
 
         # Child notifies parent
-        notify = NotifyParentTool(manager=mgr)
-        notify_result = notify.run(
-            session_id=child_sid,
+        notify_result = notify_parent.run(
             message="work complete",
             status="completed",
         )
         assert notify_result.success
 
-    def test_recursive_allowed_agents(self):
+    def test_recursive_allowed_agents(self, _fresh_manager):
         """Spawned agent can restrict its own children's allowed agents."""
-        mgr = SessionManager()
-        spawn = SpawnAgentTool(
-            manager=mgr,
-            allowed_agents=["level1"],
-        )
-        result = spawn.run(
+        mgr = _fresh_manager
+        mgr.set_allowed_agents(["level1"])
+        result = spawn_agent.run(
             agent_id="level1",
             task="manage sub-tasks",
             allowed_agents="level2a,level2b",

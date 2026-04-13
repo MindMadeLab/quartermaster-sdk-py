@@ -11,9 +11,8 @@ import os
 import uuid
 from typing import Any
 
-from quartermaster_tools.base import AbstractTool
 from quartermaster_tools.builtin.vector.embed import _builtin_embed
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 # Module-level in-memory store shared across instances
 _memory_store: dict[str, list[dict[str, Any]]] = {}
@@ -36,102 +35,57 @@ def _save_store(store_path: str | None, store: dict[str, list[dict[str, Any]]]) 
             json.dump(store, f, ensure_ascii=False)
 
 
-class VectorStoreTool(AbstractTool):
-    """Store text with embeddings in a vector collection."""
+@tool()
+def vector_store(
+    collection: str,
+    text: str,
+    metadata: dict = None,
+    embedding: list = None,
+    store_path: str = None,
+) -> dict:
+    """Store text with vector embeddings.
 
-    def name(self) -> str:
-        return "vector_store"
+    Stores a text document along with its embedding vector in a named
+    collection. Supports in-memory storage or JSON-file persistence.
+    If no embedding is provided, one is auto-generated using the
+    built-in hash-based embedder.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        collection: Name of the collection to store the document in.
+        text: The text content to store.
+        metadata: Optional metadata dict to attach to the document.
+        embedding: Pre-computed embedding vector. Auto-generated if omitted.
+        store_path: Path to a JSON file for persistent storage. In-memory if omitted.
+    """
+    if not collection:
+        raise ValueError("Parameter 'collection' is required")
+    if not text:
+        raise ValueError("Parameter 'text' is required")
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="collection",
-                description="Name of the collection to store the document in.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="text",
-                description="The text content to store.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="metadata",
-                description="Optional metadata dict to attach to the document.",
-                type="object",
-                required=False,
-                default=None,
-            ),
-            ToolParameter(
-                name="embedding",
-                description="Pre-computed embedding vector. Auto-generated if omitted.",
-                type="array",
-                required=False,
-                default=None,
-            ),
-            ToolParameter(
-                name="store_path",
-                description="Path to a JSON file for persistent storage. In-memory if omitted.",
-                type="string",
-                required=False,
-                default=None,
-            ),
-        ]
+    if embedding is None:
+        embedding = _builtin_embed(text)
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Store text with vector embeddings.",
-            long_description=(
-                "Stores a text document along with its embedding vector in a named "
-                "collection. Supports in-memory storage or JSON-file persistence. "
-                "If no embedding is provided, one is auto-generated using the "
-                "built-in hash-based embedder."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
+    store = _load_store(store_path)
+    if collection not in store:
+        store[collection] = []
 
-    def run(self, **kwargs: Any) -> ToolResult:
-        collection: str = kwargs.get("collection", "")
-        text: str = kwargs.get("text", "")
-        metadata: dict[str, Any] | None = kwargs.get("metadata", None)
-        embedding: list[float] | None = kwargs.get("embedding", None)
-        store_path: str | None = kwargs.get("store_path", None)
+    doc_id = str(uuid.uuid4())
+    doc = {
+        "id": doc_id,
+        "text": text,
+        "embedding": embedding,
+        "metadata": metadata or {},
+    }
+    store[collection].append(doc)
+    _save_store(store_path, store)
 
-        if not collection:
-            return ToolResult(success=False, error="Parameter 'collection' is required")
-        if not text:
-            return ToolResult(success=False, error="Parameter 'text' is required")
+    # Also update in-memory store if using file-backed mode
+    # so that searches in the same session see the data
+    if store_path is not None:
+        _memory_store.update(store)
 
-        if embedding is None:
-            embedding = _builtin_embed(text)
+    return {"id": doc_id, "collection": collection, "stored": True}
 
-        store = _load_store(store_path)
-        if collection not in store:
-            store[collection] = []
 
-        doc_id = str(uuid.uuid4())
-        doc = {
-            "id": doc_id,
-            "text": text,
-            "embedding": embedding,
-            "metadata": metadata or {},
-        }
-        store[collection].append(doc)
-        _save_store(store_path, store)
-
-        # Also update in-memory store if using file-backed mode
-        # so that searches in the same session see the data
-        if store_path is not None:
-            _memory_store.update(store)
-
-        return ToolResult(
-            success=True,
-            data={"id": doc_id, "collection": collection, "stored": True},
-        )
+# Backward-compatible alias
+VectorStoreTool = vector_store

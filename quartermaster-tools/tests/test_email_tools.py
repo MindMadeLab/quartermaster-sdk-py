@@ -1,34 +1,36 @@
-"""Tests for SendEmailTool, ReadEmailTool, and SearchEmailTool."""
+"""Tests for send_email, read_email, and search_email tools."""
 
 from __future__ import annotations
 
 import imaplib
 import smtplib
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from quartermaster_tools.builtin.email.tools import (
+    send_email,
+    read_email,
+    search_email,
+    SendEmailTool,
     ReadEmailTool,
     SearchEmailTool,
-    SendEmailTool,
     _send_timestamps,
 )
 
 
 class TestSendEmailTool:
     def setup_method(self) -> None:
-        self.tool = SendEmailTool()
         _send_timestamps.clear()
 
     def test_name(self) -> None:
-        assert self.tool.name() == "send_email"
+        assert send_email.name() == "send_email"
 
     def test_version(self) -> None:
-        assert self.tool.version() == "1.0.0"
+        assert send_email.version() == "1.0.0"
 
     def test_parameters_list(self) -> None:
-        params = self.tool.parameters()
+        params = send_email.parameters()
         names = [p.name for p in params]
         assert "to" in names
         assert "subject" in names
@@ -36,27 +38,27 @@ class TestSendEmailTool:
         assert "smtp_host" in names
 
     def test_info_descriptor(self) -> None:
-        info = self.tool.info()
+        info = send_email.info()
         assert info.name == "send_email"
 
     def test_missing_to(self) -> None:
-        result = self.tool.run(to="", subject="hi", body="hello")
+        result = send_email.run(to="", subject="hi", body="hello")
         assert result.success is False
         assert "to" in result.error.lower()
 
     def test_missing_subject(self) -> None:
-        result = self.tool.run(to="a@b.com", subject="", body="hello")
+        result = send_email.run(to="a@b.com", subject="", body="hello")
         assert result.success is False
         assert "subject" in result.error.lower()
 
     def test_missing_body(self) -> None:
-        result = self.tool.run(to="a@b.com", subject="hi", body="")
+        result = send_email.run(to="a@b.com", subject="hi", body="")
         assert result.success is False
         assert "body" in result.error.lower()
 
     @patch.dict("os.environ", {}, clear=True)
     def test_missing_smtp_host(self) -> None:
-        result = self.tool.run(to="a@b.com", subject="hi", body="hello")
+        result = send_email.run(to="a@b.com", subject="hi", body="hello")
         assert result.success is False
         assert "smtp" in result.error.lower()
 
@@ -67,7 +69,7 @@ class TestSendEmailTool:
         mock_smtp_cls.return_value.__enter__ = MagicMock(return_value=mock_server)
         mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
 
-        result = self.tool.run(to="recipient@example.com", subject="Test", body="Hello!")
+        result = send_email.run(to="recipient@example.com", subject="Test", body="Hello!")
         assert result.success is True
         assert "recipient@example.com" in result.data["to"]
         mock_server.starttls.assert_called_once()
@@ -81,7 +83,7 @@ class TestSendEmailTool:
         mock_smtp_cls.return_value.__enter__ = MagicMock(return_value=mock_server)
         mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
 
-        result = self.tool.run(
+        result = send_email.run(
             to="a@b.com", subject="Test", body="Hello",
             cc="c@d.com", bcc="e@f.com"
         )
@@ -100,7 +102,7 @@ class TestSendEmailTool:
         mock_smtp_cls.return_value.__enter__ = MagicMock(return_value=mock_server)
         mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
 
-        result = self.tool.run(
+        result = send_email.run(
             to="a@b.com", subject="Test", body="Hello",
             smtp_user="bad", smtp_password="creds"
         )
@@ -116,28 +118,25 @@ class TestSendEmailTool:
         for _ in range(10):
             _send_timestamps.append(now)
 
-        result = self.tool.run(to="a@b.com", subject="Test", body="Hello")
+        result = send_email.run(to="a@b.com", subject="Test", body="Hello")
         assert result.success is False
         assert "rate limit" in result.error.lower()
 
 
 class TestReadEmailTool:
-    def setup_method(self) -> None:
-        self.tool = ReadEmailTool()
-
     def test_name(self) -> None:
-        assert self.tool.name() == "read_email"
+        assert read_email.name() == "read_email"
 
     def test_version(self) -> None:
-        assert self.tool.version() == "1.0.0"
+        assert read_email.version() == "1.0.0"
 
     def test_info_descriptor(self) -> None:
-        info = self.tool.info()
+        info = read_email.info()
         assert info.name == "read_email"
 
     @patch.dict("os.environ", {}, clear=True)
     def test_missing_imap_host(self) -> None:
-        result = self.tool.run()
+        result = read_email.run()
         assert result.success is False
         assert "imap" in result.error.lower()
 
@@ -155,7 +154,7 @@ class TestReadEmailTool:
         )
         mock_conn.fetch.return_value = ("OK", [(b"1", raw_email)])
 
-        result = self.tool.run()
+        result = read_email.run()
         assert result.success is True
         assert result.data["folder"] == "INBOX"
         assert len(result.data["emails"]) == 2
@@ -167,7 +166,7 @@ class TestReadEmailTool:
     @patch.dict("os.environ", {"IMAP_HOST": "imap.example.com", "IMAP_USER": "user", "IMAP_PASSWORD": "pass"})
     def test_imap_error(self, mock_imap_cls: MagicMock) -> None:
         mock_imap_cls.side_effect = imaplib.IMAP4.error("Login failed")
-        result = self.tool.run()
+        result = read_email.run()
         assert result.success is False
         assert "imap" in result.error.lower()
 
@@ -178,33 +177,30 @@ class TestReadEmailTool:
         mock_imap_cls.return_value = mock_conn
         mock_conn.search.return_value = ("OK", [b""])
 
-        result = self.tool.run(unread_only=False)
+        result = read_email.run(unread_only=False)
         assert result.success is True
         mock_conn.search.assert_called_once_with(None, "ALL")
 
 
 class TestSearchEmailTool:
-    def setup_method(self) -> None:
-        self.tool = SearchEmailTool()
-
     def test_name(self) -> None:
-        assert self.tool.name() == "search_email"
+        assert search_email.name() == "search_email"
 
     def test_version(self) -> None:
-        assert self.tool.version() == "1.0.0"
+        assert search_email.version() == "1.0.0"
 
     def test_info_descriptor(self) -> None:
-        info = self.tool.info()
+        info = search_email.info()
         assert info.name == "search_email"
 
     def test_missing_query(self) -> None:
-        result = self.tool.run(query="")
+        result = search_email.run(query="")
         assert result.success is False
         assert "query" in result.error.lower()
 
     @patch.dict("os.environ", {}, clear=True)
     def test_missing_imap_host(self) -> None:
-        result = self.tool.run(query="test")
+        result = search_email.run(query="test")
         assert result.success is False
         assert "imap" in result.error.lower()
 
@@ -220,7 +216,7 @@ class TestSearchEmailTool:
         )
         mock_conn.fetch.return_value = ("OK", [(b"1", raw_header)])
 
-        result = self.tool.run(query="Found")
+        result = search_email.run(query="Found")
         assert result.success is True
         assert result.data["email_count"] == 1
         assert result.data["emails"][0]["subject"] == "Found Email"
@@ -232,7 +228,7 @@ class TestSearchEmailTool:
         mock_imap_cls.return_value = mock_conn
         mock_conn.search.return_value = ("OK", [b""])
 
-        result = self.tool.run(
+        result = search_email.run(
             query="test", date_from="01-Jan-2024", date_to="31-Dec-2024", sender="boss@co.com"
         )
         assert result.success is True
@@ -240,3 +236,10 @@ class TestSearchEmailTool:
         assert "SINCE 01-Jan-2024" in search_arg
         assert "BEFORE 31-Dec-2024" in search_arg
         assert 'FROM "boss@co.com"' in search_arg
+
+
+class TestEmailToolAliases:
+    def test_backward_compat_aliases(self) -> None:
+        assert SendEmailTool is send_email
+        assert ReadEmailTool is read_email
+        assert SearchEmailTool is search_email

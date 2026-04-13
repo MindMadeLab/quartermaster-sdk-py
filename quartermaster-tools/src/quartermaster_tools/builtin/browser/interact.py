@@ -1,18 +1,15 @@
 """
 Browser interaction tools: click, type, and evaluate JavaScript.
 
-BrowserClickTool: click an element by CSS selector.
-BrowserTypeTool: type text into an input field.
-BrowserEvalTool: execute arbitrary JavaScript in the page context.
+browser_click: click an element by CSS selector.
+browser_type: type text into an input field.
+browser_eval: execute arbitrary JavaScript in the page context.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from quartermaster_tools.base import AbstractTool
 from quartermaster_tools.builtin.browser.session import BrowserSessionManager
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 _PLAYWRIGHT_MISSING = (
     "Playwright is not installed. "
@@ -20,186 +17,80 @@ _PLAYWRIGHT_MISSING = (
 )
 
 
-class BrowserClickTool(AbstractTool):
-    """Click an element on the page."""
+@tool()
+def browser_click(selector: str, timeout: int = 5000) -> dict:
+    """Click an element on the page.
 
-    def name(self) -> str:
-        return "browser_click"
+    Clicks the first element matching the given CSS selector.
+    Waits for the element to be actionable before clicking.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        selector: CSS selector of the element to click.
+        timeout: Maximum wait time in milliseconds for the element.
+    """
+    if not BrowserSessionManager.is_available():
+        raise RuntimeError(_PLAYWRIGHT_MISSING)
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="selector",
-                description="CSS selector of the element to click.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="timeout",
-                description="Maximum wait time in milliseconds for the element.",
-                type="number",
-                required=False,
-                default=5000,
-            ),
-        ]
+    if not selector:
+        raise ValueError("Parameter 'selector' is required")
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Click an element on the page.",
-            long_description=(
-                "Clicks the first element matching the given CSS selector. "
-                "Waits for the element to be actionable before clicking."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        if not BrowserSessionManager.is_available():
-            return ToolResult(success=False, error=_PLAYWRIGHT_MISSING)
-
-        selector: str = kwargs.get("selector", "")
-        if not selector:
-            return ToolResult(success=False, error="Parameter 'selector' is required")
-
-        timeout: int = int(kwargs.get("timeout", 5000))
-
-        try:
-            page = BrowserSessionManager.get_page()
-            page.click(selector, timeout=timeout)
-            return ToolResult(
-                success=True,
-                data={"clicked": True, "selector": selector},
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=f"Click failed: {e}")
+    page = BrowserSessionManager.get_page()
+    page.click(selector, timeout=int(timeout))
+    return {"clicked": True, "selector": selector}
 
 
-class BrowserTypeTool(AbstractTool):
-    """Type text into an input field."""
+@tool()
+def browser_type(selector: str, text: str, clear_first: bool = True) -> dict:
+    """Type text into an input field.
 
-    def name(self) -> str:
-        return "browser_type"
+    Types text into the input element matching the given CSS
+    selector. Optionally clears existing content first by
+    triple-clicking to select all before typing.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        selector: CSS selector of the input field.
+        text: Text to type into the field.
+        clear_first: Whether to clear the field before typing.
+    """
+    if not BrowserSessionManager.is_available():
+        raise RuntimeError(_PLAYWRIGHT_MISSING)
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="selector",
-                description="CSS selector of the input field.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="text",
-                description="Text to type into the field.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="clear_first",
-                description="Whether to clear the field before typing.",
-                type="boolean",
-                required=False,
-                default=True,
-            ),
-        ]
+    if not selector:
+        raise ValueError("Parameter 'selector' is required")
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Type text into an input field.",
-            long_description=(
-                "Types text into the input element matching the given CSS "
-                "selector. Optionally clears existing content first by "
-                "triple-clicking to select all before typing."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        if not BrowserSessionManager.is_available():
-            return ToolResult(success=False, error=_PLAYWRIGHT_MISSING)
-
-        selector: str = kwargs.get("selector", "")
-        if not selector:
-            return ToolResult(success=False, error="Parameter 'selector' is required")
-
-        text: str = kwargs.get("text", "")
-        if not text and text != "":
-            return ToolResult(success=False, error="Parameter 'text' is required")
-
-        clear_first: bool = kwargs.get("clear_first", True)
-
-        try:
-            page = BrowserSessionManager.get_page()
-            if clear_first:
-                page.click(selector, click_count=3)
-            page.type(selector, text)
-            return ToolResult(
-                success=True,
-                data={
-                    "typed": True,
-                    "selector": selector,
-                    "text_length": len(text),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=f"Type failed: {e}")
+    page = BrowserSessionManager.get_page()
+    if clear_first:
+        page.click(selector, click_count=3)
+    page.type(selector, text)
+    return {
+        "typed": True,
+        "selector": selector,
+        "text_length": len(text),
+    }
 
 
-class BrowserEvalTool(AbstractTool):
-    """Execute JavaScript in the page context."""
+@tool()
+def browser_eval(script: str) -> dict:
+    """Execute JavaScript in the browser page.
 
-    def name(self) -> str:
-        return "browser_eval"
+    Evaluates the given JavaScript expression or code block
+    in the context of the current page and returns the result.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        script: JavaScript code to evaluate in the page context.
+    """
+    if not BrowserSessionManager.is_available():
+        raise RuntimeError(_PLAYWRIGHT_MISSING)
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="script",
-                description="JavaScript code to evaluate in the page context.",
-                type="string",
-                required=True,
-            ),
-        ]
+    if not script:
+        raise ValueError("Parameter 'script' is required")
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Execute JavaScript in the browser page.",
-            long_description=(
-                "Evaluates the given JavaScript expression or code block "
-                "in the context of the current page and returns the result."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-        )
+    page = BrowserSessionManager.get_page()
+    result = page.evaluate(script)
+    return {"result": result}
 
-    def run(self, **kwargs: Any) -> ToolResult:
-        if not BrowserSessionManager.is_available():
-            return ToolResult(success=False, error=_PLAYWRIGHT_MISSING)
 
-        script: str = kwargs.get("script", "")
-        if not script:
-            return ToolResult(success=False, error="Parameter 'script' is required")
-
-        try:
-            page = BrowserSessionManager.get_page()
-            result = page.evaluate(script)
-            return ToolResult(
-                success=True,
-                data={"result": result},
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=f"Eval failed: {e}")
+# Backward-compatible aliases
+BrowserClickTool = browser_click
+BrowserTypeTool = browser_type
+BrowserEvalTool = browser_eval

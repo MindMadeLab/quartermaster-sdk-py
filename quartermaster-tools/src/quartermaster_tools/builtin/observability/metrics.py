@@ -8,179 +8,139 @@ import statistics
 from datetime import datetime, timezone
 from typing import Any
 
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 _METRICS_STORE: list[dict[str, Any]] = []
 
 _VALID_METRIC_TYPES = {"counter", "gauge", "histogram"}
 
 
-class MetricTool(AbstractTool):
-    """Record custom metrics (counters, gauges, histograms)."""
+@tool()
+def metric(
+    name: str,
+    value: float = None,
+    unit: str = None,
+    tags: dict = None,
+    metric_type: str = "gauge",
+) -> dict:
+    """Record a custom metric.
 
-    def name(self) -> str:
-        return "metric"
+    Records a metric value with support for counter (accumulate),
+    gauge (overwrite last), and histogram (store all values) types.
+    Metrics are stored in-memory for retrieval and aggregation.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        name: Metric name.
+        value: Metric value.
+        unit: Optional unit (e.g. 'ms', 'bytes').
+        tags: Optional key-value tags for the metric.
+        metric_type: Type of metric: counter, gauge, or histogram.
+    """
+    if not name:
+        raise ValueError("Parameter 'name' is required")
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="name",
-                description="Metric name.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="value",
-                description="Metric value.",
-                type="number",
-                required=True,
-            ),
-            ToolParameter(
-                name="unit",
-                description="Optional unit (e.g. 'ms', 'bytes').",
-                type="string",
-                required=False,
-                default=None,
-            ),
-            ToolParameter(
-                name="tags",
-                description="Optional key-value tags for the metric.",
-                type="object",
-                required=False,
-                default=None,
-            ),
-            ToolParameter(
-                name="metric_type",
-                description="Type of metric: counter, gauge, or histogram.",
-                type="string",
-                required=False,
-                default="gauge",
-            ),
-        ]
+    if value is None:
+        raise ValueError("Parameter 'value' is required")
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Record a custom metric.",
-            long_description=(
-                "Records a metric value with support for counter (accumulate), "
-                "gauge (overwrite last), and histogram (store all values) types. "
-                "Metrics are stored in-memory for retrieval and aggregation."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
+    value = float(value)
+    tags = tags or {}
+
+    if metric_type not in _VALID_METRIC_TYPES:
+        raise ValueError(
+            f"Invalid metric_type '{metric_type}'. Must be one of: {', '.join(sorted(_VALID_METRIC_TYPES))}"
         )
 
-    def run(self, **kwargs: Any) -> ToolResult:
-        metric_name: str = kwargs.get("name", "")
-        if not metric_name:
-            return ToolResult(success=False, error="Parameter 'name' is required")
+    timestamp = datetime.now(timezone.utc).isoformat()
 
-        value = kwargs.get("value")
-        if value is None:
-            return ToolResult(success=False, error="Parameter 'value' is required")
-
-        value = float(value)
-        unit: str | None = kwargs.get("unit")
-        tags: dict[str, Any] = kwargs.get("tags") or {}
-        metric_type: str = kwargs.get("metric_type", "gauge")
-
-        if metric_type not in _VALID_METRIC_TYPES:
-            return ToolResult(
-                success=False,
-                error=f"Invalid metric_type '{metric_type}'. Must be one of: {', '.join(sorted(_VALID_METRIC_TYPES))}",
-            )
-
-        timestamp = datetime.now(timezone.utc).isoformat()
-
-        if metric_type == "counter":
-            # Accumulate: find existing counter entry and add
-            existing = None
-            for entry in _METRICS_STORE:
-                if entry["name"] == metric_name and entry["type"] == "counter":
-                    existing = entry
-                    break
-            if existing is not None:
-                existing["value"] += value
-                existing["timestamp"] = timestamp
-            else:
-                _METRICS_STORE.append({
-                    "name": metric_name,
-                    "value": value,
-                    "unit": unit,
-                    "tags": tags,
-                    "type": "counter",
-                    "timestamp": timestamp,
-                })
-        elif metric_type == "gauge":
-            # Overwrite: find existing gauge and replace value
-            existing = None
-            for entry in _METRICS_STORE:
-                if entry["name"] == metric_name and entry["type"] == "gauge":
-                    existing = entry
-                    break
-            if existing is not None:
-                existing["value"] = value
-                existing["timestamp"] = timestamp
-            else:
-                _METRICS_STORE.append({
-                    "name": metric_name,
-                    "value": value,
-                    "unit": unit,
-                    "tags": tags,
-                    "type": "gauge",
-                    "timestamp": timestamp,
-                })
+    if metric_type == "counter":
+        # Accumulate: find existing counter entry and add
+        existing = None
+        for entry in _METRICS_STORE:
+            if entry["name"] == name and entry["type"] == "counter":
+                existing = entry
+                break
+        if existing is not None:
+            existing["value"] += value
+            existing["timestamp"] = timestamp
         else:
-            # Histogram: always append
             _METRICS_STORE.append({
-                "name": metric_name,
+                "name": name,
                 "value": value,
                 "unit": unit,
                 "tags": tags,
-                "type": "histogram",
+                "type": "counter",
                 "timestamp": timestamp,
             })
-
-        return ToolResult(
-            success=True,
-            data={
-                "recorded": True,
-                "name": metric_name,
+    elif metric_type == "gauge":
+        # Overwrite: find existing gauge and replace value
+        existing = None
+        for entry in _METRICS_STORE:
+            if entry["name"] == name and entry["type"] == "gauge":
+                existing = entry
+                break
+        if existing is not None:
+            existing["value"] = value
+            existing["timestamp"] = timestamp
+        else:
+            _METRICS_STORE.append({
+                "name": name,
                 "value": value,
-                "type": metric_type,
-            },
-        )
-
-    @classmethod
-    def get_metrics(cls) -> list[dict[str, Any]]:
-        """Return all stored metrics."""
-        return list(_METRICS_STORE)
-
-    @classmethod
-    def get_summary(cls, name: str) -> dict[str, Any]:
-        """Return min/max/avg/count for histogram metrics with the given name."""
-        values = [
-            e["value"]
-            for e in _METRICS_STORE
-            if e["name"] == name and e["type"] == "histogram"
-        ]
-        if not values:
-            return {}
-        return {
+                "unit": unit,
+                "tags": tags,
+                "type": "gauge",
+                "timestamp": timestamp,
+            })
+    else:
+        # Histogram: always append
+        _METRICS_STORE.append({
             "name": name,
-            "count": len(values),
-            "min": min(values),
-            "max": max(values),
-            "avg": statistics.mean(values),
-        }
+            "value": value,
+            "unit": unit,
+            "tags": tags,
+            "type": "histogram",
+            "timestamp": timestamp,
+        })
 
-    @classmethod
-    def clear(cls) -> None:
-        """Clear all stored metrics."""
-        _METRICS_STORE.clear()
+    return {
+        "recorded": True,
+        "name": name,
+        "value": value,
+        "type": metric_type,
+    }
+
+
+def get_metrics() -> list[dict[str, Any]]:
+    """Return all stored metrics."""
+    return list(_METRICS_STORE)
+
+
+def get_metric_summary(name: str) -> dict[str, Any]:
+    """Return min/max/avg/count for histogram metrics with the given name."""
+    values = [
+        e["value"]
+        for e in _METRICS_STORE
+        if e["name"] == name and e["type"] == "histogram"
+    ]
+    if not values:
+        return {}
+    return {
+        "name": name,
+        "count": len(values),
+        "min": min(values),
+        "max": max(values),
+        "avg": statistics.mean(values),
+    }
+
+
+def clear_metrics() -> None:
+    """Clear all stored metrics."""
+    _METRICS_STORE.clear()
+
+
+# Attach class-method-like helpers to the FunctionTool instance
+metric.get_metrics = get_metrics  # type: ignore[attr-defined]
+metric.get_summary = get_metric_summary  # type: ignore[attr-defined]
+metric.clear = clear_metrics  # type: ignore[attr-defined]
+
+# Backward-compatible alias
+MetricTool = metric

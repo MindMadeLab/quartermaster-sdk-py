@@ -10,10 +10,8 @@ from __future__ import annotations
 import hashlib
 import math
 import struct
-from typing import Any
 
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 
 def _builtin_embed(text: str, dimensions: int = 384) -> list[float]:
@@ -48,94 +46,52 @@ def _builtin_embed(text: str, dimensions: int = 384) -> list[float]:
     return vector
 
 
-class EmbedTextTool(AbstractTool):
-    """Generate vector embeddings for a text string."""
+@tool()
+def embed_text(text: str, model: str = "builtin", dimensions: int = 384) -> dict:
+    """Generate vector embeddings for text.
 
-    def name(self) -> str:
-        return "embed_text"
+    Produces a numerical vector representation of text.
+    Uses a built-in hash-based approach by default (zero dependencies,
+    deterministic but not semantic). If sentence-transformers is installed,
+    can use real transformer models for semantic embeddings.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        text: The text to generate an embedding for.
+        model: Embedding model to use. 'builtin' for hash-based, or a sentence-transformers model name.
+        dimensions: Number of embedding dimensions (only for builtin model).
+    """
+    if not text:
+        raise ValueError("Parameter 'text' is required")
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="text",
-                description="The text to generate an embedding for.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="model",
-                description="Embedding model to use. 'builtin' for hash-based, or a sentence-transformers model name.",
-                type="string",
-                required=False,
-                default="builtin",
-            ),
-            ToolParameter(
-                name="dimensions",
-                description="Number of embedding dimensions (only for builtin model).",
-                type="number",
-                required=False,
-                default=384,
-            ),
-        ]
+    dimensions = int(dimensions)
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Generate vector embeddings for text.",
-            long_description=(
-                "Produces a numerical vector representation of text. "
-                "Uses a built-in hash-based approach by default (zero dependencies, "
-                "deterministic but not semantic). If sentence-transformers is installed, "
-                "can use real transformer models for semantic embeddings."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
+    if model == "builtin":
+        embedding = _builtin_embed(text, dimensions)
+        return {
+            "embedding": embedding,
+            "dimensions": dimensions,
+            "model": "builtin",
+        }
+
+    # Try sentence-transformers
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        st_model = SentenceTransformer(model)
+        embedding = st_model.encode(text).tolist()
+        return {
+            "embedding": embedding,
+            "dimensions": len(embedding),
+            "model": model,
+        }
+    except ImportError:
+        raise ImportError(
+            f"Model '{model}' requires sentence-transformers. "
+            "Install with: pip install sentence-transformers"
         )
+    except Exception as e:
+        raise RuntimeError(f"Embedding failed: {e}")
 
-    def run(self, **kwargs: Any) -> ToolResult:
-        text: str = kwargs.get("text", "")
-        model: str = kwargs.get("model", "builtin")
-        dimensions: int = int(kwargs.get("dimensions", 384))
 
-        if not text:
-            return ToolResult(success=False, error="Parameter 'text' is required")
-
-        if model == "builtin":
-            embedding = _builtin_embed(text, dimensions)
-            return ToolResult(
-                success=True,
-                data={
-                    "embedding": embedding,
-                    "dimensions": dimensions,
-                    "model": "builtin",
-                },
-            )
-
-        # Try sentence-transformers
-        try:
-            from sentence_transformers import SentenceTransformer
-
-            st_model = SentenceTransformer(model)
-            embedding = st_model.encode(text).tolist()
-            return ToolResult(
-                success=True,
-                data={
-                    "embedding": embedding,
-                    "dimensions": len(embedding),
-                    "model": model,
-                },
-            )
-        except ImportError:
-            return ToolResult(
-                success=False,
-                error=(
-                    f"Model '{model}' requires sentence-transformers. "
-                    "Install with: pip install sentence-transformers"
-                ),
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=f"Embedding failed: {e}")
+# Backward-compatible alias
+EmbedTextTool = embed_text

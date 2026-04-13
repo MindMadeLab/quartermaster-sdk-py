@@ -8,125 +8,108 @@ import fnmatch
 import os
 from typing import Any
 
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 from ._security import resolve_base_dir, validate_path
 
 
-class ListDirectoryTool(AbstractTool):
-    """List entries in a directory.
+def _entry_info(full_path: str, base: str) -> dict[str, Any]:
+    """Build an entry info dict for a single path."""
+    try:
+        stat = os.stat(full_path)
+        return {
+            "name": os.path.relpath(full_path, base),
+            "type": "directory" if os.path.isdir(full_path) else "file",
+            "size": stat.st_size,
+            "modified": stat.st_mtime,
+        }
+    except OSError:
+        return {
+            "name": os.path.relpath(full_path, base),
+            "type": "unknown",
+            "size": 0,
+            "modified": 0,
+        }
 
-    Returns file names, types, sizes, and modification times.
-    Supports recursive listing and glob pattern filtering.
+
+@tool()
+def list_directory(path: str, recursive: bool = False, pattern: str = "*", include_hidden: bool = False) -> dict:
+    """List directory entries with type, size, and modification time.
+
+    Args:
+        path: Directory path to list.
+        recursive: Whether to list recursively.
+        pattern: Glob pattern to filter entries.
+        include_hidden: Include hidden files (dot-prefixed).
     """
+    if not path:
+        return {"error": "Parameter 'path' is required"}
 
-    def __init__(self, allowed_base_dir: str | None = None) -> None:
-        """Initialise the ListDirectoryTool.
+    error, real_path = validate_path(path, None)
+    if error:
+        return {"error": error}
 
-        Args:
-            allowed_base_dir: If set, only paths under this directory are allowed.
-        """
-        self._allowed_base_dir = resolve_base_dir(allowed_base_dir)
+    if not os.path.exists(real_path):
+        return {"error": f"Directory not found: {path}"}
+    if not os.path.isdir(real_path):
+        return {"error": f"Not a directory: {path}"}
 
-    def name(self) -> str:
-        """Return the tool name."""
-        return "list_directory"
-
-    def version(self) -> str:
-        """Return the tool version."""
-        return "1.0.0"
-
-    def parameters(self) -> list[ToolParameter]:
-        """Return parameter definitions."""
-        return [
-            ToolParameter(name="path", description="Directory path to list.", type="string", required=True),
-            ToolParameter(name="recursive", description="Whether to list recursively.", type="boolean", default=False),
-            ToolParameter(name="pattern", description="Glob pattern to filter entries.", type="string", default="*"),
-            ToolParameter(name="include_hidden", description="Include hidden files (dot-prefixed).", type="boolean", default=False),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        """Return tool metadata."""
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="List directory entries with type, size, and modification time.",
-            long_description="Lists entries in a directory, optionally recursing and filtering by glob pattern.",
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        """List directory contents.
-
-        Args:
-            path: Directory to list.
-            recursive: Recurse into subdirectories (default False).
-            pattern: Glob pattern for filtering (default '*').
-            include_hidden: Include dot-prefixed entries (default False).
-
-        Returns:
-            ToolResult with data["entries"] as a list of entry dicts.
-        """
-        path: str = kwargs.get("path", "")
-        recursive: bool = kwargs.get("recursive", False)
-        pattern: str = kwargs.get("pattern", "*")
-        include_hidden: bool = kwargs.get("include_hidden", False)
-
-        if not path:
-            return ToolResult(success=False, error="Parameter 'path' is required")
-
-        error, real_path = validate_path(path, self._allowed_base_dir)
-        if error:
-            return ToolResult(success=False, error=error)
-
-        if not os.path.exists(real_path):
-            return ToolResult(success=False, error=f"Directory not found: {path}")
-        if not os.path.isdir(real_path):
-            return ToolResult(success=False, error=f"Not a directory: {path}")
-
-        entries: list[dict[str, Any]] = []
-        try:
-            if recursive:
-                for dirpath, dirnames, filenames in os.walk(real_path):
-                    if not include_hidden:
-                        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-                    for name in dirnames + filenames:
-                        if not include_hidden and name.startswith("."):
-                            continue
-                        if not fnmatch.fnmatch(name, pattern):
-                            continue
-                        full = os.path.join(dirpath, name)
-                        entries.append(self._entry_info(full, real_path))
-            else:
-                for name in sorted(os.listdir(real_path)):
+    entries: list[dict[str, Any]] = []
+    try:
+        if recursive:
+            for dirpath, dirnames, filenames in os.walk(real_path):
+                if not include_hidden:
+                    dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+                for name in dirnames + filenames:
                     if not include_hidden and name.startswith("."):
                         continue
                     if not fnmatch.fnmatch(name, pattern):
                         continue
-                    full = os.path.join(real_path, name)
-                    entries.append(self._entry_info(full, real_path))
-        except PermissionError as e:
-            return ToolResult(success=False, error=f"Permission denied: {e}")
+                    full = os.path.join(dirpath, name)
+                    entries.append(_entry_info(full, real_path))
+        else:
+            for name in sorted(os.listdir(real_path)):
+                if not include_hidden and name.startswith("."):
+                    continue
+                if not fnmatch.fnmatch(name, pattern):
+                    continue
+                full = os.path.join(real_path, name)
+                entries.append(_entry_info(full, real_path))
+    except PermissionError as e:
+        return {"error": f"Permission denied: {e}"}
 
-        return ToolResult(success=True, data={"entries": entries, "count": len(entries)})
+    return {"entries": entries, "count": len(entries)}
 
-    @staticmethod
-    def _entry_info(full_path: str, base: str) -> dict[str, Any]:
-        """Build an entry info dict for a single path."""
-        try:
-            stat = os.stat(full_path)
-            return {
-                "name": os.path.relpath(full_path, base),
-                "type": "directory" if os.path.isdir(full_path) else "file",
-                "size": stat.st_size,
-                "modified": stat.st_mtime,
-            }
-        except OSError:
-            return {
-                "name": os.path.relpath(full_path, base),
-                "type": "unknown",
-                "size": 0,
-                "modified": 0,
-            }
+
+# Backward-compatible class wrapper supporting allowed_base_dir constructor arg
+class ListDirectoryTool:
+    """List entries in a directory.
+
+    Wraps the list_directory function tool, adding optional allowed_base_dir
+    restriction for backward compatibility.
+    """
+
+    def __init__(self, allowed_base_dir: str | None = None) -> None:
+        self._allowed_base_dir = resolve_base_dir(allowed_base_dir)
+        self._tool = list_directory
+
+    def name(self) -> str:
+        return self._tool.name()
+
+    def version(self) -> str:
+        return self._tool.version()
+
+    def parameters(self):
+        return self._tool.parameters()
+
+    def info(self):
+        return self._tool.info()
+
+    def run(self, **kwargs: Any):
+        path = kwargs.get("path", "")
+        if path:
+            error, _ = validate_path(path, self._allowed_base_dir)
+            if error:
+                from quartermaster_tools.types import ToolResult
+                return ToolResult(success=False, error=error)
+        return self._tool.run(**kwargs)

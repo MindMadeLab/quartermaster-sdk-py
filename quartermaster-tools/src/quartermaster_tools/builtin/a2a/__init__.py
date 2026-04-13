@@ -2,19 +2,28 @@
 A2A (Agent-to-Agent) protocol tools for agent discovery and task management.
 
 Implements Google's A2A protocol for inter-agent communication:
-- A2ADiscoverTool: fetch a remote agent's Agent Card
-- A2ASendTaskTool: send a task to a remote agent
-- A2ACheckStatusTool: poll task status
-- A2ACollectResultTool: retrieve completed task results
-- A2ARegisterTool: generate a local Agent Card
+- a2a_discover: fetch a remote agent's Agent Card
+- a2a_send_task: send a task to a remote agent
+- a2a_check_status: poll task status
+- a2a_collect_result: retrieve completed task results
+- a2a_register: generate a local Agent Card
 """
 
-from quartermaster_tools.builtin.a2a.discover import A2ADiscoverTool
-from quartermaster_tools.builtin.a2a.register import A2ARegisterTool
+from quartermaster_tools.builtin.a2a.discover import (
+    A2ADiscoverTool,
+    a2a_discover,
+)
+from quartermaster_tools.builtin.a2a.register import (
+    A2ARegisterTool,
+    a2a_register,
+)
 from quartermaster_tools.builtin.a2a.task import (
     A2ACheckStatusTool,
     A2ACollectResultTool,
     A2ASendTaskTool,
+    a2a_check_status,
+    a2a_collect_result,
+    a2a_send_task,
 )
 
 __all__ = [
@@ -23,4 +32,9 @@ __all__ = [
     "A2ADiscoverTool",
     "A2ARegisterTool",
     "A2ASendTaskTool",
+    "a2a_check_status",
+    "a2a_collect_result",
+    "a2a_discover",
+    "a2a_register",
+    "a2a_send_task",
 ]

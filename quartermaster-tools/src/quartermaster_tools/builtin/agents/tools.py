@@ -11,8 +11,7 @@ import json
 import time
 from typing import Any
 
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 from quartermaster_tools.builtin.agents.session import (
     AgentMessage,
@@ -22,935 +21,474 @@ from quartermaster_tools.builtin.agents.session import (
     get_default_manager,
 )
 
-
-class _SessionManagerMixin:
-    """Mixin providing access to a shared SessionManager."""
-
-    _manager: SessionManager | None = None
-
-    def __init__(self, manager: SessionManager | None = None) -> None:
-        if manager is not None:
-            self._manager = manager
-
-    def _get_manager(self) -> SessionManager:
-        if self._manager is not None:
-            return self._manager
-        return get_default_manager()
+_manager_override: SessionManager | None = None
 
 
-class CreateSessionTool(_SessionManagerMixin, AbstractTool):
-    """Create a new agent session.
+def _get_manager() -> SessionManager:
+    """Return the override manager (for testing) or the module-level default."""
+    if _manager_override is not None:
+        return _manager_override
+    return get_default_manager()
 
-    For simple use-cases prefer ``SpawnAgentTool`` (``spawn_agent``) which
-    combines session creation and start into a single call.  This tool is
-    useful for advanced patterns where you need to pre-configure a session
-    (e.g. inject messages or add hooks) before starting it.
+
+def set_manager(manager: SessionManager | None) -> None:
+    """Set a custom SessionManager for all agent-session tools.
+
+    Primarily intended for testing.  Pass ``None`` to revert to the
+    default module-level manager.
     """
-
-    def name(self) -> str:
-        return "create_agent_session"
-
-    def version(self) -> str:
-        return "1.0.0"
-
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="name",
-                description="Optional human-readable name for the session.",
-                type="string",
-                required=False,
-                default="",
-            ),
-            ToolParameter(
-                name="metadata",
-                description="Optional JSON string of metadata key-value pairs.",
-                type="string",
-                required=False,
-                default="",
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Create a new parallel agent session.",
-            long_description=(
-                "Creates a new agent session that can be started with a task. "
-                "Sessions run in separate threads for parallel execution."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        name = kwargs.get("name", "")
-        metadata_str = kwargs.get("metadata", "")
-        metadata: dict[str, Any] = {}
-        if metadata_str:
-            try:
-                metadata = json.loads(metadata_str)
-            except (json.JSONDecodeError, TypeError):
-                return ToolResult(
-                    success=False, error="Invalid JSON in 'metadata' parameter"
-                )
-
-        manager = self._get_manager()
-        session = manager.create_session(name=name, metadata=metadata)
-        return ToolResult(
-            success=True,
-            data={
-                "session_id": session.id,
-                "name": session.name,
-                "status": session.status.value,
-            },
-        )
+    global _manager_override  # noqa: PLW0603
+    _manager_override = manager
 
 
-class StartSessionTool(_SessionManagerMixin, AbstractTool):
-    """Start a session with a task.
+@tool()
+def create_agent_session(name: str = "", metadata: str = "") -> dict:
+    """Create a new parallel agent session.
 
-    For simple use-cases prefer ``SpawnAgentTool`` (``spawn_agent``) which
-    combines session creation and start into a single call.  This tool is
-    useful for advanced patterns where you need to pre-configure a session
-    (e.g. inject messages or add hooks) before starting it.
+    Creates a new agent session that can be started with a task.
+    Sessions run in separate threads for parallel execution.
+    For simple use-cases prefer spawn_agent which combines
+    session creation and start into a single call.
+
+    Args:
+        name: Optional human-readable name for the session.
+        metadata: Optional JSON string of metadata key-value pairs.
     """
+    meta: dict[str, Any] = {}
+    if metadata:
+        try:
+            meta = json.loads(metadata)
+        except (json.JSONDecodeError, TypeError):
+            return {"error": "Invalid JSON in 'metadata' parameter"}
 
-    def name(self) -> str:
-        return "start_agent_session"
+    manager = _get_manager()
+    session = manager.create_session(name=name, metadata=meta)
+    return {
+        "session_id": session.id,
+        "name": session.name,
+        "status": session.status.value,
+    }
 
-    def version(self) -> str:
-        return "1.0.0"
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="session_id",
-                description="The session ID to start.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="task",
-                description="Task description/instructions for the agent.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="system_prompt",
-                description="Optional system prompt for the agent.",
-                type="string",
-                required=False,
-                default="",
-            ),
-        ]
+@tool()
+def start_agent_session(
+    session_id: str,
+    task: str,
+    system_prompt: str = "",
+) -> dict:
+    """Start an agent session with a task.
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Start an agent session with a task.",
-            long_description=(
-                "Starts a previously created session with the given task. "
-                "The task runs in a background thread. Use wait or status "
-                "tools to monitor progress."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
+    Starts a previously created session with the given task.
+    The task runs in a background thread. Use wait or status
+    tools to monitor progress. For simple use-cases prefer
+    spawn_agent which combines creation and start.
 
-    def run(self, **kwargs: Any) -> ToolResult:
-        session_id = kwargs.get("session_id", "")
-        task = kwargs.get("task", "")
-        system_prompt = kwargs.get("system_prompt", "")
+    Args:
+        session_id: The session ID to start.
+        task: Task description/instructions for the agent.
+        system_prompt: Optional system prompt for the agent.
+    """
+    if not session_id:
+        return {"error": "Parameter 'session_id' is required"}
+    if not task:
+        return {"error": "Parameter 'task' is required"}
 
-        if not session_id:
-            return ToolResult(
-                success=False, error="Parameter 'session_id' is required"
+    manager = _get_manager()
+    session = manager.get_session(session_id)
+    if not session:
+        return {"error": f"Session '{session_id}' not found"}
+
+    def task_fn(s: AgentSession) -> Any:
+        if system_prompt:
+            s.messages.append(
+                AgentMessage(role="system", content=system_prompt)
             )
-        if not task:
-            return ToolResult(success=False, error="Parameter 'task' is required")
+        s.messages.append(AgentMessage(role="user", content=task))
+        # Framework hook point: a real LLM loop would process here.
+        # For now, mark as completed with the task as the result.
+        return {"task": task, "message_count": len(s.messages)}
 
-        manager = self._get_manager()
-        session = manager.get_session(session_id)
-        if not session:
-            return ToolResult(
-                success=False, error=f"Session '{session_id}' not found"
-            )
+    started = manager.start_session(session_id, task_fn)
+    if not started:
+        return {
+            "error": f"Could not start session '{session_id}' (already running or not found)"
+        }
 
-        def task_fn(s: AgentSession) -> Any:
-            if system_prompt:
-                s.messages.append(
-                    AgentMessage(role="system", content=system_prompt)
-                )
-            s.messages.append(AgentMessage(role="user", content=task))
-            # Framework hook point: a real LLM loop would process here.
-            # For now, mark as completed with the task as the result.
-            return {"task": task, "message_count": len(s.messages)}
-
-        started = manager.start_session(session_id, task_fn)
-        if not started:
-            return ToolResult(
-                success=False,
-                error=f"Could not start session '{session_id}' (already running or not found)",
-            )
-
-        return ToolResult(
-            success=True,
-            data={"session_id": session_id, "status": "running"},
-        )
+    return {"session_id": session_id, "status": "running"}
 
 
-class InjectMessageTool(_SessionManagerMixin, AbstractTool):
-    """Inject a message into a running session."""
+@tool()
+def inject_agent_message(
+    session_id: str,
+    content: str,
+    role: str = "user",
+) -> dict:
+    """Inject a message into a running agent session.
 
-    def name(self) -> str:
-        return "inject_agent_message"
+    Adds a message to the session's message history.
+    Can be used to provide additional context or instructions
+    to a running agent.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        session_id: The session ID to inject into.
+        content: Message content to inject.
+        role: Message role (user, assistant, system).
+    """
+    if not session_id:
+        return {"error": "Parameter 'session_id' is required"}
+    if not content:
+        return {"error": "Parameter 'content' is required"}
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="session_id",
-                description="The session ID to inject into.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="content",
-                description="Message content to inject.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="role",
-                description="Message role (user, assistant, system).",
-                type="string",
-                required=False,
-                default="user",
-            ),
-        ]
+    manager = _get_manager()
+    injected = manager.inject_message(session_id, role=role, content=content)
+    if not injected:
+        return {"error": f"Session '{session_id}' not found"}
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Inject a message into a running agent session.",
-            long_description=(
-                "Adds a message to the session's message history. "
-                "Can be used to provide additional context or instructions "
-                "to a running agent."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        session_id = kwargs.get("session_id", "")
-        content = kwargs.get("content", "")
-        role = kwargs.get("role", "user")
-
-        if not session_id:
-            return ToolResult(
-                success=False, error="Parameter 'session_id' is required"
-            )
-        if not content:
-            return ToolResult(
-                success=False, error="Parameter 'content' is required"
-            )
-
-        manager = self._get_manager()
-        injected = manager.inject_message(session_id, role=role, content=content)
-        if not injected:
-            return ToolResult(
-                success=False, error=f"Session '{session_id}' not found"
-            )
-
-        session = manager.get_session(session_id)
-        return ToolResult(
-            success=True,
-            data={
-                "session_id": session_id,
-                "injected": True,
-                "message_count": len(session.messages) if session else 0,
-            },
-        )
+    session = manager.get_session(session_id)
+    return {
+        "session_id": session_id,
+        "injected": True,
+        "message_count": len(session.messages) if session else 0,
+    }
 
 
-class GetSessionStatusTool(_SessionManagerMixin, AbstractTool):
-    """Get the status of an agent session."""
+@tool()
+def get_agent_session_status(session_id: str) -> dict:
+    """Get the status of an agent session.
 
-    def name(self) -> str:
-        return "get_agent_session_status"
+    Returns detailed status information for a session,
+    including its current state, message count, and timestamps.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        session_id: The session ID to check.
+    """
+    if not session_id:
+        return {"error": "Parameter 'session_id' is required"}
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="session_id",
-                description="The session ID to check.",
-                type="string",
-                required=True,
-            ),
-        ]
+    manager = _get_manager()
+    session = manager.get_session(session_id)
+    if not session:
+        return {"error": f"Session '{session_id}' not found"}
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Get the status of an agent session.",
-            long_description=(
-                "Returns detailed status information for a session, "
-                "including its current state, message count, and timestamps."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        session_id = kwargs.get("session_id", "")
-        if not session_id:
-            return ToolResult(
-                success=False, error="Parameter 'session_id' is required"
-            )
-
-        manager = self._get_manager()
-        session = manager.get_session(session_id)
-        if not session:
-            return ToolResult(
-                success=False, error=f"Session '{session_id}' not found"
-            )
-
-        return ToolResult(
-            success=True,
-            data={
-                "session_id": session.id,
-                "status": session.status.value,
-                "name": session.name,
-                "message_count": len(session.messages),
-                "created_at": session.created_at,
-                "updated_at": session.updated_at,
-            },
-        )
+    return {
+        "session_id": session.id,
+        "status": session.status.value,
+        "name": session.name,
+        "message_count": len(session.messages),
+        "created_at": session.created_at,
+        "updated_at": session.updated_at,
+    }
 
 
-class ListSessionsTool(_SessionManagerMixin, AbstractTool):
-    """List all agent sessions."""
+@tool()
+def list_agent_sessions(status: str = "") -> dict:
+    """List all agent sessions.
 
-    def name(self) -> str:
-        return "list_agent_sessions"
+    Returns a list of all tracked agent sessions,
+    optionally filtered by status.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        status: Optional status filter (created, running, completed, failed, cancelled).
+    """
+    manager = _get_manager()
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="status",
-                description="Optional status filter (created, running, completed, failed, cancelled).",
-                type="string",
-                required=False,
-                default="",
-            ),
-        ]
+    status_filter: SessionStatus | None = None
+    if status:
+        try:
+            status_filter = SessionStatus(status)
+        except ValueError:
+            return {
+                "error": f"Invalid status '{status}'. Valid values: "
+                + ", ".join(s.value for s in SessionStatus)
+            }
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="List all agent sessions.",
-            long_description=(
-                "Returns a list of all tracked agent sessions, "
-                "optionally filtered by status."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        status_str = kwargs.get("status", "")
-        manager = self._get_manager()
-
-        status_filter: SessionStatus | None = None
-        if status_str:
-            try:
-                status_filter = SessionStatus(status_str)
-            except ValueError:
-                return ToolResult(
-                    success=False,
-                    error=f"Invalid status '{status_str}'. Valid values: "
-                    + ", ".join(s.value for s in SessionStatus),
-                )
-
-        sessions = manager.list_sessions(status=status_filter)
-        return ToolResult(
-            success=True,
-            data={
-                "sessions": [
-                    {
-                        "id": s.id,
-                        "name": s.name,
-                        "status": s.status.value,
-                        "message_count": len(s.messages),
-                        "created_at": s.created_at,
-                    }
-                    for s in sessions
-                ],
-                "count": len(sessions),
-            },
-        )
-
-
-class WaitSessionTool(_SessionManagerMixin, AbstractTool):
-    """Wait for a session to complete."""
-
-    def name(self) -> str:
-        return "wait_agent_session"
-
-    def version(self) -> str:
-        return "1.0.0"
-
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="session_id",
-                description="The session ID to wait for.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="timeout",
-                description="Maximum seconds to wait (default: 30).",
-                type="number",
-                required=False,
-                default=30,
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Wait for an agent session to complete.",
-            long_description=(
-                "Blocks until the session finishes or the timeout expires. "
-                "Returns the session result and final status."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        session_id = kwargs.get("session_id", "")
-        timeout = float(kwargs.get("timeout", 30))
-
-        if not session_id:
-            return ToolResult(
-                success=False, error="Parameter 'session_id' is required"
-            )
-
-        manager = self._get_manager()
-        session = manager.wait_for_session(session_id, timeout=timeout)
-        if not session:
-            return ToolResult(
-                success=False, error=f"Session '{session_id}' not found"
-            )
-
-        return ToolResult(
-            success=True,
-            data={
-                "session_id": session.id,
-                "status": session.status.value,
-                "result": session.result,
-                "error": session.error,
-            },
-        )
-
-
-class CollectResultsTool(_SessionManagerMixin, AbstractTool):
-    """Collect results from multiple sessions."""
-
-    def name(self) -> str:
-        return "collect_agent_results"
-
-    def version(self) -> str:
-        return "1.0.0"
-
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="session_ids",
-                description="Comma-separated list of session IDs.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="timeout",
-                description="Maximum seconds to wait per session (default: 30).",
-                type="number",
-                required=False,
-                default=30,
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Collect results from multiple agent sessions.",
-            long_description=(
-                "Waits for all specified sessions to complete and "
-                "collects their results. Returns a summary of all sessions."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        session_ids_str = kwargs.get("session_ids", "")
-        timeout = float(kwargs.get("timeout", 30))
-
-        if not session_ids_str:
-            return ToolResult(
-                success=False, error="Parameter 'session_ids' is required"
-            )
-
-        session_ids = [s.strip() for s in session_ids_str.split(",") if s.strip()]
-        manager = self._get_manager()
-        sessions = manager.wait_all(session_ids, timeout=timeout)
-
-        results = [
+    sessions = manager.list_sessions(status=status_filter)
+    return {
+        "sessions": [
             {
-                "session_id": s.id,
+                "id": s.id,
+                "name": s.name,
                 "status": s.status.value,
-                "result": s.result,
-                "error": s.error,
+                "message_count": len(s.messages),
+                "created_at": s.created_at,
             }
             for s in sessions
-        ]
-        all_completed = all(
-            s.status
-            in (SessionStatus.COMPLETED, SessionStatus.FAILED, SessionStatus.CANCELLED)
-            for s in sessions
-        )
-
-        return ToolResult(
-            success=True,
-            data={
-                "results": results,
-                "all_completed": all_completed,
-            },
-        )
+        ],
+        "count": len(sessions),
+    }
 
 
-class CancelSessionTool(_SessionManagerMixin, AbstractTool):
-    """Cancel a running session."""
+@tool()
+def wait_agent_session(session_id: str, timeout: float = 30) -> dict:
+    """Wait for an agent session to complete.
 
-    def name(self) -> str:
-        return "cancel_agent_session"
+    Blocks until the session finishes or the timeout expires.
+    Returns the session result and final status.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        session_id: The session ID to wait for.
+        timeout: Maximum seconds to wait.
+    """
+    if not session_id:
+        return {"error": "Parameter 'session_id' is required"}
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="session_id",
-                description="The session ID to cancel.",
-                type="string",
-                required=True,
-            ),
-        ]
+    manager = _get_manager()
+    session = manager.wait_for_session(session_id, timeout=timeout)
+    if not session:
+        return {"error": f"Session '{session_id}' not found"}
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Cancel a running agent session.",
-            long_description=(
-                "Marks a session as cancelled. Note that the underlying "
-                "thread may still be running; this sets the status flag."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        session_id = kwargs.get("session_id", "")
-        if not session_id:
-            return ToolResult(
-                success=False, error="Parameter 'session_id' is required"
-            )
-
-        manager = self._get_manager()
-        cancelled = manager.cancel_session(session_id)
-        if not cancelled:
-            return ToolResult(
-                success=False, error=f"Session '{session_id}' not found"
-            )
-
-        return ToolResult(
-            success=True,
-            data={"session_id": session_id, "cancelled": True},
-        )
+    return {
+        "session_id": session.id,
+        "status": session.status.value,
+        "result": session.result,
+        "error": session.error,
+    }
 
 
-class AddFinishHookTool(_SessionManagerMixin, AbstractTool):
-    """Add a finish hook to a session."""
+@tool()
+def collect_agent_results(session_ids: str, timeout: float = 30) -> dict:
+    """Collect results from multiple agent sessions.
 
-    def name(self) -> str:
-        return "add_agent_finish_hook"
+    Waits for all specified sessions to complete and
+    collects their results. Returns a summary of all sessions.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        session_ids: Comma-separated list of session IDs.
+        timeout: Maximum seconds to wait per session.
+    """
+    if not session_ids:
+        return {"error": "Parameter 'session_ids' is required"}
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="session_id",
-                description="The session ID to add a hook to.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="hook_type",
-                description="Type of hook: 'log' or 'notify'.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="hook_config",
-                description="Optional JSON string of hook configuration.",
-                type="string",
-                required=False,
-                default="",
-            ),
-        ]
+    ids = [s.strip() for s in session_ids.split(",") if s.strip()]
+    manager = _get_manager()
+    sessions = manager.wait_all(ids, timeout=timeout)
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Add a finish hook to an agent session.",
-            long_description=(
-                "Registers a callback that fires when the session completes. "
-                "Built-in hooks: 'log' writes to a file, 'notify' stores a "
-                "notification in session metadata."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
+    results = [
+        {
+            "session_id": s.id,
+            "status": s.status.value,
+            "result": s.result,
+            "error": s.error,
+        }
+        for s in sessions
+    ]
+    all_completed = all(
+        s.status
+        in (SessionStatus.COMPLETED, SessionStatus.FAILED, SessionStatus.CANCELLED)
+        for s in sessions
+    )
 
-    def run(self, **kwargs: Any) -> ToolResult:
-        session_id = kwargs.get("session_id", "")
-        hook_type = kwargs.get("hook_type", "")
-        hook_config_str = kwargs.get("hook_config", "")
+    return {
+        "results": results,
+        "all_completed": all_completed,
+    }
 
-        if not session_id:
-            return ToolResult(
-                success=False, error="Parameter 'session_id' is required"
-            )
-        if not hook_type:
-            return ToolResult(
-                success=False, error="Parameter 'hook_type' is required"
-            )
-        if hook_type not in ("log", "notify"):
-            return ToolResult(
-                success=False,
-                error=f"Invalid hook_type '{hook_type}'. Must be 'log' or 'notify'.",
-            )
 
-        hook_config: dict[str, Any] = {}
-        if hook_config_str:
+@tool()
+def cancel_agent_session(session_id: str) -> dict:
+    """Cancel a running agent session.
+
+    Marks a session as cancelled. Note that the underlying
+    thread may still be running; this sets the status flag.
+
+    Args:
+        session_id: The session ID to cancel.
+    """
+    if not session_id:
+        return {"error": "Parameter 'session_id' is required"}
+
+    manager = _get_manager()
+    cancelled = manager.cancel_session(session_id)
+    if not cancelled:
+        return {"error": f"Session '{session_id}' not found"}
+
+    return {"session_id": session_id, "cancelled": True}
+
+
+@tool()
+def add_agent_finish_hook(
+    session_id: str,
+    hook_type: str,
+    hook_config: str = "",
+) -> dict:
+    """Add a finish hook to an agent session.
+
+    Registers a callback that fires when the session completes.
+    Built-in hooks: 'log' writes to a file, 'notify' stores a
+    notification in session metadata.
+
+    Args:
+        session_id: The session ID to add a hook to.
+        hook_type: Type of hook: 'log' or 'notify'.
+        hook_config: Optional JSON string of hook configuration.
+    """
+    if not session_id:
+        return {"error": "Parameter 'session_id' is required"}
+    if not hook_type:
+        return {"error": "Parameter 'hook_type' is required"}
+    if hook_type not in ("log", "notify"):
+        return {"error": f"Invalid hook_type '{hook_type}'. Must be 'log' or 'notify'."}
+
+    config: dict[str, Any] = {}
+    if hook_config:
+        try:
+            config = json.loads(hook_config)
+        except (json.JSONDecodeError, TypeError):
+            return {"error": "Invalid JSON in 'hook_config' parameter"}
+
+    manager = _get_manager()
+    session = manager.get_session(session_id)
+    if not session:
+        return {"error": f"Session '{session_id}' not found"}
+
+    if hook_type == "log":
+        path = config.get("path", "agent_session.log")
+
+        def log_hook(s: AgentSession) -> None:
             try:
-                hook_config = json.loads(hook_config_str)
-            except (json.JSONDecodeError, TypeError):
-                return ToolResult(
-                    success=False, error="Invalid JSON in 'hook_config' parameter"
-                )
+                with open(path, "a") as f:
+                    f.write(
+                        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                        f"Session {s.id} ({s.name}) finished with "
+                        f"status={s.status.value}\n"
+                    )
+            except OSError:
+                pass
 
-        manager = self._get_manager()
-        session = manager.get_session(session_id)
-        if not session:
-            return ToolResult(
-                success=False, error=f"Session '{session_id}' not found"
-            )
+        manager.add_finish_hook(session_id, log_hook)
+    elif hook_type == "notify":
 
-        if hook_type == "log":
-            path = hook_config.get("path", "agent_session.log")
+        def notify_hook(s: AgentSession) -> None:
+            s.metadata["notification"] = {
+                "type": "finish",
+                "status": s.status.value,
+                "timestamp": time.time(),
+            }
 
-            def log_hook(s: AgentSession) -> None:
-                try:
-                    with open(path, "a") as f:
-                        f.write(
-                            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
-                            f"Session {s.id} ({s.name}) finished with "
-                            f"status={s.status.value}\n"
-                        )
-                except OSError:
-                    pass
+        manager.add_finish_hook(session_id, notify_hook)
 
-            manager.add_finish_hook(session_id, log_hook)
-        elif hook_type == "notify":
-
-            def notify_hook(s: AgentSession) -> None:
-                s.metadata["notification"] = {
-                    "type": "finish",
-                    "status": s.status.value,
-                    "timestamp": time.time(),
-                }
-
-            manager.add_finish_hook(session_id, notify_hook)
-
-        return ToolResult(
-            success=True,
-            data={
-                "session_id": session_id,
-                "hook_added": True,
-                "hook_type": hook_type,
-            },
-        )
+    return {
+        "session_id": session_id,
+        "hook_added": True,
+        "hook_type": hook_type,
+    }
 
 
-class NotifyParentTool(_SessionManagerMixin, AbstractTool):
+@tool()
+def notify_parent(
+    message: str,
+    status: str = "progress",
+    data: str = "",
+) -> dict:
     """Notify the parent agent that spawned this session.
 
     Sub-agents running in background sessions can call this tool to send
-    status updates or results back to the primary agent via webhook.
+    status updates or results back to the primary agent.
+
+    Args:
+        message: Message to send to parent agent.
+        status: Status: 'progress', 'completed', 'failed'.
+        data: JSON string of additional data.
     """
+    if not message:
+        return {"error": "Parameter 'message' is required"}
 
-    def name(self) -> str:
-        return "notify_parent"
+    try:
+        parsed_data = json.loads(data) if data else {}
+    except json.JSONDecodeError:
+        parsed_data = {"raw": data}
 
-    def version(self) -> str:
-        return "1.0.0"
+    notification = {
+        "message": message,
+        "status": status,
+        "data": parsed_data,
+        "timestamp": time.time(),
+    }
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="message",
-                description="Message to send to parent agent",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="status",
-                description="Status: 'progress', 'completed', 'failed'",
-                type="string",
-                required=False,
-                default="progress",
-            ),
-            ToolParameter(
-                name="data",
-                description="JSON string of additional data",
-                type="string",
-                required=False,
-                default="",
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Notify the parent agent that spawned this session",
-            long_description=(
-                "Send status updates or results from a sub-session back to "
-                "the parent agent."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        message = kwargs.get("message", "")
-        status = kwargs.get("status", "progress")
-        data_str = kwargs.get("data", "{}")
-
-        if not message:
-            return ToolResult(success=False, error="message is required")
-
-        try:
-            data = json.loads(data_str) if data_str else {}
-        except json.JSONDecodeError:
-            data = {"raw": data_str}
-
-        notification = {
-            "message": message,
-            "status": status,
-            "data": data,
-            "timestamp": time.time(),
-        }
-
-        # Store the notification for the parent to pick up.
-        # The parent can check via get_session_status which includes notifications.
-        return ToolResult(
-            success=True,
-            data={"notification": notification, "status": status},
-        )
+    # Store the notification for the parent to pick up.
+    # The parent can check via get_session_status which includes notifications.
+    return {"notification": notification, "status": status}
 
 
-class SpawnAgentTool(_SessionManagerMixin, AbstractTool):
+@tool()
+def spawn_agent(
+    agent_id: str,
+    task: str,
+    name: str = "",
+    system_prompt: str = "",
+    allowed_agents: str = "",
+    parent_session_id: str = "",
+) -> dict:
     """Spawn a new agent session in a single step.
 
-    Combines session creation and start into one call.  This is the
-    preferred tool for simple agent spawning.  Use ``create_agent_session``
-    and ``start_agent_session`` separately only when you need to
+    Creates and immediately starts a new agent session with
+    the given task. This is the preferred tool for simple
+    agent spawning. Use create_agent_session and
+    start_agent_session separately only when you need to
     pre-configure a session before starting it.
+
+    Args:
+        agent_id: Which agent to spawn (must be in allowed list if configured).
+        task: Task description/instructions for the agent.
+        name: Optional human-readable session name.
+        system_prompt: Optional system prompt override for the agent.
+        allowed_agents: Comma-separated list of agent IDs this spawned agent can itself spawn.
+        parent_session_id: Session ID of the parent that is spawning this agent.
     """
+    if not agent_id:
+        return {"error": "Parameter 'agent_id' is required"}
+    if not task:
+        return {"error": "Parameter 'task' is required"}
 
-    _allowed_agents: set[str]
+    manager = _get_manager()
 
-    def __init__(
-        self,
-        manager: SessionManager | None = None,
-        allowed_agents: list[str] | None = None,
-    ) -> None:
-        super().__init__(manager=manager)
-        self._allowed_agents = set(allowed_agents) if allowed_agents else set()
-
-    def name(self) -> str:
-        return "spawn_agent"
-
-    def version(self) -> str:
-        return "1.0.0"
-
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="agent_id",
-                description="Which agent to spawn (must be in allowed list).",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="task",
-                description="Task description/instructions for the agent.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="name",
-                description="Optional human-readable session name.",
-                type="string",
-                required=False,
-                default="",
-            ),
-            ToolParameter(
-                name="system_prompt",
-                description="Optional system prompt override for the agent.",
-                type="string",
-                required=False,
-                default="",
-            ),
-            ToolParameter(
-                name="allowed_agents",
-                description=(
-                    "Comma-separated list of agent IDs this spawned agent "
-                    "can itself spawn (for recursive control)."
-                ),
-                type="string",
-                required=False,
-                default="",
-            ),
-            ToolParameter(
-                name="parent_session_id",
-                description=(
-                    "Session ID of the parent that is spawning this agent. "
-                    "Stored in metadata so the child can send notifications back."
-                ),
-                type="string",
-                required=False,
-                default="",
-            ),
+    # Build metadata
+    meta: dict[str, Any] = {"agent_id": agent_id}
+    if allowed_agents:
+        child_allowed = [
+            a.strip() for a in allowed_agents.split(",") if a.strip()
         ]
+        meta["allowed_agents"] = child_allowed
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Spawn a new agent session in a single step.",
-            long_description=(
-                "Creates and immediately starts a new agent session with "
-                "the given task.  The agent_id must be in the allowed "
-                "agents list (if one is configured).  Returns the "
-                "session_id and a status of 'running'."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
+    # Create and start in one go
+    try:
+        session = manager.create_session(
+            name=name or agent_id,
+            metadata=meta,
+            agent_id=agent_id,
         )
+    except ValueError as exc:
+        return {"error": str(exc)}
 
-    def run(self, **kwargs: Any) -> ToolResult:
-        agent_id = kwargs.get("agent_id", "")
-        task = kwargs.get("task", "")
-        session_name = kwargs.get("name", "")
-        system_prompt = kwargs.get("system_prompt", "")
-        allowed_agents_str = kwargs.get("allowed_agents", "")
-        parent_session_id = kwargs.get("parent_session_id", "")
+    # Store parent session context for webhook notifications
+    if parent_session_id:
+        session.metadata["parent_session_id"] = parent_session_id
 
-        if not agent_id:
-            return ToolResult(
-                success=False, error="Parameter 'agent_id' is required"
+    def task_fn(s: AgentSession) -> Any:
+        if system_prompt:
+            s.messages.append(
+                AgentMessage(role="system", content=system_prompt)
             )
-        if not task:
-            return ToolResult(success=False, error="Parameter 'task' is required")
+        s.messages.append(AgentMessage(role="user", content=task))
+        # Framework hook point: a real LLM loop would process here.
+        return {"task": task, "message_count": len(s.messages)}
 
-        # Validate agent_id against allowed list (empty = allow all)
-        if self._allowed_agents and agent_id not in self._allowed_agents:
-            return ToolResult(
-                success=False,
-                error=(
-                    f"Agent '{agent_id}' is not in the allowed agents list. "
-                    f"Allowed: {', '.join(sorted(self._allowed_agents))}"
-                ),
-            )
+    started = manager.start_session(session.id, task_fn)
+    if not started:
+        return {"error": f"Could not start session '{session.id}'"}
 
-        manager = self._get_manager()
+    return {"session_id": session.id, "status": "running"}
 
-        # Build metadata
-        metadata: dict[str, Any] = {"agent_id": agent_id}
-        if allowed_agents_str:
-            child_allowed = [
-                a.strip() for a in allowed_agents_str.split(",") if a.strip()
-            ]
-            metadata["allowed_agents"] = child_allowed
 
-        # Create and start in one go
-        try:
-            session = manager.create_session(
-                name=session_name or agent_id,
-                metadata=metadata,
-                agent_id=agent_id,
-            )
-        except ValueError as exc:
-            return ToolResult(success=False, error=str(exc))
-
-        # Store parent session context for webhook notifications
-        if parent_session_id:
-            session.metadata["parent_session_id"] = parent_session_id
-
-        def task_fn(s: AgentSession) -> Any:
-            if system_prompt:
-                s.messages.append(
-                    AgentMessage(role="system", content=system_prompt)
-                )
-            s.messages.append(AgentMessage(role="user", content=task))
-            # Framework hook point: a real LLM loop would process here.
-            return {"task": task, "message_count": len(s.messages)}
-
-        started = manager.start_session(session.id, task_fn)
-        if not started:
-            return ToolResult(
-                success=False,
-                error=f"Could not start session '{session.id}'",
-            )
-
-        return ToolResult(
-            success=True,
-            data={"session_id": session.id, "status": "running"},
-        )
+# Backward-compatible aliases
+CreateSessionTool = create_agent_session
+StartSessionTool = start_agent_session
+InjectMessageTool = inject_agent_message
+GetSessionStatusTool = get_agent_session_status
+ListSessionsTool = list_agent_sessions
+WaitSessionTool = wait_agent_session
+CollectResultsTool = collect_agent_results
+CancelSessionTool = cancel_agent_session
+AddFinishHookTool = add_agent_finish_hook
+NotifyParentTool = notify_parent
+SpawnAgentTool = spawn_agent

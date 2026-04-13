@@ -6,14 +6,19 @@ from quartermaster_tools.builtin.memory.tools import (
     GetVariableTool,
     ListVariablesTool,
     SetVariableTool,
+    clear_store,
+    get_store,
 )
 
+import pytest
 
-def _make_tools(store: dict | None = None) -> tuple[SetVariableTool, GetVariableTool, ListVariablesTool]:
-    """Create a set of memory tools sharing an isolated store."""
-    if store is None:
-        store = {}
-    return SetVariableTool(store=store), GetVariableTool(store=store), ListVariablesTool(store=store)
+
+@pytest.fixture(autouse=True)
+def _isolate_store():
+    """Clear the shared module-level store before and after each test."""
+    clear_store()
+    yield
+    clear_store()
 
 
 # --- SetVariableTool ---
@@ -21,39 +26,33 @@ def _make_tools(store: dict | None = None) -> tuple[SetVariableTool, GetVariable
 
 class TestSetVariableTool:
     def test_set_returns_success(self):
-        setter, _, _ = _make_tools()
-        result = setter.run(name="x", value="42")
+        result = SetVariableTool.run(name="x", value="42")
         assert result.success is True
         assert result.data["name"] == "x"
         assert result.data["value"] == "42"
 
     def test_set_missing_name(self):
-        setter, _, _ = _make_tools()
-        result = setter.run(name="", value="v")
+        result = SetVariableTool.run(name="", value="v")
         assert result.success is False
         assert "name" in result.error.lower()
 
     def test_set_missing_value(self):
-        setter, _, _ = _make_tools()
-        result = setter.run(name="x")
+        result = SetVariableTool.run(name="x")
+        # value is a required param, so the underlying function is called
+        # without the required arg — FunctionTool catches the TypeError
         assert result.success is False
-        assert "value" in result.error.lower()
 
     def test_set_overwrite(self):
-        store: dict = {}
-        setter, getter, _ = _make_tools(store)
-        setter.run(name="x", value="first")
-        setter.run(name="x", value="second")
-        result = getter.run(name="x")
+        SetVariableTool.run(name="x", value="first")
+        SetVariableTool.run(name="x", value="second")
+        result = GetVariableTool.run(name="x")
         assert result.data["value"] == "second"
 
     def test_set_none_value_explicit(self):
         """Setting value=None explicitly should work."""
-        store: dict = {}
-        setter, getter, _ = _make_tools(store)
-        result = setter.run(name="x", value=None)
+        result = SetVariableTool.run(name="x", value=None)
         assert result.success is True
-        r2 = getter.run(name="x")
+        r2 = GetVariableTool.run(name="x")
         assert r2.data["value"] is None
         assert r2.data["found"] is True
 
@@ -63,39 +62,32 @@ class TestSetVariableTool:
 
 class TestGetVariableTool:
     def test_get_existing(self):
-        store: dict = {}
-        setter, getter, _ = _make_tools(store)
-        setter.run(name="color", value="blue")
-        result = getter.run(name="color")
+        SetVariableTool.run(name="color", value="blue")
+        result = GetVariableTool.run(name="color")
         assert result.success is True
         assert result.data["value"] == "blue"
         assert result.data["found"] is True
 
     def test_get_missing_returns_default_none(self):
-        _, getter, _ = _make_tools()
-        result = getter.run(name="nonexistent")
+        result = GetVariableTool.run(name="nonexistent")
         assert result.success is True
         assert result.data["value"] is None
         assert result.data["found"] is False
 
     def test_get_missing_with_custom_default(self):
-        _, getter, _ = _make_tools()
-        result = getter.run(name="nonexistent", default="fallback")
+        result = GetVariableTool.run(name="nonexistent", default="fallback")
         assert result.success is True
         assert result.data["value"] == "fallback"
         assert result.data["found"] is False
 
     def test_get_missing_name(self):
-        _, getter, _ = _make_tools()
-        result = getter.run(name="")
+        result = GetVariableTool.run(name="")
         assert result.success is False
 
     def test_get_does_not_store_default(self):
         """Getting with a default should not persist the default."""
-        store: dict = {}
-        _, getter, _ = _make_tools(store)
-        getter.run(name="k", default="val")
-        assert "k" not in store
+        GetVariableTool.run(name="k", default="val")
+        assert "k" not in get_store()
 
 
 # --- ListVariablesTool ---
@@ -103,36 +95,29 @@ class TestGetVariableTool:
 
 class TestListVariablesTool:
     def test_list_empty_store(self):
-        _, _, lister = _make_tools()
-        result = lister.run()
+        result = ListVariablesTool.run()
         assert result.success is True
         assert result.data["names"] == []
         assert result.data["count"] == 0
 
     def test_list_all_variables(self):
-        store: dict = {}
-        setter, _, lister = _make_tools(store)
-        setter.run(name="b", value="2")
-        setter.run(name="a", value="1")
-        result = lister.run()
+        SetVariableTool.run(name="b", value="2")
+        SetVariableTool.run(name="a", value="1")
+        result = ListVariablesTool.run()
         assert result.data["names"] == ["a", "b"]
         assert result.data["count"] == 2
 
     def test_list_with_prefix(self):
-        store: dict = {}
-        setter, _, lister = _make_tools(store)
-        setter.run(name="user.name", value="Alice")
-        setter.run(name="user.age", value="30")
-        setter.run(name="system.version", value="1.0")
-        result = lister.run(prefix="user.")
+        SetVariableTool.run(name="user.name", value="Alice")
+        SetVariableTool.run(name="user.age", value="30")
+        SetVariableTool.run(name="system.version", value="1.0")
+        result = ListVariablesTool.run(prefix="user.")
         assert result.data["names"] == ["user.age", "user.name"]
         assert result.data["count"] == 2
 
     def test_list_prefix_no_match(self):
-        store: dict = {}
-        setter, _, lister = _make_tools(store)
-        setter.run(name="foo", value="bar")
-        result = lister.run(prefix="zzz")
+        SetVariableTool.run(name="foo", value="bar")
+        result = ListVariablesTool.run(prefix="zzz")
         assert result.data["names"] == []
         assert result.data["count"] == 0
 
@@ -141,29 +126,24 @@ class TestListVariablesTool:
 
 
 class TestStoreIsolation:
-    def test_injected_stores_are_independent(self):
-        store_a: dict = {}
-        store_b: dict = {}
-        setter_a = SetVariableTool(store=store_a)
-        setter_b = SetVariableTool(store=store_b)
-        getter_a = GetVariableTool(store=store_a)
-        getter_b = GetVariableTool(store=store_b)
+    def test_shared_module_store(self):
+        """All tools share the same module-level store."""
+        SetVariableTool.run(name="x", value="from_set")
+        assert GetVariableTool.run(name="x").data["value"] == "from_set"
+        assert "x" in ListVariablesTool.run().data["names"]
 
-        setter_a.run(name="x", value="from_a")
-        setter_b.run(name="x", value="from_b")
+    def test_clear_store_resets(self):
+        """clear_store() empties the shared store."""
+        SetVariableTool.run(name="a", value="1")
+        clear_store()
+        result = GetVariableTool.run(name="a")
+        assert result.data["found"] is False
 
-        assert getter_a.run(name="x").data["value"] == "from_a"
-        assert getter_b.run(name="x").data["value"] == "from_b"
-
-    def test_shared_store_across_tools(self):
-        store: dict = {}
-        setter = SetVariableTool(store=store)
-        getter = GetVariableTool(store=store)
-        lister = ListVariablesTool(store=store)
-
-        setter.run(name="key", value="val")
-        assert getter.run(name="key").data["value"] == "val"
-        assert "key" in lister.run().data["names"]
+    def test_get_store_returns_internal_dict(self):
+        """get_store() provides direct access to the underlying dict."""
+        SetVariableTool.run(name="key", value="val")
+        store = get_store()
+        assert store["key"] == "val"
 
 
 # --- Tool metadata ---
@@ -171,17 +151,13 @@ class TestStoreIsolation:
 
 class TestMemoryToolMetadata:
     def test_set_tool_info(self):
-        setter = SetVariableTool(store={})
-        assert setter.name() == "set_variable"
-        assert setter.version() == "1.0.0"
-        info = setter.info()
+        assert SetVariableTool.name() == "set_variable"
+        assert SetVariableTool.version() == "1.0.0"
+        info = SetVariableTool.info()
         assert info.name == "set_variable"
-        assert info.is_local is True
 
     def test_get_tool_info(self):
-        getter = GetVariableTool(store={})
-        assert getter.name() == "get_variable"
+        assert GetVariableTool.name() == "get_variable"
 
     def test_list_tool_info(self):
-        lister = ListVariablesTool(store={})
-        assert lister.name() == "list_variables"
+        assert ListVariablesTool.name() == "list_variables"

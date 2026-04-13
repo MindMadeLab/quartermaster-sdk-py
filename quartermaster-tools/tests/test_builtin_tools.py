@@ -21,19 +21,15 @@ class TestReadFileTool:
     """Tests for ReadFileTool."""
 
     def test_name_and_version(self) -> None:
-        tool = ReadFileTool()
-        assert tool.name() == "read_file"
-        assert tool.version() == "1.0.0"
+        assert ReadFileTool.name() == "read_file"
+        assert ReadFileTool.version() == "1.0.0"
 
     def test_info_returns_descriptor(self) -> None:
-        tool = ReadFileTool()
-        info = tool.info()
+        info = ReadFileTool.info()
         assert info.name == "read_file"
-        assert info.is_local is True
 
     def test_parameters_defined(self) -> None:
-        tool = ReadFileTool()
-        params = tool.parameters()
+        params = ReadFileTool.parameters()
         names = [p.name for p in params]
         assert "path" in names
         assert "encoding" in names
@@ -42,22 +38,19 @@ class TestReadFileTool:
         file = tmp_path / "test.txt"
         file.write_text("hello world", encoding="utf-8")
 
-        tool = ReadFileTool()
-        result = tool.run(path=str(file))
+        result = ReadFileTool.run(path=str(file))
 
         assert result.success is True
         assert result.data["content"] == "hello world"
 
     def test_read_nonexistent_file(self) -> None:
-        tool = ReadFileTool()
-        result = tool.run(path="/tmp/nonexistent_file_abc123xyz.txt")
+        result = ReadFileTool.run(path="/tmp/nonexistent_file_abc123xyz.txt")
 
         assert result.success is False
         assert "not found" in result.error.lower()
 
     def test_read_directory_fails(self, tmp_path: str) -> None:
-        tool = ReadFileTool()
-        result = tool.run(path=str(tmp_path))
+        result = ReadFileTool.run(path=str(tmp_path))
 
         assert result.success is False
         assert "not a file" in result.error.lower()
@@ -66,23 +59,20 @@ class TestReadFileTool:
         file = tmp_path / "big.txt"
         file.write_text("x" * 100, encoding="utf-8")
 
-        tool = ReadFileTool(max_file_size=50)
-        result = tool.run(path=str(file))
+        result = ReadFileTool.run(path=str(file), max_file_size=50)
 
         assert result.success is False
         assert "too large" in result.error.lower()
 
     def test_blocked_path_etc_shadow(self) -> None:
-        tool = ReadFileTool()
-        result = tool.run(path="/etc/shadow")
+        result = ReadFileTool.run(path="/etc/shadow")
 
         # On macOS /etc/shadow doesn't exist; on Linux it's blocked.
         # Either way the result should be a failure.
         assert result.success is False
 
     def test_blocked_path_proc(self) -> None:
-        tool = ReadFileTool()
-        result = tool.run(path="/proc/cpuinfo")
+        result = ReadFileTool.run(path="/proc/cpuinfo")
 
         assert result.success is False
         assert "access denied" in result.error.lower()
@@ -95,8 +85,7 @@ class TestReadFileTool:
         outside_file = outside / "secret.txt"
         outside_file.write_text("secret", encoding="utf-8")
 
-        tool = ReadFileTool(allowed_base_dir=str(allowed))
-        result = tool.run(path=str(outside_file))
+        result = ReadFileTool.run(path=str(outside_file), allowed_base_dir=str(allowed))
 
         assert result.success is False
         assert "access denied" in result.error.lower()
@@ -107,22 +96,19 @@ class TestReadFileTool:
         inside_file = allowed / "ok.txt"
         inside_file.write_text("allowed content", encoding="utf-8")
 
-        tool = ReadFileTool(allowed_base_dir=str(allowed))
-        result = tool.run(path=str(inside_file))
+        result = ReadFileTool.run(path=str(inside_file), allowed_base_dir=str(allowed))
 
         assert result.success is True
         assert result.data["content"] == "allowed content"
 
     def test_missing_path_param(self) -> None:
-        tool = ReadFileTool()
-        result = tool.run()
+        result = ReadFileTool.run()
 
         assert result.success is False
         assert "required" in result.error.lower()
 
     def test_safe_run_validates_params(self) -> None:
-        tool = ReadFileTool()
-        result = tool.safe_run()  # missing required 'path'
+        result = ReadFileTool.safe_run()  # missing required 'path'
 
         assert result.success is False
 
@@ -136,20 +122,17 @@ class TestWriteFileTool:
     """Tests for WriteFileTool."""
 
     def test_name_and_version(self) -> None:
-        tool = WriteFileTool()
-        assert tool.name() == "write_file"
-        assert tool.version() == "1.0.0"
+        assert WriteFileTool.name() == "write_file"
+        assert WriteFileTool.version() == "1.0.0"
 
     def test_info_returns_descriptor(self) -> None:
-        tool = WriteFileTool()
-        info = tool.info()
+        info = WriteFileTool.info()
         assert info.name == "write_file"
 
     def test_write_new_file(self, tmp_path: str) -> None:
         file = tmp_path / "output.txt"
 
-        tool = WriteFileTool()
-        result = tool.run(path=str(file), content="hello")
+        result = WriteFileTool.run(path=str(file), content="hello")
 
         assert result.success is True
         assert file.read_text(encoding="utf-8") == "hello"
@@ -159,8 +142,7 @@ class TestWriteFileTool:
         file = tmp_path / "output.txt"
         file.write_text("old content", encoding="utf-8")
 
-        tool = WriteFileTool()
-        result = tool.run(path=str(file), content="new content")
+        result = WriteFileTool.run(path=str(file), content="new content")
 
         assert result.success is True
         assert file.read_text(encoding="utf-8") == "new content"
@@ -169,8 +151,7 @@ class TestWriteFileTool:
         file = tmp_path / "output.txt"
         file.write_text("line1\n", encoding="utf-8")
 
-        tool = WriteFileTool()
-        result = tool.run(path=str(file), content="line2\n", append=True)
+        result = WriteFileTool.run(path=str(file), content="line2\n", append=True)
 
         assert result.success is True
         assert file.read_text(encoding="utf-8") == "line1\nline2\n"
@@ -179,8 +160,7 @@ class TestWriteFileTool:
     def test_creates_parent_directories(self, tmp_path: str) -> None:
         file = tmp_path / "a" / "b" / "c" / "deep.txt"
 
-        tool = WriteFileTool(create_dirs=True)
-        result = tool.run(path=str(file), content="deep")
+        result = WriteFileTool.run(path=str(file), content="deep", create_dirs=True)
 
         assert result.success is True
         assert file.read_text(encoding="utf-8") == "deep"
@@ -188,15 +168,13 @@ class TestWriteFileTool:
     def test_content_too_large(self, tmp_path: str) -> None:
         file = tmp_path / "big.txt"
 
-        tool = WriteFileTool(max_content_size=10)
-        result = tool.run(path=str(file), content="x" * 100)
+        result = WriteFileTool.run(path=str(file), content="x" * 100, max_content_size=10)
 
         assert result.success is False
         assert "too large" in result.error.lower()
 
     def test_blocked_path(self) -> None:
-        tool = WriteFileTool()
-        result = tool.run(path="/etc/evil.conf", content="bad")
+        result = WriteFileTool.run(path="/etc/evil.conf", content="bad")
 
         # On macOS /etc -> /private/etc, both are blocked. Result is always failure.
         assert result.success is False
@@ -206,15 +184,13 @@ class TestWriteFileTool:
         allowed.mkdir()
         outside_file = tmp_path / "outside.txt"
 
-        tool = WriteFileTool(allowed_base_dir=str(allowed))
-        result = tool.run(path=str(outside_file), content="nope")
+        result = WriteFileTool.run(path=str(outside_file), content="nope", allowed_base_dir=str(allowed))
 
         assert result.success is False
         assert "access denied" in result.error.lower()
 
     def test_missing_path_param(self) -> None:
-        tool = WriteFileTool()
-        result = tool.run(content="hello")
+        result = WriteFileTool.run(content="hello")
 
         assert result.success is False
         assert "required" in result.error.lower()
@@ -222,8 +198,7 @@ class TestWriteFileTool:
     def test_bytes_written_reported(self, tmp_path: str) -> None:
         file = tmp_path / "out.txt"
 
-        tool = WriteFileTool()
-        result = tool.run(path=str(file), content="abc")
+        result = WriteFileTool.run(path=str(file), content="abc")
 
         assert result.success is True
         assert result.data["bytes_written"] == 3
@@ -238,19 +213,15 @@ class TestWebRequestTool:
     """Tests for WebRequestTool."""
 
     def test_name_and_version(self) -> None:
-        tool = WebRequestTool()
-        assert tool.name() == "web_request"
-        assert tool.version() == "1.0.0"
+        assert WebRequestTool.name() == "web_request"
+        assert WebRequestTool.version() == "1.0.0"
 
     def test_info_returns_descriptor(self) -> None:
-        tool = WebRequestTool()
-        info = tool.info()
+        info = WebRequestTool.info()
         assert info.name == "web_request"
-        assert info.is_local is False
 
     def test_parameters_defined(self) -> None:
-        tool = WebRequestTool()
-        params = tool.parameters()
+        params = WebRequestTool.parameters()
         names = [p.name for p in params]
         assert "url" in names
         assert "method" in names
@@ -258,15 +229,13 @@ class TestWebRequestTool:
         assert "body" in names
 
     def test_missing_url(self) -> None:
-        tool = WebRequestTool()
-        result = tool.run()
+        result = WebRequestTool.run()
 
         assert result.success is False
         assert "required" in result.error.lower()
 
     def test_unsupported_method(self) -> None:
-        tool = WebRequestTool()
-        result = tool.run(url="https://example.com", method="OPTIONS")
+        result = WebRequestTool.run(url="https://example.com", method="OPTIONS")
 
         assert result.success is False
         assert "unsupported" in result.error.lower()
@@ -308,8 +277,7 @@ class TestWebRequestTool:
         import sys
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = WebRequestTool()
-            result = tool.run(url="https://example.com/api")
+            result = WebRequestTool.run(url="https://example.com/api")
 
             assert result.success is True
             assert result.data["status_code"] == 200
@@ -331,8 +299,7 @@ class TestWebRequestTool:
         import sys
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = WebRequestTool()
-            result = tool.run(
+            result = WebRequestTool.run(
                 url="https://example.com/api",
                 method="POST",
                 body='{"data": 1}',
@@ -356,8 +323,7 @@ class TestWebRequestTool:
         import sys
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = WebRequestTool()
-            result = tool.run(url="https://example.com/slow")
+            result = WebRequestTool.run(url="https://example.com/slow")
 
             assert result.success is False
             assert "timed out" in result.error.lower()
@@ -377,8 +343,7 @@ class TestWebRequestTool:
         import sys
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = WebRequestTool(max_response_size=100)
-            result = tool.run(url="https://example.com")
+            result = WebRequestTool.run(url="https://example.com", max_response_size=100)
 
             assert result.success is False
             assert "too large" in result.error.lower()
@@ -392,8 +357,7 @@ class TestWebRequestTool:
         httpx_mod = sys.modules.get("httpx")
         sys.modules["httpx"] = None  # type: ignore[assignment]
         try:
-            tool = WebRequestTool()
-            result = tool.run(url="https://example.com")
+            result = WebRequestTool.run(url="https://example.com")
             assert result.success is False
             assert "httpx is required" in result.error
         finally:
@@ -415,9 +379,9 @@ class TestBuiltinRegistration:
         from quartermaster_tools.registry import ToolRegistry
 
         registry = ToolRegistry()
-        registry.register(ReadFileTool())
-        registry.register(WriteFileTool())
-        registry.register(WebRequestTool())
+        registry.register(ReadFileTool)
+        registry.register(WriteFileTool)
+        registry.register(WebRequestTool)
 
         assert len(registry) == 3
         assert "read_file" in registry
@@ -428,7 +392,7 @@ class TestBuiltinRegistration:
         from quartermaster_tools.registry import ToolRegistry
 
         registry = ToolRegistry()
-        registry.register(ReadFileTool())
+        registry.register(ReadFileTool)
 
         schemas = registry.to_json_schema()
         assert len(schemas) == 1
@@ -438,6 +402,6 @@ class TestBuiltinRegistration:
     def test_imports_from_top_level(self) -> None:
         from quartermaster_tools import ReadFileTool, WriteFileTool, WebRequestTool
 
-        assert ReadFileTool().name() == "read_file"
-        assert WriteFileTool().name() == "write_file"
-        assert WebRequestTool().name() == "web_request"
+        assert ReadFileTool.name() == "read_file"
+        assert WriteFileTool.name() == "write_file"
+        assert WebRequestTool.name() == "web_request"

@@ -1,5 +1,5 @@
 """
-RedactPIITool: Redact PII from text with configurable strategies.
+redact_pii: Redact PII from text with configurable strategies.
 
 Strategies:
 - redact: Replace with type labels like <EMAIL>, <PHONE>
@@ -12,9 +12,8 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from quartermaster_tools.base import AbstractTool
 from quartermaster_tools.builtin.privacy.detect import detect_pii
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 # Labels for redaction
 _REDACT_LABELS: dict[str, str] = {
@@ -108,72 +107,36 @@ def redact_text(
     return result, found
 
 
-class RedactPIITool(AbstractTool):
-    """Redact PII from text with configurable strategy."""
+@tool()
+def redact_pii(text: str, strategy: str = "redact", entities: list = None) -> dict:
+    """Redact PII from text.
 
-    def name(self) -> str:
-        return "redact_pii"
+    Removes or masks personally identifiable information from text.
+    Supports three strategies: redact (replace with labels),
+    mask (partial masking), and hash (SHA-256 based replacement).
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        text: Text from which to redact PII.
+        strategy: Redaction strategy: 'redact', 'mask', or 'hash'.
+        entities: Optional list of entity types to redact.
+    """
+    if not text:
+        raise ValueError("Parameter 'text' is required")
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="text",
-                description="Text from which to redact PII.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="strategy",
-                description="Redaction strategy: 'redact', 'mask', or 'hash'.",
-                type="string",
-                required=False,
-                default="redact",
-            ),
-            ToolParameter(
-                name="entities",
-                description="Optional list of entity types to redact.",
-                type="array",
-                required=False,
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Redact PII from text.",
-            long_description=(
-                "Removes or masks personally identifiable information from text. "
-                "Supports three strategies: redact (replace with labels), "
-                "mask (partial masking), and hash (SHA-256 based replacement)."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
+    if strategy not in ("redact", "mask", "hash"):
+        raise ValueError(
+            f"Invalid strategy: {strategy!r}. Must be 'redact', 'mask', or 'hash'."
         )
 
-    def run(self, **kwargs: Any) -> ToolResult:
-        text: str = kwargs.get("text", "")
-        if not text:
-            return ToolResult(success=False, error="Parameter 'text' is required")
+    entities_filter: list[str] | None = entities
+    redacted, found = redact_text(text, strategy, entities_filter)
 
-        strategy: str = kwargs.get("strategy", "redact")
-        if strategy not in ("redact", "mask", "hash"):
-            return ToolResult(
-                success=False,
-                error=f"Invalid strategy: {strategy!r}. Must be 'redact', 'mask', or 'hash'.",
-            )
+    return {
+        "redacted_text": redacted,
+        "entities_found": len(found),
+        "entities": found,
+    }
 
-        entities_filter: list[str] | None = kwargs.get("entities")
-        redacted, found = redact_text(text, strategy, entities_filter)
 
-        return ToolResult(
-            success=True,
-            data={
-                "redacted_text": redacted,
-                "entities_found": len(found),
-                "entities": found,
-            },
-        )
+# Backward-compatible alias
+RedactPIITool = redact_pii

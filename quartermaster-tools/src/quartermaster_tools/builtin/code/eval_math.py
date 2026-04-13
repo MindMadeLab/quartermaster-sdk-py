@@ -13,8 +13,7 @@ import math
 import operator
 from typing import Any
 
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 
 # Maximum expression length in characters.
@@ -73,47 +72,29 @@ def _get_ast_depth(node: ast.AST, current: int = 0) -> int:
 
 
 def _safe_eval_node(node: ast.AST) -> Any:
-    """Recursively evaluate an AST node in a safe manner.
-
-    Only supports numeric literals, arithmetic, comparisons,
-    and a whitelist of safe functions.
-
-    Args:
-        node: An AST node to evaluate.
-
-    Returns:
-        The computed value.
-
-    Raises:
-        ValueError: If the node type is not supported.
-    """
-    # Numeric and string literals
+    """Recursively evaluate an AST node in a safe manner."""
     if isinstance(node, ast.Constant):
         if isinstance(node.value, (int, float, complex)):
             return node.value
         raise ValueError(f"Unsupported constant type: {type(node.value).__name__}")
 
-    # Unary operations: -x, +x
     if isinstance(node, ast.UnaryOp):
         op_func = _UNARY_OPS.get(type(node.op))
         if op_func is None:
             raise ValueError(f"Unsupported unary operator: {type(node.op).__name__}")
         return op_func(_safe_eval_node(node.operand))
 
-    # Binary operations: x + y, x ** y, etc.
     if isinstance(node, ast.BinOp):
         op_func = _BINARY_OPS.get(type(node.op))
         if op_func is None:
             raise ValueError(f"Unsupported binary operator: {type(node.op).__name__}")
         left = _safe_eval_node(node.left)
         right = _safe_eval_node(node.right)
-        # Prevent exponentiation bombs
         if isinstance(node.op, ast.Pow):
             if isinstance(right, (int, float)) and abs(right) > 10_000:
                 raise ValueError(f"Exponent too large: {right}")
         return op_func(left, right)
 
-    # Comparison operations: x < y, x == y, etc.
     if isinstance(node, ast.Compare):
         left = _safe_eval_node(node.left)
         for op, comparator in zip(node.ops, node.comparators):
@@ -126,7 +107,6 @@ def _safe_eval_node(node: ast.AST) -> Any:
             left = right
         return True
 
-    # Function calls: abs(x), sqrt(x), min(x, y), etc.
     if isinstance(node, ast.Call):
         if not isinstance(node.func, ast.Name):
             raise ValueError("Only simple function calls are supported (e.g., abs, sqrt)")
@@ -142,11 +122,9 @@ def _safe_eval_node(node: ast.AST) -> Any:
             raise ValueError("Keyword arguments are not supported")
         return func(*args)
 
-    # Tuple / list for multi-arg functions like min(1, 2, 3)
     if isinstance(node, ast.Tuple) or isinstance(node, ast.List):
         return [_safe_eval_node(elt) for elt in node.elts]
 
-    # Name references — only allow known constants
     if isinstance(node, ast.Name):
         name_constants: dict[str, Any] = {
             "pi": math.pi,
@@ -161,7 +139,6 @@ def _safe_eval_node(node: ast.AST) -> Any:
             f"Unknown name: {node.id!r}. Variables are not supported."
         )
 
-    # Expression wrapper
     if isinstance(node, ast.Expression):
         return _safe_eval_node(node.body)
 
@@ -192,88 +169,27 @@ def safe_eval(expression: str) -> Any:
     return _safe_eval_node(tree)
 
 
-class EvalMathTool(AbstractTool):
+@tool()
+def eval_math(expression: str) -> dict:
     """Safely evaluate mathematical expressions.
 
-    Uses AST parsing — never calls exec() or eval() on arbitrary code.
-    Supports:
-    - Arithmetic: +, -, *, /, //, %, **
-    - Comparisons: ==, !=, <, <=, >, >=
-    - Functions: abs, round, min, max, sqrt, int, float
-    - Constants: pi, e, inf
+    Uses AST parsing -- never calls exec() or eval() on arbitrary code.
+    Supports arithmetic (+, -, *, /, //, %, **), comparisons (==, !=, <, <=, >, >=),
+    functions (abs, round, min, max, sqrt, int, float), and constants (pi, e, inf).
+
+    Args:
+        expression: Mathematical expression to evaluate.
     """
-
-    def name(self) -> str:
-        """Return the tool name."""
-        return "eval_math"
-
-    def version(self) -> str:
-        """Return the tool version."""
-        return "1.0.0"
-
-    def parameters(self) -> list[ToolParameter]:
-        """Return parameter definitions for the tool."""
-        return [
-            ToolParameter(
-                name="expression",
-                description="Mathematical expression to evaluate.",
-                type="string",
-                required=True,
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        """Return metadata describing this tool."""
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Safely evaluate mathematical expressions.",
-            long_description=(
-                "Evaluates mathematical expressions using AST parsing. "
-                "Supports arithmetic, comparisons, and safe built-in functions "
-                "(abs, round, min, max, sqrt). Never uses exec/eval."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
+    if not expression or not expression.strip():
+        raise ValueError("Parameter 'expression' is required and must not be empty")
+    if len(expression) > MAX_EXPRESSION_LENGTH:
+        raise ValueError(
+            f"Expression too long: {len(expression)} chars (limit: {MAX_EXPRESSION_LENGTH})"
         )
 
-    def evaluate(self, expression: str) -> ToolResult:
-        """Evaluate a mathematical expression.
+    result = safe_eval(expression)
+    return {"result": result, "expression": expression}
 
-        Args:
-            expression: Mathematical expression string.
 
-        Returns:
-            ToolResult with the computed result in data["result"].
-        """
-        return self.safe_run(expression=expression)
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        """Execute the math evaluation.
-
-        Args:
-            expression: The expression to evaluate.
-
-        Returns:
-            ToolResult with computed value or error.
-        """
-        expression: str = kwargs.get("expression", "")
-        if not expression or not expression.strip():
-            return ToolResult(success=False, error="Parameter 'expression' is required and must not be empty")
-        if len(expression) > MAX_EXPRESSION_LENGTH:
-            return ToolResult(
-                success=False,
-                error=f"Expression too long: {len(expression)} chars (limit: {MAX_EXPRESSION_LENGTH})",
-            )
-
-        try:
-            result = safe_eval(expression)
-        except ValueError as e:
-            return ToolResult(success=False, error=str(e))
-        except (TypeError, ArithmeticError, OverflowError) as e:
-            return ToolResult(success=False, error=f"Evaluation error: {e}")
-
-        return ToolResult(
-            success=True,
-            data={"result": result, "expression": expression},
-        )
+# Backward-compatible alias
+EvalMathTool = eval_math

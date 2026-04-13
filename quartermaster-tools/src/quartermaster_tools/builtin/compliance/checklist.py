@@ -1,13 +1,10 @@
 """
-ComplianceChecklistTool: Generate EU AI Act compliance checklists.
+compliance_checklist: Generate EU AI Act compliance checklists.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 _CHECKLISTS: dict[str, list[dict[str, str]]] = {
     "UNACCEPTABLE": [
@@ -156,66 +153,36 @@ _CHECKLISTS: dict[str, list[dict[str, str]]] = {
 }
 
 
-class ComplianceChecklistTool(AbstractTool):
-    """Generate EU AI Act compliance checklist for a given risk level."""
+@tool()
+def compliance_checklist(risk_level: str, system_type: str = "") -> dict:
+    """Generate EU AI Act compliance checklist.
 
-    def name(self) -> str:
-        return "compliance_checklist"
+    Generates a comprehensive compliance checklist based on
+    EU AI Act requirements for the specified risk level.
+    Each checklist item references the relevant article.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        risk_level: Risk level: UNACCEPTABLE, HIGH, LIMITED, or MINIMAL.
+        system_type: Optional system type for context.
+    """
+    risk_level = risk_level.upper() if risk_level else ""
+    if not risk_level:
+        raise ValueError("Parameter 'risk_level' is required")
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="risk_level",
-                description="Risk level: UNACCEPTABLE, HIGH, LIMITED, or MINIMAL.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="system_type",
-                description="Optional system type for context.",
-                type="string",
-                required=False,
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Generate EU AI Act compliance checklist.",
-            long_description=(
-                "Generates a comprehensive compliance checklist based on "
-                "EU AI Act requirements for the specified risk level. "
-                "Each checklist item references the relevant article."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
+    valid_levels = {"UNACCEPTABLE", "HIGH", "LIMITED", "MINIMAL"}
+    if risk_level not in valid_levels:
+        raise ValueError(
+            f"Invalid risk_level: {risk_level!r}. Must be one of {sorted(valid_levels)}."
         )
 
-    def run(self, **kwargs: Any) -> ToolResult:
-        risk_level: str = kwargs.get("risk_level", "").upper()
-        if not risk_level:
-            return ToolResult(
-                success=False, error="Parameter 'risk_level' is required"
-            )
+    checklist = [item.copy() for item in _CHECKLISTS[risk_level]]
 
-        valid_levels = {"UNACCEPTABLE", "HIGH", "LIMITED", "MINIMAL"}
-        if risk_level not in valid_levels:
-            return ToolResult(
-                success=False,
-                error=f"Invalid risk_level: {risk_level!r}. Must be one of {sorted(valid_levels)}.",
-            )
+    return {
+        "risk_level": risk_level,
+        "checklist": checklist,
+        "total_items": len(checklist),
+    }
 
-        checklist = [item.copy() for item in _CHECKLISTS[risk_level]]
 
-        return ToolResult(
-            success=True,
-            data={
-                "risk_level": risk_level,
-                "checklist": checklist,
-                "total_items": len(checklist),
-            },
-        )
+# Backward-compatible alias
+ComplianceChecklistTool = compliance_checklist

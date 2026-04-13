@@ -22,7 +22,7 @@ from quartermaster_tools.builtin.compliance.risk_classifier import RiskClassifie
 
 class TestRiskClassifierTool:
     def setup_method(self) -> None:
-        self.tool = RiskClassifierTool()
+        self.tool = RiskClassifierTool
 
     def test_unacceptable_subliminal(self) -> None:
         result = self.tool.run(
@@ -127,7 +127,7 @@ class TestRiskClassifierTool:
 
 class TestAuditLogTool:
     def setup_method(self) -> None:
-        self.tool = AuditLogTool()
+        self.tool = AuditLogTool
         self._tmpfile = tempfile.NamedTemporaryFile(
             mode="w", suffix=".jsonl", delete=False
         )
@@ -206,8 +206,8 @@ class TestAuditLogTool:
 
 class TestReadAuditLogTool:
     def setup_method(self) -> None:
-        self.write_tool = AuditLogTool()
-        self.read_tool = ReadAuditLogTool()
+        self.write_tool = AuditLogTool
+        self.read_tool = ReadAuditLogTool
         self._tmpfile = tempfile.NamedTemporaryFile(
             mode="w", suffix=".jsonl", delete=False
         )
@@ -306,7 +306,7 @@ class TestReadAuditLogTool:
 
 class TestComplianceChecklistTool:
     def setup_method(self) -> None:
-        self.tool = ComplianceChecklistTool()
+        self.tool = ComplianceChecklistTool
 
     def test_high_checklist(self) -> None:
         result = self.tool.run(risk_level="HIGH")
