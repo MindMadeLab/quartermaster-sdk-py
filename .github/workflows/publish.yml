@@ -2,11 +2,19 @@ name: Publish to PyPI
 
 on:
   push:
-    tags:
-      - "v*"          # Trigger on version tags: v0.1.0, v1.0.0, etc.
+    branches: [master, main]   # Auto-publish on every merge to master
 
-  workflow_dispatch:    # Allow manual trigger from GitHub Actions UI
+  workflow_dispatch:            # Manual trigger with version bump control
     inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
       dry_run:
         description: "Dry run (build only, do not upload)"
         required: false
@@ -17,8 +25,8 @@ on:
           - "true"
 
 permissions:
-  contents: read
-  id-token: write      # Required for PyPI trusted publishing
+  contents: write              # Needed to push version commits and tags
+  id-token: write              # Required for PyPI trusted publishing
 
 jobs:
   # -----------------------------------------------------------------------
@@ -58,10 +66,127 @@ jobs:
         run: pytest -v --tb=short
 
   # -----------------------------------------------------------------------
-  # Step 2: Build all packages
+  # Step 2: Bump version in all packages, commit, and tag
+  # -----------------------------------------------------------------------
+  version:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.bump.outputs.new_version }}
+      new_tag: ${{ steps.bump.outputs.new_tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0         # Full history for tag lookup
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Determine version bump type
+        id: bump_type
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "bump=${{ github.event.inputs.bump }}" >> "$GITHUB_OUTPUT"
+          else
+            # Auto-detect from commit messages on push to master
+            # Use "minor" if any commit contains [minor] or [feature]
+            # Use "major" if any commit contains [major] or [breaking]
+            # Default to "patch"
+            COMMITS=$(git log --format=%s $(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~10")..HEAD 2>/dev/null || echo "")
+            if echo "$COMMITS" | grep -qiE '\[(major|breaking)\]'; then
+              echo "bump=major" >> "$GITHUB_OUTPUT"
+            elif echo "$COMMITS" | grep -qiE '\[(minor|feature)\]'; then
+              echo "bump=minor" >> "$GITHUB_OUTPUT"
+            else
+              echo "bump=patch" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Bump version across all packages
+        id: bump
+        run: |
+          BUMP_TYPE="${{ steps.bump_type.outputs.bump }}"
+
+          # Get current version from the last git tag, or default to 0.1.0
+          CURRENT=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.1.0")
+          echo "Current version: $CURRENT"
+
+          # Parse semver
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          # Bump
+          case "$BUMP_TYPE" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version: $NEW_VERSION ($BUMP_TYPE bump)"
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "new_tag=v$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+          # Update version in all pyproject.toml files
+          PACKAGES=(
+            quartermaster-providers
+            quartermaster-graph
+            quartermaster-tools
+            quartermaster-nodes
+            quartermaster-engine
+            quartermaster-mcp-client
+            quartermaster-code-runner
+            quartermaster-sdk
+          )
+
+          for pkg in "${PACKAGES[@]}"; do
+            TOML="$pkg/pyproject.toml"
+            if [ -f "$TOML" ]; then
+              sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" "$TOML"
+              echo "  Updated $TOML -> $NEW_VERSION"
+            fi
+          done
+
+          # Update SDK __init__.py
+          sed -i "s/^__version__ = \".*\"/__version__ = \"$NEW_VERSION\"/" \
+            quartermaster-sdk/src/quartermaster_sdk/__init__.py
+
+          # Update cross-package dependency pins (>=X.Y.Z)
+          for pkg in "${PACKAGES[@]}"; do
+            TOML="$pkg/pyproject.toml"
+            if [ -f "$TOML" ]; then
+              for dep in quartermaster-graph quartermaster-providers quartermaster-tools quartermaster-nodes quartermaster-engine quartermaster-mcp-client quartermaster-code-runner; do
+                sed -i "s/\"${dep}>=.*\"/\"${dep}>=${NEW_VERSION}\"/" "$TOML"
+              done
+            fi
+          done
+
+      - name: Commit and tag
+        run: |
+          NEW_VERSION="${{ steps.bump.outputs.new_version }}"
+          NEW_TAG="${{ steps.bump.outputs.new_tag }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git diff --cached --quiet && echo "No version changes to commit" && exit 0
+
+          git commit -m "Release $NEW_TAG
+
+          Automated version bump to $NEW_VERSION across all packages."
+
+          git tag -a "$NEW_TAG" -m "Release $NEW_VERSION"
+          git push origin HEAD --follow-tags
+
+  # -----------------------------------------------------------------------
+  # Step 3: Build all packages with the new version
   # -----------------------------------------------------------------------
   build:
-    needs: test
+    needs: version
     runs-on: ubuntu-latest
 
     strategy:
@@ -79,6 +204,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.new_tag }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -99,16 +226,14 @@ jobs:
           path: ${{ matrix.package }}/dist/
 
   # -----------------------------------------------------------------------
-  # Step 3: Publish all packages to PyPI (in dependency order)
+  # Step 4: Publish all packages to PyPI in dependency order
   # -----------------------------------------------------------------------
   publish:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'false')
+    needs: [version, build]
+    if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true') }}
     runs-on: ubuntu-latest
-    environment: pypi       # Configure this environment in GitHub repo settings
+    environment: pypi
 
-    # Publish in dependency order: providers first (no deps), then graph,
-    # tools, nodes, engine, standalone packages, and SDK last.
     steps:
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -123,52 +248,67 @@ jobs:
       - name: Install twine
         run: python -m pip install --upgrade twine
 
-      # Publish in dependency order so each package can resolve its deps
+      # Publish in dependency order: leaf packages first, SDK last
       - name: Publish quartermaster-providers
-        run: twine upload all-dists/dist-quartermaster-providers/*
+        run: twine upload all-dists/dist-quartermaster-providers/* --skip-existing
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Publish quartermaster-graph
-        run: twine upload all-dists/dist-quartermaster-graph/*
+        run: twine upload all-dists/dist-quartermaster-graph/* --skip-existing
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Publish quartermaster-tools
-        run: twine upload all-dists/dist-quartermaster-tools/*
+        run: twine upload all-dists/dist-quartermaster-tools/* --skip-existing
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Publish quartermaster-nodes
-        run: twine upload all-dists/dist-quartermaster-nodes/*
+        run: twine upload all-dists/dist-quartermaster-nodes/* --skip-existing
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Publish quartermaster-engine
-        run: twine upload all-dists/dist-quartermaster-engine/*
+        run: twine upload all-dists/dist-quartermaster-engine/* --skip-existing
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Publish quartermaster-mcp-client
-        run: twine upload all-dists/dist-quartermaster-mcp-client/*
+        run: twine upload all-dists/dist-quartermaster-mcp-client/* --skip-existing
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Publish quartermaster-code-runner
-        run: twine upload all-dists/dist-quartermaster-code-runner/*
+        run: twine upload all-dists/dist-quartermaster-code-runner/* --skip-existing
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
-      # SDK last — depends on all other packages being available
       - name: Publish quartermaster-sdk
-        run: twine upload all-dists/dist-quartermaster-sdk/*
+        run: twine upload all-dists/dist-quartermaster-sdk/* --skip-existing
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## Published v${{ needs.version.outputs.new_version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "All 8 packages published to PyPI:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- quartermaster-providers" >> "$GITHUB_STEP_SUMMARY"
+          echo "- quartermaster-graph" >> "$GITHUB_STEP_SUMMARY"
+          echo "- quartermaster-tools" >> "$GITHUB_STEP_SUMMARY"
+          echo "- quartermaster-nodes" >> "$GITHUB_STEP_SUMMARY"
+          echo "- quartermaster-engine" >> "$GITHUB_STEP_SUMMARY"
+          echo "- quartermaster-mcp-client" >> "$GITHUB_STEP_SUMMARY"
+          echo "- quartermaster-code-runner" >> "$GITHUB_STEP_SUMMARY"
+          echo "- quartermaster-sdk" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Install: \`pip install quartermaster-sdk==${{ needs.version.outputs.new_version }}\`" >> "$GITHUB_STEP_SUMMARY"
