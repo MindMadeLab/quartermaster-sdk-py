@@ -8,84 +8,77 @@ import os
 import shutil
 from typing import Any
 
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 from ._security import resolve_base_dir, validate_path
 
 
-class MoveFileTool(AbstractTool):
-    """Move or rename a file or directory."""
+@tool()
+def move_file(source: str, destination: str) -> dict:
+    """Move or rename a file or directory.
+
+    Args:
+        source: Source path.
+        destination: Destination path.
+    """
+    if not source:
+        return {"error": "Parameter 'source' is required"}
+    if not destination:
+        return {"error": "Parameter 'destination' is required"}
+
+    error, real_source = validate_path(source, None)
+    if error:
+        return {"error": error}
+
+    error, real_dest = validate_path(destination, None)
+    if error:
+        return {"error": error}
+
+    if not os.path.exists(real_source):
+        return {"error": f"Source not found: {source}"}
+
+    try:
+        shutil.move(real_source, real_dest)
+    except OSError as e:
+        return {"error": f"Move failed: {e}"}
+
+    return {"source": source, "destination": destination}
+
+
+# Backward-compatible class wrapper supporting allowed_base_dir constructor arg
+class MoveFileTool:
+    """Move or rename a file or directory.
+
+    Wraps the move_file function tool, adding optional allowed_base_dir
+    restriction for backward compatibility.
+    """
 
     def __init__(self, allowed_base_dir: str | None = None) -> None:
-        """Initialise the MoveFileTool.
-
-        Args:
-            allowed_base_dir: If set, both source and destination must be under this directory.
-        """
         self._allowed_base_dir = resolve_base_dir(allowed_base_dir)
+        self._tool = move_file
 
     def name(self) -> str:
-        """Return the tool name."""
-        return "move_file"
+        return self._tool.name()
 
     def version(self) -> str:
-        """Return the tool version."""
-        return "1.0.0"
+        return self._tool.version()
 
-    def parameters(self) -> list[ToolParameter]:
-        """Return parameter definitions."""
-        return [
-            ToolParameter(name="source", description="Source path.", type="string", required=True),
-            ToolParameter(name="destination", description="Destination path.", type="string", required=True),
-        ]
+    def parameters(self):
+        return self._tool.parameters()
 
-    def info(self) -> ToolDescriptor:
-        """Return tool metadata."""
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Move or rename a file or directory.",
-            long_description="Moves a file or directory from source to destination. Both paths are validated for security.",
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
+    def info(self):
+        return self._tool.info()
 
-    def run(self, **kwargs: Any) -> ToolResult:
-        """Move a file or directory.
-
-        Args:
-            source: Path to move from.
-            destination: Path to move to.
-
-        Returns:
-            ToolResult indicating success or failure.
-        """
-        source: str = kwargs.get("source", "")
-        destination: str = kwargs.get("destination", "")
-
-        if not source:
-            return ToolResult(success=False, error="Parameter 'source' is required")
-        if not destination:
-            return ToolResult(success=False, error="Parameter 'destination' is required")
-
-        error, real_source = validate_path(source, self._allowed_base_dir)
-        if error:
-            return ToolResult(success=False, error=error)
-
-        error, real_dest = validate_path(destination, self._allowed_base_dir)
-        if error:
-            return ToolResult(success=False, error=error)
-
-        if not os.path.exists(real_source):
-            return ToolResult(success=False, error=f"Source not found: {source}")
-
-        try:
-            shutil.move(real_source, real_dest)
-        except OSError as e:
-            return ToolResult(success=False, error=f"Move failed: {e}")
-
-        return ToolResult(
-            success=True,
-            data={"source": source, "destination": destination},
-        )
+    def run(self, **kwargs: Any):
+        from quartermaster_tools.types import ToolResult
+        source = kwargs.get("source", "")
+        destination = kwargs.get("destination", "")
+        if source:
+            error, _ = validate_path(source, self._allowed_base_dir)
+            if error:
+                return ToolResult(success=False, error=error)
+        if destination:
+            error, _ = validate_path(destination, self._allowed_base_dir)
+            if error:
+                return ToolResult(success=False, error=error)
+        return self._tool.run(**kwargs)

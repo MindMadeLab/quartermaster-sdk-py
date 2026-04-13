@@ -1,5 +1,5 @@
 """
-A2ADiscoverTool: Discover remote agent capabilities via the A2A protocol.
+a2a_discover: Discover remote agent capabilities via the A2A protocol.
 
 Fetches the Agent Card from a remote agent's well-known endpoint to learn
 about its name, skills, and capabilities.  Requires ``httpx``.
@@ -9,11 +9,9 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-from typing import Any
 from urllib.parse import urlparse
 
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 # Private/reserved IP networks that must not be accessed (SSRF protection)
 _BLOCKED_NETWORKS = [
@@ -72,101 +70,59 @@ def _validate_agent_url(url: str) -> str | None:
 DEFAULT_TIMEOUT = 30
 
 
-class A2ADiscoverTool(AbstractTool):
-    """Discover a remote A2A agent by fetching its Agent Card.
+@tool()
+def a2a_discover(agent_url: str) -> dict:
+    """Discover a remote A2A agent's capabilities.
 
-    Sends a GET request to ``{agent_url}/.well-known/agent.json`` and parses
-    the returned Agent Card JSON to extract the agent's name, description,
-    version, skills, and capabilities.
+    Fetches the Agent Card from a remote agent's
+    /.well-known/agent.json endpoint and returns the agent's
+    name, description, version, skills, and capabilities.
 
-    Requires httpx (``pip install quartermaster-tools[web]``).
+    Args:
+        agent_url: Base URL of the remote A2A agent (e.g. https://agent.example.com).
     """
+    if not agent_url:
+        raise ValueError("Parameter 'agent_url' is required")
 
-    def __init__(self, timeout: int = DEFAULT_TIMEOUT) -> None:
-        self._timeout = timeout
+    url_error = _validate_agent_url(agent_url)
+    if url_error:
+        raise ValueError(url_error)
 
-    def name(self) -> str:
-        return "a2a_discover"
-
-    def version(self) -> str:
-        return "1.0.0"
-
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="agent_url",
-                description="Base URL of the remote A2A agent (e.g. https://agent.example.com).",
-                type="string",
-                required=True,
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Discover a remote A2A agent's capabilities.",
-            long_description=(
-                "Fetches the Agent Card from a remote agent's "
-                "/.well-known/agent.json endpoint and returns the agent's "
-                "name, description, version, skills, and capabilities."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=False,
+    try:
+        import httpx
+    except ImportError:
+        raise ImportError(
+            "httpx is required for A2ADiscoverTool. "
+            "Install it with: pip install quartermaster-tools[web]"
         )
 
-    def run(self, **kwargs: Any) -> ToolResult:
-        agent_url: str = kwargs.get("agent_url", "")
-        if not agent_url:
-            return ToolResult(success=False, error="Parameter 'agent_url' is required")
+    card_url = agent_url.rstrip("/") + "/.well-known/agent.json"
 
-        url_error = _validate_agent_url(agent_url)
-        if url_error:
-            return ToolResult(success=False, error=url_error)
+    try:
+        with httpx.Client(timeout=DEFAULT_TIMEOUT, follow_redirects=True) as client:
+            response = client.get(card_url)
 
-        try:
-            import httpx
-        except ImportError:
-            return ToolResult(
-                success=False,
-                error=(
-                    "httpx is required for A2ADiscoverTool. "
-                    "Install it with: pip install quartermaster-tools[web]"
-                ),
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Agent card request failed with status {response.status_code}"
             )
 
-        card_url = agent_url.rstrip("/") + "/.well-known/agent.json"
+        card = response.json()
+        return {
+            "agent_name": card.get("name", ""),
+            "description": card.get("description", ""),
+            "skills": card.get("skills", []),
+            "capabilities": card.get("capabilities", {}),
+            "version": card.get("version", ""),
+        }
 
-        try:
-            with httpx.Client(timeout=self._timeout, follow_redirects=True) as client:
-                response = client.get(card_url)
+    except httpx.TimeoutException:
+        raise TimeoutError(f"Request timed out after {DEFAULT_TIMEOUT} seconds")
+    except httpx.ConnectError as e:
+        raise ConnectionError(f"Connection error: {e}")
+    except httpx.HTTPError as e:
+        raise RuntimeError(f"HTTP error: {e}")
 
-            if response.status_code != 200:
-                return ToolResult(
-                    success=False,
-                    error=f"Agent card request failed with status {response.status_code}",
-                )
 
-            card = response.json()
-            return ToolResult(
-                success=True,
-                data={
-                    "agent_name": card.get("name", ""),
-                    "description": card.get("description", ""),
-                    "skills": card.get("skills", []),
-                    "capabilities": card.get("capabilities", {}),
-                    "version": card.get("version", ""),
-                },
-            )
-
-        except httpx.TimeoutException:
-            return ToolResult(
-                success=False,
-                error=f"Request timed out after {self._timeout} seconds",
-            )
-        except httpx.ConnectError as e:
-            return ToolResult(success=False, error=f"Connection error: {e}")
-        except httpx.HTTPError as e:
-            return ToolResult(success=False, error=f"HTTP error: {e}")
-        except Exception as e:
-            return ToolResult(success=False, error=f"Unexpected error: {e}")
+# Backward-compatible alias
+A2ADiscoverTool = a2a_discover

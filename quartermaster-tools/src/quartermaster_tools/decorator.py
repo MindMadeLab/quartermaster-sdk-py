@@ -175,6 +175,9 @@ class FunctionTool(AbstractTool):
             if isinstance(result, ToolResult):
                 return result
             if isinstance(result, dict):
+                # Convention: a dict with only an "error" key signals failure
+                if "error" in result and len(result) == 1:
+                    return ToolResult(success=False, error=result["error"])
                 return ToolResult(success=True, data=result)
             return ToolResult(success=True, data={"result": result})
 

@@ -10,8 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 _COST_STORE: list[dict[str, Any]] = []
 
@@ -28,137 +27,109 @@ _PRICING: dict[str, tuple[float, float]] = {
 }
 
 
-class CostTrackerTool(AbstractTool):
-    """Track LLM API call costs."""
+@tool()
+def cost_tracker(
+    model: str,
+    input_tokens: int = None,
+    output_tokens: int = None,
+    provider: str = None,
+) -> dict:
+    """Track LLM API call costs.
 
-    def name(self) -> str:
-        return "cost_tracker"
+    Calculates and tracks costs for LLM API calls based on
+    model, token counts, and built-in pricing tables.
+    Accumulates costs for budget monitoring and reporting.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        model: Model name (e.g. 'gpt-4o', 'claude-3-5-sonnet').
+        input_tokens: Number of input tokens.
+        output_tokens: Number of output tokens.
+        provider: Optional provider name (e.g. 'openai', 'anthropic').
+    """
+    if not model:
+        raise ValueError("Parameter 'model' is required")
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="model",
-                description="Model name (e.g. 'gpt-4o', 'claude-3-5-sonnet').",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="input_tokens",
-                description="Number of input tokens.",
-                type="number",
-                required=True,
-            ),
-            ToolParameter(
-                name="output_tokens",
-                description="Number of output tokens.",
-                type="number",
-                required=True,
-            ),
-            ToolParameter(
-                name="provider",
-                description="Optional provider name (e.g. 'openai', 'anthropic').",
-                type="string",
-                required=False,
-                default=None,
-            ),
-        ]
+    if input_tokens is None:
+        raise ValueError("Parameter 'input_tokens' is required")
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Track LLM API call costs.",
-            long_description=(
-                "Calculates and tracks costs for LLM API calls based on "
-                "model, token counts, and built-in pricing tables. "
-                "Accumulates costs for budget monitoring and reporting."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
+    if output_tokens is None:
+        raise ValueError("Parameter 'output_tokens' is required")
 
-    def run(self, **kwargs: Any) -> ToolResult:
-        model: str = kwargs.get("model", "")
-        if not model:
-            return ToolResult(success=False, error="Parameter 'model' is required")
+    input_tokens = int(input_tokens)
+    output_tokens = int(output_tokens)
+    timestamp = datetime.now(timezone.utc).isoformat()
 
-        input_tokens = kwargs.get("input_tokens")
-        if input_tokens is None:
-            return ToolResult(success=False, error="Parameter 'input_tokens' is required")
+    warning: str | None = None
+    pricing = _PRICING.get(model)
+    if pricing is not None:
+        input_cost_per_m, output_cost_per_m = pricing
+        input_cost = (input_tokens / 1_000_000) * input_cost_per_m
+        output_cost = (output_tokens / 1_000_000) * output_cost_per_m
+    else:
+        input_cost = 0.0
+        output_cost = 0.0
+        warning = f"Unknown model '{model}': cost set to 0"
 
-        output_tokens = kwargs.get("output_tokens")
-        if output_tokens is None:
-            return ToolResult(success=False, error="Parameter 'output_tokens' is required")
+    total_cost = input_cost + output_cost
 
-        input_tokens = int(input_tokens)
-        output_tokens = int(output_tokens)
-        provider: str | None = kwargs.get("provider")
-        timestamp = datetime.now(timezone.utc).isoformat()
+    entry: dict[str, Any] = {
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "input_cost": input_cost,
+        "output_cost": output_cost,
+        "total_cost": total_cost,
+        "provider": provider,
+        "timestamp": timestamp,
+    }
+    _COST_STORE.append(entry)
 
-        warning: str | None = None
-        pricing = _PRICING.get(model)
-        if pricing is not None:
-            input_cost_per_m, output_cost_per_m = pricing
-            input_cost = (input_tokens / 1_000_000) * input_cost_per_m
-            output_cost = (output_tokens / 1_000_000) * output_cost_per_m
-        else:
-            input_cost = 0.0
-            output_cost = 0.0
-            warning = f"Unknown model '{model}': cost set to 0"
+    cumulative_cost = sum(e["total_cost"] for e in _COST_STORE)
 
-        total_cost = input_cost + output_cost
+    data: dict[str, Any] = {
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "input_cost": input_cost,
+        "output_cost": output_cost,
+        "total_cost": total_cost,
+        "cumulative_cost": cumulative_cost,
+    }
+    if warning:
+        data["warning"] = warning
 
-        entry: dict[str, Any] = {
-            "model": model,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "input_cost": input_cost,
-            "output_cost": output_cost,
-            "total_cost": total_cost,
-            "provider": provider,
-            "timestamp": timestamp,
-        }
-        _COST_STORE.append(entry)
+    return data
 
-        cumulative_cost = sum(e["total_cost"] for e in _COST_STORE)
 
-        data: dict[str, Any] = {
-            "model": model,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "input_cost": input_cost,
-            "output_cost": output_cost,
-            "total_cost": total_cost,
-            "cumulative_cost": cumulative_cost,
-        }
-        if warning:
-            data["warning"] = warning
+def get_total_cost() -> float:
+    """Return the total cumulative cost across all tracked calls."""
+    return sum(e["total_cost"] for e in _COST_STORE)
 
-        return ToolResult(success=True, data=data)
 
-    @classmethod
-    def get_total_cost(cls) -> float:
-        """Return the total cumulative cost across all tracked calls."""
-        return sum(e["total_cost"] for e in _COST_STORE)
+def get_cost_by_model() -> dict[str, float]:
+    """Return total cost grouped by model."""
+    by_model: dict[str, float] = {}
+    for entry in _COST_STORE:
+        model = entry["model"]
+        by_model[model] = by_model.get(model, 0.0) + entry["total_cost"]
+    return by_model
 
-    @classmethod
-    def get_cost_by_model(cls) -> dict[str, float]:
-        """Return total cost grouped by model."""
-        by_model: dict[str, float] = {}
-        for entry in _COST_STORE:
-            model = entry["model"]
-            by_model[model] = by_model.get(model, 0.0) + entry["total_cost"]
-        return by_model
 
-    @classmethod
-    def get_cost_breakdown(cls) -> list[dict[str, Any]]:
-        """Return all cost entries."""
-        return list(_COST_STORE)
+def get_cost_breakdown() -> list[dict[str, Any]]:
+    """Return all cost entries."""
+    return list(_COST_STORE)
 
-    @classmethod
-    def clear(cls) -> None:
-        """Clear all cost tracking data."""
-        _COST_STORE.clear()
+
+def clear_costs() -> None:
+    """Clear all cost tracking data."""
+    _COST_STORE.clear()
+
+
+# Attach class-method-like helpers to the FunctionTool instance
+cost_tracker.get_total_cost = get_total_cost  # type: ignore[attr-defined]
+cost_tracker.get_cost_by_model = get_cost_by_model  # type: ignore[attr-defined]
+cost_tracker.get_cost_breakdown = get_cost_breakdown  # type: ignore[attr-defined]
+cost_tracker.clear = clear_costs  # type: ignore[attr-defined]
+
+# Backward-compatible alias
+CostTrackerTool = cost_tracker

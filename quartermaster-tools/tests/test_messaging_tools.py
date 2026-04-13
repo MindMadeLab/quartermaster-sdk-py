@@ -1,4 +1,4 @@
-"""Tests for SlackMessageTool, SlackReadTool, WebhookNotifyTool, and DiscordMessageTool."""
+"""Tests for slack_message, slack_read, webhook_notify, and discord_message tools."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from quartermaster_tools.builtin.messaging.tools import (
 
 class TestSlackMessageTool:
     def setup_method(self) -> None:
-        self.tool = SlackMessageTool()
+        self.tool = SlackMessageTool
 
     def test_name(self) -> None:
         assert self.tool.name() == "slack_message"
@@ -103,7 +103,7 @@ class TestSlackMessageTool:
 
 class TestSlackReadTool:
     def setup_method(self) -> None:
-        self.tool = SlackReadTool()
+        self.tool = SlackReadTool
 
     def test_name(self) -> None:
         assert self.tool.name() == "slack_read"
@@ -158,7 +158,7 @@ class TestSlackReadTool:
 
 class TestWebhookNotifyTool:
     def setup_method(self) -> None:
-        self.tool = WebhookNotifyTool()
+        self.tool = WebhookNotifyTool
 
     def test_name(self) -> None:
         assert self.tool.name() == "webhook_notify"
@@ -233,7 +233,7 @@ class TestWebhookNotifyTool:
 
 class TestDiscordMessageTool:
     def setup_method(self) -> None:
-        self.tool = DiscordMessageTool()
+        self.tool = DiscordMessageTool
 
     def test_name(self) -> None:
         assert self.tool.name() == "discord_message"

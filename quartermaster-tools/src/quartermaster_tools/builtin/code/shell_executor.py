@@ -8,10 +8,10 @@ obviously destructive operations.
 from __future__ import annotations
 
 import shlex
-from typing import Any
+import subprocess
 
-from quartermaster_tools.base import AbstractLocalTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
+from quartermaster_tools.types import ToolResult
 
 
 # Maximum allowed command length in characters.
@@ -20,7 +20,7 @@ MAX_COMMAND_LENGTH = 100_000
 # Default execution timeout in seconds.
 DEFAULT_TIMEOUT = 30
 
-# Blocked command patterns — exact matches and substrings that indicate
+# Blocked command patterns -- exact matches and substrings that indicate
 # destructive or dangerous operations.
 _BLOCKED_COMMANDS: list[str] = [
     "rm -rf /",
@@ -68,134 +68,63 @@ def _is_command_blocked(command: str) -> bool:
     return False
 
 
-class ShellExecutorTool(AbstractLocalTool):
+@tool()
+def shell_executor(
+    command: str,
+    timeout: int = DEFAULT_TIMEOUT,
+    working_dir: str = None,
+) -> ToolResult:
     """Execute shell commands in a subprocess.
 
-    Security notes:
-    - A blocklist prevents obviously destructive commands.
-    - A hard timeout prevents runaway processes.
-    - Command length is capped.
-    - Commands are executed via ``sh -c`` (not a login shell).
+    Runs shell commands via `sh -c <command>` in a subprocess. Captures stdout,
+    stderr, and exit code. Blocks known-dangerous commands and enforces a timeout.
 
-    The blocklist is NOT a security boundary. For production use,
-    prefer Docker-based isolation via quartermaster-code-runner.
+    Args:
+        command: Shell command to execute.
+        timeout: Maximum execution time in seconds.
+        working_dir: Working directory for command execution.
     """
-
-    def __init__(
-        self,
-        timeout: int = DEFAULT_TIMEOUT,
-        working_dir: str | None = None,
-    ) -> None:
-        """Initialise the ShellExecutorTool.
-
-        Args:
-            timeout: Maximum execution time in seconds.
-            working_dir: Default working directory for command execution.
-        """
-        self._timeout = timeout
-        self._working_dir = working_dir
-
-    def name(self) -> str:
-        """Return the tool name."""
-        return "shell_executor"
-
-    def version(self) -> str:
-        """Return the tool version."""
-        return "1.0.0"
-
-    def parameters(self) -> list[ToolParameter]:
-        """Return parameter definitions for the tool."""
-        return [
-            ToolParameter(
-                name="command",
-                description="Shell command to execute.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="timeout",
-                description="Maximum execution time in seconds.",
-                type="number",
-                required=False,
-                default=DEFAULT_TIMEOUT,
-            ),
-            ToolParameter(
-                name="working_dir",
-                description="Working directory for command execution.",
-                type="string",
-                required=False,
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        """Return metadata describing this tool."""
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Execute shell commands in a subprocess.",
-            long_description=(
-                "Runs shell commands via `sh -c <command>` in a subprocess. "
-                "Captures stdout, stderr, and exit code. Blocks known-dangerous "
-                "commands and enforces a timeout."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
+    if not command or not command.strip():
+        return ToolResult(success=False, error="Parameter 'command' is required and must not be empty")
+    if len(command) > MAX_COMMAND_LENGTH:
+        return ToolResult(
+            success=False,
+            error=f"Command too long: {len(command)} chars (limit: {MAX_COMMAND_LENGTH})",
+        )
+    if _is_command_blocked(command):
+        return ToolResult(
+            success=False,
+            error=f"Command blocked for safety: {shlex.quote(command)}",
         )
 
-    def timeout(self) -> int:
-        """Return the configured timeout."""
-        return self._timeout
-
-    def working_directory(self) -> str | None:
-        """Return the configured working directory."""
-        return self._working_dir
-
-    def execute(
-        self,
-        command: str,
-        timeout: int | None = None,
-        working_dir: str | None = None,
-    ) -> ToolResult:
-        """Execute a shell command and return the result.
-
-        Args:
-            command: Shell command to execute.
-            timeout: Optional timeout override in seconds.
-            working_dir: Optional working directory override.
-
-        Returns:
-            ToolResult with stdout, stderr, and exit_code in data.
-        """
-        old_timeout = self._timeout
-        old_working_dir = self._working_dir
-        try:
-            if timeout is not None:
-                self._timeout = timeout
-            if working_dir is not None:
-                self._working_dir = working_dir
-            return self.safe_run(command=command)
-        finally:
-            self._timeout = old_timeout
-            self._working_dir = old_working_dir
-
-    def prepare_command(self, **kwargs: Any) -> list[str]:
-        """Build the subprocess command for shell execution."""
-        command: str = kwargs["command"]
-        return ["sh", "-c", command]
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        """Execute with safety checks before running."""
-        command: str = kwargs.get("command", "")
-        if not command or not command.strip():
-            return ToolResult(success=False, error="Parameter 'command' is required and must not be empty")
-        if len(command) > MAX_COMMAND_LENGTH:
+    cmd = ["sh", "-c", command]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=working_dir,
+        )
+        data = {
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "returncode": result.returncode,
+        }
+        if result.returncode != 0:
             return ToolResult(
                 success=False,
-                error=f"Command too long: {len(command)} chars (limit: {MAX_COMMAND_LENGTH})",
+                error=result.stderr or f"Command exited with code {result.returncode}",
+                data=data,
             )
-        if _is_command_blocked(command):
-            return ToolResult(
-                success=False,
-                error=f"Command blocked for safety: {shlex.quote(command)}",
-            )
-        return super().run(**kwargs)
+        return ToolResult(success=True, data=data)
+    except subprocess.TimeoutExpired:
+        return ToolResult(success=False, error=f"Command timed out after {timeout} seconds")
+    except FileNotFoundError:
+        return ToolResult(success=False, error=f"Command not found: {cmd[0]}")
+    except OSError as e:
+        return ToolResult(success=False, error=f"OS error: {e}")
+
+
+# Backward-compatible alias
+ShellExecutorTool = shell_executor

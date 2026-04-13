@@ -13,8 +13,7 @@ import socket
 from typing import Any
 from urllib.parse import urlparse
 
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolParameterOption, ToolResult
+from quartermaster_tools.decorator import tool
 
 # Default timeout in seconds
 DEFAULT_TIMEOUT = 30
@@ -45,7 +44,7 @@ def _is_private_ip(host: str) -> bool:
     try:
         addr_infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
     except socket.gaierror:
-        return False  # DNS resolution failed — httpx will handle the error
+        return False  # DNS resolution failed -- httpx will handle the error
 
     for _, _, _, _, sockaddr in addr_infos:
         ip = ipaddress.ip_address(sockaddr[0])
@@ -58,16 +57,120 @@ def _is_private_ip(host: str) -> bool:
 _SUPPORTED_METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH")
 
 
-class WebRequestTool(AbstractTool):
+def _validate_url(url: str) -> str | None:
+    """Validate URL scheme and host. Returns error message or None."""
+    parsed = urlparse(url)
+
+    # Validate scheme
+    if parsed.scheme not in ("http", "https"):
+        return f"Only http and https schemes are allowed, got: {parsed.scheme!r}"
+
+    # Validate host exists
+    hostname = parsed.hostname
+    if not hostname:
+        return "URL must include a hostname"
+
+    # SSRF check: resolve hostname and block private IPs
+    if _is_private_ip(hostname):
+        return "Access denied: requests to private/internal networks are not allowed"
+
+    return None
+
+
+def _web_request_impl(
+    url: str,
+    method: str = "GET",
+    headers: dict | None = None,
+    body: str | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+    max_response_size: int = DEFAULT_MAX_RESPONSE_SIZE,
+) -> dict:
+    """Core implementation for making HTTP requests."""
+    if not url:
+        return {"error": "Parameter 'url' is required"}
+
+    method = method.upper()
+    if method not in _SUPPORTED_METHODS:
+        return {"error": f"Unsupported HTTP method: {method}. Use one of: {', '.join(_SUPPORTED_METHODS)}."}
+
+    # Validate URL before making any request
+    url_error = _validate_url(url)
+    if url_error:
+        return {"error": url_error}
+
+    try:
+        import httpx
+    except ImportError:
+        return {
+            "error": (
+                "httpx is required for WebRequestTool. "
+                "Install it with: pip install quartermaster-tools[web]"
+            )
+        }
+
+    try:
+        # Use streaming to avoid OOM on large responses
+        with httpx.Client(
+            timeout=timeout,
+            follow_redirects=False,
+        ) as client:
+            if method == "GET":
+                response = client.get(url, headers=headers)
+            elif method == "POST":
+                response = client.post(url, headers=headers, content=body)
+            elif method == "PUT":
+                response = client.put(url, headers=headers, content=body)
+            elif method == "DELETE":
+                response = client.delete(url, headers=headers)
+            else:  # PATCH
+                response = client.patch(url, headers=headers, content=body)
+
+            # Stream-read with size limit
+            content_length = len(response.content)
+            if content_length > max_response_size:
+                return {
+                    "error": (
+                        f"Response too large: {content_length} bytes "
+                        f"(limit: {max_response_size} bytes)"
+                    )
+                }
+
+            return {
+                "body": response.text,
+                "status_code": response.status_code,
+                "headers": dict(response.headers),
+                "url": str(response.url),
+            }
+
+    except httpx.TimeoutException:
+        return {"error": f"Request timed out after {timeout} seconds"}
+    except httpx.ConnectError as e:
+        return {"error": f"Connection error: {e}"}
+    except httpx.HTTPError as e:
+        return {"error": f"HTTP error: {e}"}
+    except Exception as e:
+        return {"error": f"Unexpected error: {e}"}
+
+
+@tool()
+def web_request(url: str, method: str = "GET", headers: dict = None, body: str = None) -> dict:
+    """Make an HTTP request (GET, POST, PUT, DELETE, PATCH).
+
+    Args:
+        url: The URL to send the request to.
+        method: HTTP method: GET, POST, PUT, DELETE, or PATCH.
+        headers: Optional HTTP headers as a JSON object.
+        body: Request body for POST/PUT/PATCH requests (string or JSON object).
+    """
+    return _web_request_impl(url, method=method, headers=headers, body=body)
+
+
+# Backward-compatible class wrapper supporting constructor args
+class WebRequestTool:
     """Make HTTP requests and return the response body.
 
-    Requires httpx to be installed (``pip install quartermaster-tools[web]``).
-
-    Features:
-    - Supports GET, POST, PUT, DELETE, and PATCH methods
-    - SSRF protection: blocks requests to private/loopback/link-local IPs
-    - Streaming response handling to prevent OOM on large responses
-    - Configurable timeout and max response size
+    Wraps the web_request function tool, adding optional timeout and
+    max_response_size for backward compatibility.
     """
 
     def __init__(
@@ -75,193 +178,40 @@ class WebRequestTool(AbstractTool):
         timeout: int = DEFAULT_TIMEOUT,
         max_response_size: int = DEFAULT_MAX_RESPONSE_SIZE,
     ) -> None:
-        """Initialise the WebRequestTool.
-
-        Args:
-            timeout: Request timeout in seconds (max 300).
-            max_response_size: Maximum response body size in bytes.
-
-        Raises:
-            ValueError: If timeout exceeds MAX_TIMEOUT.
-        """
         if timeout > MAX_TIMEOUT:
             raise ValueError(f"timeout must be <= {MAX_TIMEOUT} seconds, got {timeout}")
         self._timeout = timeout
         self._max_response_size = max_response_size
+        self._tool = web_request
 
     def name(self) -> str:
-        """Return the tool name."""
-        return "web_request"
+        return self._tool.name()
 
     def version(self) -> str:
-        """Return the tool version."""
-        return "1.0.0"
+        return self._tool.version()
 
-    def parameters(self) -> list[ToolParameter]:
-        """Return parameter definitions for the tool."""
-        return [
-            ToolParameter(
-                name="url",
-                description="The URL to send the request to.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="method",
-                description="HTTP method: GET, POST, PUT, DELETE, or PATCH.",
-                type="string",
-                required=False,
-                default="GET",
-                options=[
-                    ToolParameterOption(label=m, value=m) for m in _SUPPORTED_METHODS
-                ],
-            ),
-            ToolParameter(
-                name="headers",
-                description="Optional HTTP headers as a JSON object.",
-                type="object",
-                required=False,
-            ),
-            ToolParameter(
-                name="body",
-                description="Request body for POST/PUT/PATCH requests (string or JSON object).",
-                type="string",
-                required=False,
-            ),
-        ]
+    def parameters(self):
+        return self._tool.parameters()
 
-    def info(self) -> ToolDescriptor:
-        """Return metadata describing this tool."""
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Make an HTTP request (GET, POST, PUT, DELETE, PATCH).",
-            long_description=(
-                "Sends an HTTP request to the specified URL and returns "
-                "the response body, status code, and headers. Supports "
-                "GET, POST, PUT, DELETE, and PATCH methods with SSRF protection "
-                "and configurable timeout."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=False,
+    def info(self):
+        info = self._tool.info()
+        info.is_local = False
+        return info
+
+    def run(self, **kwargs: Any):
+        from quartermaster_tools.types import ToolResult
+        url = kwargs.get("url", "")
+        method = kwargs.get("method", "GET")
+        headers = kwargs.get("headers")
+        body = kwargs.get("body")
+        result = _web_request_impl(
+            url,
+            method=method,
+            headers=headers,
+            body=body,
+            timeout=self._timeout,
+            max_response_size=self._max_response_size,
         )
-
-    def _validate_url(self, url: str) -> str | None:
-        """Validate URL scheme and host. Returns error message or None."""
-        parsed = urlparse(url)
-
-        # Validate scheme
-        if parsed.scheme not in ("http", "https"):
-            return f"Only http and https schemes are allowed, got: {parsed.scheme!r}"
-
-        # Validate host exists
-        hostname = parsed.hostname
-        if not hostname:
-            return "URL must include a hostname"
-
-        # SSRF check: resolve hostname and block private IPs
-        if _is_private_ip(hostname):
-            return "Access denied: requests to private/internal networks are not allowed"
-
-        return None
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        """Execute the HTTP request and return the response.
-
-        Args:
-            url: The target URL.
-            method: HTTP method (GET, POST, PUT, DELETE, or PATCH; default GET).
-            headers: Optional request headers dict.
-            body: Optional request body for POST/PUT/PATCH.
-
-        Returns:
-            ToolResult with response data including body, status_code, and headers.
-        """
-        url: str = kwargs.get("url", "")
-        method: str = kwargs.get("method", "GET").upper()
-        headers: dict[str, str] | None = kwargs.get("headers")
-        body: str | None = kwargs.get("body")
-
-        if not url:
-            return ToolResult(success=False, error="Parameter 'url' is required")
-
-        if method not in _SUPPORTED_METHODS:
-            return ToolResult(
-                success=False,
-                error=f"Unsupported HTTP method: {method}. Use one of: {', '.join(_SUPPORTED_METHODS)}.",
-            )
-
-        # Validate URL before making any request
-        url_error = self._validate_url(url)
-        if url_error:
-            return ToolResult(success=False, error=url_error)
-
-        try:
-            import httpx
-        except ImportError:
-            return ToolResult(
-                success=False,
-                error=(
-                    "httpx is required for WebRequestTool. "
-                    "Install it with: pip install quartermaster-tools[web]"
-                ),
-            )
-
-        try:
-            # Use streaming to avoid OOM on large responses
-            with httpx.Client(
-                timeout=self._timeout,
-                follow_redirects=False,
-            ) as client:
-                if method == "GET":
-                    response = client.get(url, headers=headers)
-                elif method == "POST":
-                    response = client.post(url, headers=headers, content=body)
-                elif method == "PUT":
-                    response = client.put(url, headers=headers, content=body)
-                elif method == "DELETE":
-                    response = client.delete(url, headers=headers)
-                else:  # PATCH
-                    response = client.patch(url, headers=headers, content=body)
-
-                # Stream-read with size limit
-                content_length = len(response.content)
-                if content_length > self._max_response_size:
-                    return ToolResult(
-                        success=False,
-                        error=(
-                            f"Response too large: {content_length} bytes "
-                            f"(limit: {self._max_response_size} bytes)"
-                        ),
-                    )
-
-                return ToolResult(
-                    success=True,
-                    data={
-                        "body": response.text,
-                        "status_code": response.status_code,
-                        "headers": dict(response.headers),
-                        "url": str(response.url),
-                    },
-                )
-
-        except httpx.TimeoutException:
-            return ToolResult(
-                success=False,
-                error=f"Request timed out after {self._timeout} seconds",
-            )
-        except httpx.ConnectError as e:
-            return ToolResult(
-                success=False,
-                error=f"Connection error: {e}",
-            )
-        except httpx.HTTPError as e:
-            return ToolResult(
-                success=False,
-                error=f"HTTP error: {e}",
-            )
-        except Exception as e:
-            return ToolResult(
-                success=False,
-                error=f"Unexpected error: {e}",
-            )
+        if "error" in result:
+            return ToolResult(success=False, error=result["error"])
+        return ToolResult(success=True, data=result)

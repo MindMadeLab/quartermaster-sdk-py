@@ -17,7 +17,7 @@ from quartermaster_tools.builtin.privacy.redact import RedactPIITool
 
 class TestDetectPIITool:
     def setup_method(self) -> None:
-        self.tool = DetectPIITool()
+        self.tool = DetectPIITool
 
     def test_detect_email(self) -> None:
         result = self.tool.run(text="Contact john@example.com for details.")
@@ -123,7 +123,7 @@ class TestDetectPIITool:
 
 class TestRedactPIITool:
     def setup_method(self) -> None:
-        self.tool = RedactPIITool()
+        self.tool = RedactPIITool
 
     def test_redact_strategy(self) -> None:
         text = "Email: john@example.com"
@@ -199,7 +199,7 @@ class TestRedactPIITool:
 
 class TestScanFilePIITool:
     def setup_method(self) -> None:
-        self.tool = ScanFilePIITool()
+        self.tool = ScanFilePIITool
 
     def test_scan_file(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:

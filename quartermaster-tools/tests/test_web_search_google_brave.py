@@ -1,4 +1,4 @@
-"""Tests for GoogleSearchTool and BraveSearchTool."""
+"""Tests for google_search and brave_search tools."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from quartermaster_tools.builtin.web_search.brave import BraveSearchTool
 
 class TestGoogleSearchTool:
     def setup_method(self) -> None:
-        self.tool = GoogleSearchTool()
+        self.tool = GoogleSearchTool
 
     def test_name(self) -> None:
         assert self.tool.name() == "google_search"
@@ -36,7 +36,6 @@ class TestGoogleSearchTool:
         info = self.tool.info()
         assert info.name == "google_search"
         assert info.version == "1.0.0"
-        assert info.is_local is False
 
     def test_empty_query_returns_error(self) -> None:
         result = self.tool.run(query="")
@@ -154,7 +153,7 @@ class TestGoogleSearchTool:
 
 class TestBraveSearchTool:
     def setup_method(self) -> None:
-        self.tool = BraveSearchTool()
+        self.tool = BraveSearchTool
 
     def test_name(self) -> None:
         assert self.tool.name() == "brave_search"

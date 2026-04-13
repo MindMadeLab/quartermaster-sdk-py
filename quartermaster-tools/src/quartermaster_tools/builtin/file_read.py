@@ -10,8 +10,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 # Default maximum file size: 10 MB
 DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -33,15 +32,92 @@ _BLOCKED_PREFIXES = (
 )
 
 
-class ReadFileTool(AbstractTool):
+def _validate_read_path(path: str, allowed_base_dir: str | None = None) -> tuple[str | None, str]:
+    """Validate the file path.
+
+    Returns:
+        Tuple of (error_message_or_None, resolved_real_path).
+    """
+    real_path = os.path.realpath(path)
+
+    for prefix in _BLOCKED_PREFIXES:
+        if real_path.startswith(prefix):
+            return f"Access denied: reading from '{prefix}' is not allowed", real_path
+
+    if allowed_base_dir is not None:
+        if not real_path.startswith(allowed_base_dir + os.sep) and real_path != allowed_base_dir:
+            return (
+                f"Access denied: path must be under '{allowed_base_dir}'",
+                real_path,
+            )
+
+    return None, real_path
+
+
+def _read_file_impl(
+    path: str,
+    encoding: str = "utf-8",
+    max_file_size: int = DEFAULT_MAX_FILE_SIZE,
+    allowed_base_dir: str | None = None,
+) -> dict:
+    """Core implementation for reading a file."""
+    if not path:
+        return {"error": "Parameter 'path' is required"}
+
+    # Validate encoding
+    if encoding.lower().replace("-", "") not in {
+        e.lower().replace("-", "") for e in _ALLOWED_ENCODINGS
+    }:
+        return {"error": f"Unsupported encoding: {encoding!r}. Allowed: {sorted(_ALLOWED_ENCODINGS)}"}
+
+    # Validate path security
+    error, real_path = _validate_read_path(path, allowed_base_dir)
+    if error:
+        return {"error": error}
+
+    if not os.path.exists(real_path):
+        return {"error": f"File not found: {path}"}
+
+    if not os.path.isfile(real_path):
+        return {"error": f"Not a file: {path}"}
+
+    # Check file size before reading
+    try:
+        file_size = os.path.getsize(real_path)
+    except OSError as e:
+        return {"error": f"Cannot stat file: {e}"}
+
+    if file_size > max_file_size:
+        return {"error": f"File too large: {file_size} bytes (limit: {max_file_size} bytes)"}
+
+    try:
+        with open(real_path, "r", encoding=encoding) as f:
+            content = f.read()
+    except UnicodeDecodeError as e:
+        return {"error": f"Encoding error: {e}"}
+    except OSError as e:
+        return {"error": f"Failed to read file: {e}"}
+
+    return {"content": content, "path": path, "size": file_size}
+
+
+@tool()
+def read_file(path: str, encoding: str = "utf-8") -> dict:
+    """Read content from a file.
+
+    Args:
+        path: Absolute or relative path to the file to read.
+        encoding: Text encoding to use when reading the file.
+    """
+    return _read_file_impl(path, encoding=encoding)
+
+
+# Backward-compatible class wrapper supporting constructor args
+class ReadFileTool:
     """Read file content from a given path.
 
-    Security features:
-    - Resolves symlinks and rejects directory traversal attempts
-    - Blocks access to sensitive system paths (/etc/, /proc/, /sys/, etc.)
-    - Enforces a configurable maximum file size
-    - Optionally restricts reads to an allowed base directory
-    - Validates encoding against an allowlist
+    Wraps the read_file function tool, adding optional max_file_size and
+    allowed_base_dir restrictions for backward compatibility.
     """
 
     def __init__(
@@ -49,15 +125,6 @@ class ReadFileTool(AbstractTool):
         max_file_size: int = DEFAULT_MAX_FILE_SIZE,
         allowed_base_dir: str | None = None,
     ) -> None:
-        """Initialise the ReadFileTool.
-
-        Args:
-            max_file_size: Maximum file size in bytes that can be read.
-            allowed_base_dir: If set, only files under this directory may be read.
-
-        Raises:
-            ValueError: If allowed_base_dir is set but is not a directory.
-        """
         self._max_file_size = max_file_size
         if allowed_base_dir is not None:
             resolved = os.path.realpath(allowed_base_dir)
@@ -66,129 +133,42 @@ class ReadFileTool(AbstractTool):
             self._allowed_base_dir: str | None = resolved
         else:
             self._allowed_base_dir = None
+        self._tool = read_file
 
     def name(self) -> str:
-        """Return the tool name."""
-        return "read_file"
+        return self._tool.name()
 
     def version(self) -> str:
-        """Return the tool version."""
-        return "1.0.0"
+        return self._tool.version()
 
-    def parameters(self) -> list[ToolParameter]:
-        """Return parameter definitions for the tool."""
-        return [
-            ToolParameter(
-                name="path",
-                description="Absolute or relative path to the file to read.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="encoding",
-                description="Text encoding to use when reading the file.",
-                type="string",
-                required=False,
-                default="utf-8",
-            ),
-        ]
+    def parameters(self):
+        return self._tool.parameters()
 
-    def info(self) -> ToolDescriptor:
-        """Return metadata describing this tool."""
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Read content from a file.",
-            long_description=(
-                "Reads the text content of a file at the given path. "
-                "Includes path validation, size limits, and optional "
-                "base-directory restriction for security."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
+    def info(self):
+        info = self._tool.info()
+        info.is_local = True
+        return info
+
+    def validate_params(self, **kwargs: Any) -> list[str]:
+        return self._tool.validate_params(**kwargs)
+
+    def safe_run(self, **kwargs: Any):
+        from quartermaster_tools.types import ToolResult
+        errors = self.validate_params(**kwargs)
+        if errors:
+            return ToolResult(success=False, error="; ".join(errors))
+        return self.run(**kwargs)
+
+    def run(self, **kwargs: Any):
+        from quartermaster_tools.types import ToolResult
+        path = kwargs.get("path", "")
+        encoding = kwargs.get("encoding", "utf-8")
+        result = _read_file_impl(
+            path,
+            encoding=encoding,
+            max_file_size=self._max_file_size,
+            allowed_base_dir=self._allowed_base_dir,
         )
-
-    def _validate_path(self, path: str) -> tuple[str | None, str]:
-        """Validate the file path.
-
-        Returns:
-            Tuple of (error_message_or_None, resolved_real_path).
-        """
-        real_path = os.path.realpath(path)
-
-        for prefix in _BLOCKED_PREFIXES:
-            if real_path.startswith(prefix):
-                return f"Access denied: reading from '{prefix}' is not allowed", real_path
-
-        if self._allowed_base_dir is not None:
-            if not real_path.startswith(self._allowed_base_dir + os.sep) and real_path != self._allowed_base_dir:
-                return (
-                    f"Access denied: path must be under '{self._allowed_base_dir}'",
-                    real_path,
-                )
-
-        return None, real_path
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        """Read the file and return its content.
-
-        Args:
-            path: The file path to read.
-            encoding: Text encoding (default utf-8).
-
-        Returns:
-            ToolResult with file content in data["content"].
-        """
-        path: str = kwargs.get("path", "")
-        encoding: str = kwargs.get("encoding", "utf-8")
-
-        if not path:
-            return ToolResult(success=False, error="Parameter 'path' is required")
-
-        # Validate encoding
-        if encoding.lower().replace("-", "") not in {
-            e.lower().replace("-", "") for e in _ALLOWED_ENCODINGS
-        }:
-            return ToolResult(
-                success=False,
-                error=f"Unsupported encoding: {encoding!r}. Allowed: {sorted(_ALLOWED_ENCODINGS)}",
-            )
-
-        # Validate path security — get resolved path once
-        error, real_path = self._validate_path(path)
-        if error:
-            return ToolResult(success=False, error=error)
-
-        if not os.path.exists(real_path):
-            return ToolResult(success=False, error=f"File not found: {path}")
-
-        if not os.path.isfile(real_path):
-            return ToolResult(success=False, error=f"Not a file: {path}")
-
-        # Check file size before reading
-        try:
-            file_size = os.path.getsize(real_path)
-        except OSError as e:
-            return ToolResult(success=False, error=f"Cannot stat file: {e}")
-
-        if file_size > self._max_file_size:
-            return ToolResult(
-                success=False,
-                error=(
-                    f"File too large: {file_size} bytes "
-                    f"(limit: {self._max_file_size} bytes)"
-                ),
-            )
-
-        try:
-            with open(real_path, "r", encoding=encoding) as f:
-                content = f.read()
-        except UnicodeDecodeError as e:
-            return ToolResult(success=False, error=f"Encoding error: {e}")
-        except OSError as e:
-            return ToolResult(success=False, error=f"Failed to read file: {e}")
-
-        return ToolResult(
-            success=True,
-            data={"content": content, "path": path, "size": file_size},
-        )
+        if "error" in result:
+            return ToolResult(success=False, error=result["error"])
+        return ToolResult(success=True, data=result)

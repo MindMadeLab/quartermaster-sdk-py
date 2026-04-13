@@ -1,5 +1,5 @@
 """
-PII detection tools: DetectPIITool and ScanFilePIITool.
+PII detection tools: detect_pii_tool and scan_file_pii.
 
 Detect personally identifiable information in text or files using
 regex patterns. No external dependencies required.
@@ -11,8 +11,7 @@ import os
 import re
 from typing import Any
 
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
 
 # Blocked path prefixes for file scanning
 _BLOCKED_PREFIXES = (
@@ -170,166 +169,98 @@ def detect_pii(
     return results
 
 
-class DetectPIITool(AbstractTool):
-    """Detect PII entities in text using regex patterns."""
-
-    def name(self) -> str:
-        return "detect_pii"
-
-    def version(self) -> str:
-        return "1.0.0"
-
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="text",
-                description="Text to scan for PII entities.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="entities",
-                description=(
-                    "Optional list of entity types to detect. "
-                    "Options: email, phone, credit_card, ssn, ip_address, "
-                    "date_of_birth, url_with_credentials. "
-                    "Defaults to all types."
-                ),
-                type="array",
-                required=False,
-            ),
-            ToolParameter(
-                name="threshold",
-                description="Confidence threshold (unused for regex, reserved for API compatibility).",
-                type="number",
-                required=False,
-                default=0.0,
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Detect PII entities in text.",
-            long_description=(
-                "Scans text for personally identifiable information using "
-                "regex patterns. Detects emails, phone numbers, credit cards "
-                "(with Luhn validation), SSNs, IP addresses, dates of birth, "
-                "and URLs with embedded credentials."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        text: str = kwargs.get("text", "")
-        if not text:
-            return ToolResult(success=False, error="Parameter 'text' is required")
-
-        entities_filter: list[str] | None = kwargs.get("entities")
-        found = detect_pii(text, entities_filter)
-
-        return ToolResult(
-            success=True,
-            data={"entities": found, "count": len(found)},
-        )
+def _validate_path(path: str) -> str | None:
+    """Return an error message if the path is blocked, else None."""
+    real_path = os.path.realpath(path)
+    for prefix in _BLOCKED_PREFIXES:
+        if real_path.startswith(prefix):
+            return f"Access denied: reading from '{prefix}' is not allowed"
+    return None
 
 
-class ScanFilePIITool(AbstractTool):
-    """Scan a file for PII entities."""
+@tool(name="detect_pii")
+def detect_pii_tool(text: str, entities: list = None, threshold: float = 0.0) -> dict:
+    """Detect PII entities in text.
 
-    def name(self) -> str:
-        return "scan_file_pii"
+    Scans text for personally identifiable information using
+    regex patterns. Detects emails, phone numbers, credit cards
+    (with Luhn validation), SSNs, IP addresses, dates of birth,
+    and URLs with embedded credentials.
 
-    def version(self) -> str:
-        return "1.0.0"
+    Args:
+        text: Text to scan for PII entities.
+        entities: Optional list of entity types to detect.
+            Options: email, phone, credit_card, ssn, ip_address,
+            date_of_birth, url_with_credentials.
+            Defaults to all types.
+        threshold: Confidence threshold (unused for regex, reserved for API compatibility).
+    """
+    if not text:
+        raise ValueError("Parameter 'text' is required")
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="file_path",
-                description="Path to the file to scan.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="entities",
-                description="Optional list of entity types to detect.",
-                type="array",
-                required=False,
-            ),
-        ]
+    entities_filter: list[str] | None = entities
+    found = detect_pii(text, entities_filter)
+    return {"entities": found, "count": len(found)}
 
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Scan a file for PII entities.",
-            long_description=(
-                "Reads a file and scans its content for personally identifiable "
-                "information. Includes security checks to block access to "
-                "sensitive system paths."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
 
-    @staticmethod
-    def _validate_path(path: str) -> str | None:
-        """Return an error message if the path is blocked, else None."""
-        real_path = os.path.realpath(path)
-        for prefix in _BLOCKED_PREFIXES:
-            if real_path.startswith(prefix):
-                return f"Access denied: reading from '{prefix}' is not allowed"
-        return None
+@tool()
+def scan_file_pii(file_path: str, entities: list = None) -> dict:
+    """Scan a file for PII entities.
 
-    def run(self, **kwargs: Any) -> ToolResult:
-        file_path: str = kwargs.get("file_path", "")
-        if not file_path:
-            return ToolResult(success=False, error="Parameter 'file_path' is required")
+    Reads a file and scans its content for personally identifiable
+    information. Includes security checks to block access to
+    sensitive system paths.
 
-        error = self._validate_path(file_path)
-        if error:
-            return ToolResult(success=False, error=error)
+    Args:
+        file_path: Path to the file to scan.
+        entities: Optional list of entity types to detect.
+    """
+    if not file_path:
+        raise ValueError("Parameter 'file_path' is required")
 
-        real_path = os.path.realpath(file_path)
-        if not os.path.exists(real_path):
-            return ToolResult(success=False, error=f"File not found: {file_path}")
-        if not os.path.isfile(real_path):
-            return ToolResult(success=False, error=f"Not a file: {file_path}")
+    error = _validate_path(file_path)
+    if error:
+        raise PermissionError(error)
 
-        try:
-            with open(real_path, "r", encoding="utf-8") as f:
-                content = f.read()
-        except (OSError, UnicodeDecodeError) as e:
-            return ToolResult(success=False, error=f"Failed to read file: {e}")
+    real_path = os.path.realpath(file_path)
+    if not os.path.exists(real_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+    if not os.path.isfile(real_path):
+        raise ValueError(f"Not a file: {file_path}")
 
-        entities_filter: list[str] | None = kwargs.get("entities")
-        found = detect_pii(content, entities_filter)
+    try:
+        with open(real_path, "r", encoding="utf-8") as f:
+            content = f.read()
+    except (OSError, UnicodeDecodeError) as e:
+        raise OSError(f"Failed to read file: {e}")
 
-        # Determine which lines contain PII
-        lines_with_pii: list[int] = []
-        lines = content.split("\n")
-        for entity in found:
-            # Find line number for this entity's start position
-            pos = 0
-            for line_num, line in enumerate(lines, start=1):
-                line_end = pos + len(line)
-                if pos <= entity["start"] <= line_end:
-                    if line_num not in lines_with_pii:
-                        lines_with_pii.append(line_num)
-                    break
-                pos = line_end + 1  # +1 for newline
+    entities_filter: list[str] | None = entities
+    found = detect_pii(content, entities_filter)
 
-        lines_with_pii.sort()
+    # Determine which lines contain PII
+    lines_with_pii: list[int] = []
+    lines = content.split("\n")
+    for entity in found:
+        # Find line number for this entity's start position
+        pos = 0
+        for line_num, line in enumerate(lines, start=1):
+            line_end = pos + len(line)
+            if pos <= entity["start"] <= line_end:
+                if line_num not in lines_with_pii:
+                    lines_with_pii.append(line_num)
+                break
+            pos = line_end + 1  # +1 for newline
 
-        return ToolResult(
-            success=True,
-            data={
-                "file_path": file_path,
-                "entities": found,
-                "count": len(found),
-                "lines_with_pii": lines_with_pii,
-            },
-        )
+    lines_with_pii.sort()
+
+    return {
+        "file_path": file_path,
+        "entities": found,
+        "count": len(found),
+        "lines_with_pii": lines_with_pii,
+    }
+
+
+# Backward-compatible aliases
+DetectPIITool = detect_pii_tool
+ScanFilePIITool = scan_file_pii

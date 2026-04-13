@@ -1,5 +1,5 @@
 """
-WebScraperTool: Fetch and convert web pages to readable text.
+Web scraper: fetch and convert web pages to readable text.
 
 Supports output in plain text, basic markdown, or raw HTML. Uses regex-based
 HTML stripping to avoid external dependencies like BeautifulSoup.
@@ -8,10 +8,8 @@ HTML stripping to avoid external dependencies like BeautifulSoup.
 from __future__ import annotations
 
 import re
-from typing import Any
 
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolParameterOption, ToolResult
+from quartermaster_tools.decorator import tool
 
 _DEFAULT_TIMEOUT = 30
 _MAX_TIMEOUT = 120
@@ -111,157 +109,76 @@ def _strip_to_markdown(html_content: str) -> str:
     return text.strip()
 
 
-class WebScraperTool(AbstractTool):
-    """Fetch a URL and return its content as text, markdown, or raw HTML.
+@tool()
+def web_scraper(url: str, output_format: str = "text", timeout: int = _DEFAULT_TIMEOUT) -> dict:
+    """Fetch a web page and return its content as text, markdown, or HTML.
 
-    Uses httpx for HTTP fetching and regex-based HTML stripping (no
-    BeautifulSoup dependency). Supports configurable timeout and three
-    output formats: text, markdown, and html.
+    Fetches a URL using httpx and converts the HTML content to the
+    requested output format. Supports plain text (tags stripped),
+    basic markdown conversion, or raw HTML. Uses regex-based parsing
+    with no external HTML library dependencies.
+
+    Args:
+        url: The URL to scrape.
+        output_format: Output format: text, markdown, or html.
+        timeout: Request timeout in seconds (default 30, max 120).
     """
+    url = url.strip() if url else ""
+    output_format = output_format.lower() if output_format else "text"
+    timeout = min(int(timeout), _MAX_TIMEOUT)
 
-    def name(self) -> str:
-        """Return the tool name."""
-        return "web_scraper"
+    if not url:
+        raise ValueError("Parameter 'url' is required")
 
-    def version(self) -> str:
-        """Return the tool version."""
-        return "1.0.0"
-
-    def parameters(self) -> list[ToolParameter]:
-        """Return parameter definitions for the tool."""
-        return [
-            ToolParameter(
-                name="url",
-                description="The URL to scrape.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="output_format",
-                description="Output format: text, markdown, or html.",
-                type="string",
-                required=False,
-                default="text",
-                options=[
-                    ToolParameterOption(label="text", value="text"),
-                    ToolParameterOption(label="markdown", value="markdown"),
-                    ToolParameterOption(label="html", value="html"),
-                ],
-            ),
-            ToolParameter(
-                name="timeout",
-                description=f"Request timeout in seconds (default {_DEFAULT_TIMEOUT}, max {_MAX_TIMEOUT}).",
-                type="number",
-                required=False,
-                default=_DEFAULT_TIMEOUT,
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        """Return metadata describing this tool."""
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Fetch a web page and return its content as text, markdown, or HTML.",
-            long_description=(
-                "Fetches a URL using httpx and converts the HTML content to the "
-                "requested output format. Supports plain text (tags stripped), "
-                "basic markdown conversion, or raw HTML. Uses regex-based parsing "
-                "with no external HTML library dependencies."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=False,
+    if output_format not in ("text", "markdown", "html"):
+        raise ValueError(
+            f"Invalid output_format: {output_format!r}. Use 'text', 'markdown', or 'html'."
         )
 
-    def scrape(
-        self,
-        url: str,
-        output_format: str = "text",
-        timeout: int = _DEFAULT_TIMEOUT,
-    ) -> ToolResult:
-        """Scrape a URL and return content in the specified format.
+    try:
+        import httpx
+    except ImportError:
+        raise ImportError(
+            "httpx is required for WebScraperTool. "
+            "Install it with: pip install quartermaster-tools[web]"
+        )
 
-        Args:
-            url: The URL to fetch.
-            output_format: One of 'text', 'markdown', or 'html'.
-            timeout: Request timeout in seconds.
-
-        Returns:
-            ToolResult with the scraped content.
-        """
-        return self.run(url=url, output_format=output_format, timeout=timeout)
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        """Fetch the URL and return content in the requested format.
-
-        Args:
-            url: The URL to scrape.
-            output_format: Output format - 'text', 'markdown', or 'html' (default 'text').
-            timeout: Timeout in seconds (default 30, max 120).
-
-        Returns:
-            ToolResult with content, url, and content_length.
-        """
-        url: str = kwargs.get("url", "").strip()
-        output_format: str = kwargs.get("output_format", "text").lower()
-        timeout: int = min(int(kwargs.get("timeout", _DEFAULT_TIMEOUT)), _MAX_TIMEOUT)
-
-        if not url:
-            return ToolResult(success=False, error="Parameter 'url' is required")
-
-        if output_format not in ("text", "markdown", "html"):
-            return ToolResult(
-                success=False,
-                error=f"Invalid output_format: {output_format!r}. Use 'text', 'markdown', or 'html'.",
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            response = client.get(
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; QuartermasterBot/1.0)",
+                },
             )
+            response.raise_for_status()
 
-        try:
-            import httpx
-        except ImportError:
-            return ToolResult(
-                success=False,
-                error=(
-                    "httpx is required for WebScraperTool. "
-                    "Install it with: pip install quartermaster-tools[web]"
-                ),
-            )
-
-        try:
-            with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-                response = client.get(
-                    url,
-                    headers={
-                        "User-Agent": "Mozilla/5.0 (compatible; QuartermasterBot/1.0)",
-                    },
+            if len(response.content) > _MAX_RESPONSE_SIZE:
+                raise ValueError(
+                    f"Response too large: {len(response.content)} bytes (limit: {_MAX_RESPONSE_SIZE})"
                 )
-                response.raise_for_status()
 
-                if len(response.content) > _MAX_RESPONSE_SIZE:
-                    return ToolResult(
-                        success=False,
-                        error=f"Response too large: {len(response.content)} bytes (limit: {_MAX_RESPONSE_SIZE})",
-                    )
+            raw_html = response.text
+    except httpx.TimeoutException:
+        raise TimeoutError(f"Request timed out after {timeout} seconds")
+    except httpx.HTTPStatusError as e:
+        raise RuntimeError(f"HTTP {e.response.status_code}: {e}")
+    except httpx.HTTPError as e:
+        raise RuntimeError(f"HTTP error: {e}")
 
-                raw_html = response.text
-        except httpx.TimeoutException:
-            return ToolResult(success=False, error=f"Request timed out after {timeout} seconds")
-        except httpx.HTTPStatusError as e:
-            return ToolResult(success=False, error=f"HTTP {e.response.status_code}: {e}")
-        except httpx.HTTPError as e:
-            return ToolResult(success=False, error=f"HTTP error: {e}")
+    if output_format == "html":
+        content = raw_html
+    elif output_format == "markdown":
+        content = _strip_to_markdown(raw_html)
+    else:
+        content = _strip_to_text(raw_html)
 
-        if output_format == "html":
-            content = raw_html
-        elif output_format == "markdown":
-            content = _strip_to_markdown(raw_html)
-        else:
-            content = _strip_to_text(raw_html)
+    return {
+        "content": content,
+        "url": url,
+        "content_length": len(content),
+    }
 
-        return ToolResult(
-            success=True,
-            data={
-                "content": content,
-                "url": url,
-                "content_length": len(content),
-            },
-        )
+
+# Backward-compatible alias
+WebScraperTool = web_scraper

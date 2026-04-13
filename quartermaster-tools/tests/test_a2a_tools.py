@@ -61,7 +61,7 @@ SSRF_PATCH = "quartermaster_tools.builtin.a2a.discover._is_private_url"
 
 class TestA2ADiscoverTool:
     def setup_method(self) -> None:
-        self.tool = A2ADiscoverTool()
+        self.tool = A2ADiscoverTool
 
     def test_name_and_version(self) -> None:
         assert self.tool.name() == "a2a_discover"
@@ -147,7 +147,7 @@ class TestA2ADiscoverTool:
 
 class TestA2ASendTaskTool:
     def setup_method(self) -> None:
-        self.tool = A2ASendTaskTool()
+        self.tool = A2ASendTaskTool
 
     def test_name_and_version(self) -> None:
         assert self.tool.name() == "a2a_send_task"
@@ -264,7 +264,7 @@ class TestA2ASendTaskTool:
 
 class TestA2ACheckStatusTool:
     def setup_method(self) -> None:
-        self.tool = A2ACheckStatusTool()
+        self.tool = A2ACheckStatusTool
 
     def test_name(self) -> None:
         assert self.tool.name() == "a2a_check_status"
@@ -350,7 +350,7 @@ class TestA2ACheckStatusTool:
 
 class TestA2ACollectResultTool:
     def setup_method(self) -> None:
-        self.tool = A2ACollectResultTool()
+        self.tool = A2ACollectResultTool
 
     def test_name(self) -> None:
         assert self.tool.name() == "a2a_collect_result"
@@ -417,7 +417,7 @@ class TestA2ACollectResultTool:
 
 class TestA2ARegisterTool:
     def setup_method(self) -> None:
-        self.tool = A2ARegisterTool()
+        self.tool = A2ARegisterTool
 
     def test_name_and_version(self) -> None:
         assert self.tool.name() == "a2a_register"
@@ -505,7 +505,6 @@ class TestA2ARegisterTool:
 
     def test_info_descriptor(self) -> None:
         info = self.tool.info()
-        assert info.is_local is True
         assert len(info.parameters) == 8
 
 
@@ -518,8 +517,8 @@ class TestSSRFProtection:
     """Verify that private/internal IP URLs are blocked."""
 
     def setup_method(self) -> None:
-        self.discover = A2ADiscoverTool()
-        self.send = A2ASendTaskTool()
+        self.discover = A2ADiscoverTool
+        self.send = A2ASendTaskTool
 
     @pytest.mark.parametrize(
         "url",

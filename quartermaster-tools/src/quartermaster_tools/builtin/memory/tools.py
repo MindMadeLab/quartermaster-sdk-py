@@ -1,201 +1,95 @@
 """
 Variable/memory tools: Set, Get, and List in-memory key-value pairs.
 
-All three tools share a class-level ``_store`` dict that persists across
-calls within the same process.  An optional ``store`` parameter in
-``__init__`` allows dependency injection for testing or isolation.
+All three tools share a module-level ``_default_store`` dict that persists
+across calls within the same process.  The ``create_memory_tools`` factory
+returns tools bound to a custom store for testing or isolation.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from quartermaster_tools.base import AbstractTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
+from quartermaster_tools.types import ToolResult
+
+# Sentinel for distinguishing "not provided" from None.
+_MISSING = object()
+
+# Default module-level store shared by the default tool instances.
+_default_store: dict[str, Any] = {}
 
 
-class _VariableStoreMixin:
-    """Mixin providing a shared class-level variable store."""
+def _make_set_variable(store: dict[str, Any]) -> Any:
+    """Create a set_variable tool bound to the given store."""
 
-    _store: dict[str, Any] = {}
+    @tool()
+    def set_variable(name: str, value: str = _MISSING) -> ToolResult:
+        """Store a key-value pair in memory.
 
-    def __init__(self, store: dict[str, Any] | None = None) -> None:
-        if store is not None:
-            self._store = store
-
-
-class SetVariableTool(_VariableStoreMixin, AbstractTool):
-    """Store a key-value pair in the in-memory variable store."""
-
-    def name(self) -> str:
-        return "set_variable"
-
-    def version(self) -> str:
-        return "1.0.0"
-
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="name",
-                description="The variable name (key) to store.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="value",
-                description="The value to store.",
-                type="string",
-                required=True,
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Store a key-value pair in memory.",
-            long_description=(
-                "Stores a named variable in a shared in-memory dictionary. "
-                "Overwrites any existing value for the same key."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        """Set a variable in the store.
+        Stores a named variable in a shared in-memory dictionary.
+        Overwrites any existing value for the same key.
 
         Args:
-            name: Variable name.
-            value: Value to store.
-
-        Returns:
-            ToolResult confirming the variable was stored.
+            name: The variable name (key) to store.
+            value: The value to store.
         """
-        var_name: str = kwargs.get("name", "")
-        value: Any = kwargs.get("value")
-
-        if not var_name:
+        if not name:
             return ToolResult(success=False, error="Parameter 'name' is required")
 
-        if value is None and "value" not in kwargs:
+        if value is _MISSING:
             return ToolResult(success=False, error="Parameter 'value' is required")
 
-        self._store[var_name] = value
+        store[name] = value
         return ToolResult(
             success=True,
-            data={"name": var_name, "value": value, "message": f"Variable '{var_name}' set."},
+            data={"name": name, "value": value, "message": f"Variable '{name}' set."},
         )
 
+    return set_variable
 
-class GetVariableTool(_VariableStoreMixin, AbstractTool):
-    """Retrieve a variable from the in-memory store."""
 
-    def name(self) -> str:
-        return "get_variable"
+def _make_get_variable(store: dict[str, Any]) -> Any:
+    """Create a get_variable tool bound to the given store."""
 
-    def version(self) -> str:
-        return "1.0.0"
+    @tool()
+    def get_variable(name: str, default: str = None) -> ToolResult:
+        """Retrieve a variable from memory.
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="name",
-                description="The variable name (key) to retrieve.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="default",
-                description="Default value to return if the variable is not found.",
-                type="string",
-                required=False,
-                default=None,
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Retrieve a variable from memory.",
-            long_description=(
-                "Looks up a named variable in the shared in-memory store. "
-                "Returns the stored value, or a default if the key is missing."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        """Get a variable from the store.
+        Looks up a named variable in the shared in-memory store.
+        Returns the stored value, or a default if the key is missing.
 
         Args:
-            name: Variable name.
-            default: Fallback value (default: None).
-
-        Returns:
-            ToolResult with the variable's value.
+            name: The variable name (key) to retrieve.
+            default: Default value to return if the variable is not found.
         """
-        var_name: str = kwargs.get("name", "")
-        default: Any = kwargs.get("default", None)
-
-        if not var_name:
+        if not name:
             return ToolResult(success=False, error="Parameter 'name' is required")
 
-        found = var_name in self._store
-        value = self._store.get(var_name, default)
+        found = name in store
+        value = store.get(name, default)
         return ToolResult(
             success=True,
-            data={"name": var_name, "value": value, "found": found},
+            data={"name": name, "value": value, "found": found},
         )
 
+    return get_variable
 
-class ListVariablesTool(_VariableStoreMixin, AbstractTool):
-    """List variable names in the in-memory store."""
 
-    def name(self) -> str:
-        return "list_variables"
+def _make_list_variables(store: dict[str, Any]) -> Any:
+    """Create a list_variables tool bound to the given store."""
 
-    def version(self) -> str:
-        return "1.0.0"
+    @tool()
+    def list_variables(prefix: str = None) -> ToolResult:
+        """List stored variable names.
 
-    def parameters(self) -> list[ToolParameter]:
-        return [
-            ToolParameter(
-                name="prefix",
-                description="Optional prefix to filter variable names.",
-                type="string",
-                required=False,
-                default=None,
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="List stored variable names.",
-            long_description=(
-                "Returns a list of all variable names in the shared store, "
-                "optionally filtered by a key prefix."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
-        )
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        """List variable names, optionally filtered by prefix.
+        Returns a list of all variable names in the shared store,
+        optionally filtered by a key prefix.
 
         Args:
-            prefix: If provided, only return names starting with this string.
-
-        Returns:
-            ToolResult with a list of variable names.
+            prefix: Optional prefix to filter variable names.
         """
-        prefix: str | None = kwargs.get("prefix", None)
-
-        names = sorted(self._store.keys())
+        names = sorted(store.keys())
         if prefix is not None:
             names = [n for n in names if n.startswith(prefix)]
 
@@ -203,3 +97,37 @@ class ListVariablesTool(_VariableStoreMixin, AbstractTool):
             success=True,
             data={"names": names, "count": len(names)},
         )
+
+    return list_variables
+
+
+def create_memory_tools(
+    store: dict[str, Any] | None = None,
+) -> tuple:
+    """Create a set of memory tools sharing an isolated store.
+
+    Args:
+        store: Optional dict to use as backing store. If None, creates a new one.
+
+    Returns:
+        Tuple of (set_variable, get_variable, list_variables) function tools.
+    """
+    if store is None:
+        store = {}
+    return (
+        _make_set_variable(store),
+        _make_get_variable(store),
+        _make_list_variables(store),
+    )
+
+
+# Default tool instances using the module-level store.
+set_variable = _make_set_variable(_default_store)
+get_variable = _make_get_variable(_default_store)
+list_variables = _make_list_variables(_default_store)
+
+
+# Backward-compatible class-like aliases.
+SetVariableTool = set_variable
+GetVariableTool = get_variable
+ListVariablesTool = list_variables

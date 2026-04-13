@@ -8,10 +8,10 @@ are captured and returned.
 
 from __future__ import annotations
 
-from typing import Any
+import subprocess
 
-from quartermaster_tools.base import AbstractLocalTool
-from quartermaster_tools.types import ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools.decorator import tool
+from quartermaster_tools.types import ToolResult
 
 
 # Maximum allowed code length in characters.
@@ -21,102 +21,52 @@ MAX_CODE_LENGTH = 100_000
 DEFAULT_TIMEOUT = 30
 
 
-class PythonExecutorTool(AbstractLocalTool):
+@tool()
+def python_executor(code: str, timeout: int = DEFAULT_TIMEOUT) -> ToolResult:
     """Execute Python code in a subprocess.
 
-    Security notes:
-    - Code runs as an unprivileged subprocess of the current process.
-    - A hard timeout prevents runaway processes.
-    - Code length is capped to prevent memory exhaustion.
+    Runs Python code via `python3 -c <code>` in a subprocess. Captures stdout,
+    stderr, and exit code. Enforces a timeout to prevent runaway execution.
 
-    For production sandboxing, prefer quartermaster-code-runner which
-    provides Docker-based isolation.
+    Args:
+        code: Python source code to execute.
+        timeout: Maximum execution time in seconds.
     """
-
-    def __init__(self, timeout: int = DEFAULT_TIMEOUT) -> None:
-        """Initialise the PythonExecutorTool.
-
-        Args:
-            timeout: Maximum execution time in seconds.
-        """
-        self._timeout = timeout
-
-    def name(self) -> str:
-        """Return the tool name."""
-        return "python_executor"
-
-    def version(self) -> str:
-        """Return the tool version."""
-        return "1.0.0"
-
-    def parameters(self) -> list[ToolParameter]:
-        """Return parameter definitions for the tool."""
-        return [
-            ToolParameter(
-                name="code",
-                description="Python source code to execute.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="timeout",
-                description="Maximum execution time in seconds.",
-                type="number",
-                required=False,
-                default=DEFAULT_TIMEOUT,
-            ),
-        ]
-
-    def info(self) -> ToolDescriptor:
-        """Return metadata describing this tool."""
-        return ToolDescriptor(
-            name=self.name(),
-            short_description="Execute Python code in a subprocess.",
-            long_description=(
-                "Runs Python code via `python3 -c <code>` in a subprocess. "
-                "Captures stdout, stderr, and exit code. Enforces a timeout "
-                "to prevent runaway execution."
-            ),
-            version=self.version(),
-            parameters=self.parameters(),
-            is_local=True,
+    if not code or not code.strip():
+        return ToolResult(success=False, error="Parameter 'code' is required and must not be empty")
+    if len(code) > MAX_CODE_LENGTH:
+        return ToolResult(
+            success=False,
+            error=f"Code too long: {len(code)} chars (limit: {MAX_CODE_LENGTH})",
         )
 
-    def timeout(self) -> int:
-        """Return the configured timeout."""
-        return self._timeout
-
-    def execute(self, code: str, timeout: int | None = None) -> ToolResult:
-        """Execute Python code and return the result.
-
-        Args:
-            code: Python source code to execute.
-            timeout: Optional timeout override in seconds.
-
-        Returns:
-            ToolResult with stdout, stderr, and exit_code in data.
-        """
-        old_timeout = self._timeout
-        try:
-            if timeout is not None:
-                self._timeout = timeout
-            return self.safe_run(code=code)
-        finally:
-            self._timeout = old_timeout
-
-    def prepare_command(self, **kwargs: Any) -> list[str]:
-        """Build the subprocess command for Python execution."""
-        code: str = kwargs["code"]
-        return ["python3", "-c", code]
-
-    def run(self, **kwargs: Any) -> ToolResult:
-        """Execute with code-length validation before running."""
-        code: str = kwargs.get("code", "")
-        if not code or not code.strip():
-            return ToolResult(success=False, error="Parameter 'code' is required and must not be empty")
-        if len(code) > MAX_CODE_LENGTH:
+    cmd = ["python3", "-c", code]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        data = {
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "returncode": result.returncode,
+        }
+        if result.returncode != 0:
             return ToolResult(
                 success=False,
-                error=f"Code too long: {len(code)} chars (limit: {MAX_CODE_LENGTH})",
+                error=result.stderr or f"Command exited with code {result.returncode}",
+                data=data,
             )
-        return super().run(**kwargs)
+        return ToolResult(success=True, data=data)
+    except subprocess.TimeoutExpired:
+        return ToolResult(success=False, error=f"Command timed out after {timeout} seconds")
+    except FileNotFoundError:
+        return ToolResult(success=False, error=f"Command not found: {cmd[0]}")
+    except OSError as e:
+        return ToolResult(success=False, error=f"OS error: {e}")
+
+
+# Backward-compatible alias
+PythonExecutorTool = python_executor
