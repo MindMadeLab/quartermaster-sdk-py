@@ -75,10 +75,10 @@ Content-Type: application/json
                 "type": "Instruction1",
                 "name": "Analyze",
                 "metadata": {
-                    "system_instruction": "Analyze the input",
-                    "model": "gpt-4o",
-                    "provider": "openai",
-                    "temperature": 0.7
+                    "llm_system_instruction": "Analyze the input",
+                    "llm_model": "gpt-4o",
+                    "llm_provider": "openai",
+                    "llm_temperature": 0.7
                 }
             }
         ],

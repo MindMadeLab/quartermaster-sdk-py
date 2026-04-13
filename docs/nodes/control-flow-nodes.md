@@ -302,7 +302,7 @@ graph TD
 GraphBuilder("Orchestrator") \
     .start() \
     .instruction("Decide task", model="gpt-4o") \
-    .sub_agent("Run specialist", agent_id="specialist-flow-id") \
+    .sub_agent("Run specialist", graph_id="specialist-flow-id") \
     .instruction("Summarize result", model="gpt-4o") \
     .end() \
     .build()

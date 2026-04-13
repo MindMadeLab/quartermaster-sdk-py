@@ -127,19 +127,19 @@ graph = (
 
 ```python
 # Static content (no LLM call)
-builder.static("Welcome", content="Hello! How can I help you today?")
+builder.static("Welcome", text="Hello! How can I help you today?")
 
 # User input (pauses execution, waits for user response)
 builder.user("Ask for clarification")
 
 # Code execution
-builder.code("Calculate", code="result = 2 + 2", language="python")
+builder.code("Calculate", code="result = 2 + 2", filename="calc.py")
 
 # Tool invocation
 builder.tool("Search", tool_name="web_search", query="latest news")
 
 # Sub-agent delegation
-builder.sub_agent("Delegate", agent_id="agent-uuid-here")
+builder.sub_agent("Delegate", graph_id="agent-uuid-here")
 
 # Loop
 builder.loop("Retry loop", max_iterations=5, break_condition="success == True")
@@ -318,9 +318,10 @@ node = GraphNode(
     retry_delay=1.0,                         # 1 second between retries
     timeout=30.0,                            # 30 second timeout
     metadata={                               # Node-specific configuration
-        "model": "gpt-4o",
-        "temperature": 0.7,
-        "system_instruction": "You are a helpful assistant.",
+        "llm_model": "gpt-4o",
+        "llm_provider": "openai",
+        "llm_temperature": 0.7,
+        "llm_system_instruction": "You are a helpful assistant.",
     },
 )
 ```

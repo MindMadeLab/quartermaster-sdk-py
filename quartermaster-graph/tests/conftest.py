@@ -36,10 +36,10 @@ def instruction_node() -> GraphNode:
         type=NodeType.INSTRUCTION,
         name="Process",
         metadata={
-            "system_instruction": "You are helpful",
-            "model": "gpt-4o",
-            "provider": "openai",
-            "temperature": 0.7,
+            "llm_system_instruction": "You are helpful",
+            "llm_model": "gpt-4o",
+            "llm_provider": "openai",
+            "llm_temperature": 0.7,
         },
     )
 
