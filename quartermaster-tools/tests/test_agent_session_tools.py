@@ -516,3 +516,113 @@ class TestParallelSessions:
         assert len(results) == 3
         assert all(s.status == SessionStatus.COMPLETED for s in results)
         assert all(s.result == "done" for s in results)
+
+
+class TestOrchestratorPattern:
+    """End-to-end test of the orchestrator → spawn N agents → collect pattern."""
+
+    def test_spawn_three_and_collect(self):
+        """Orchestrator spawns researcher, writer, reviewer; collects all."""
+        mgr = SessionManager()
+        spawn = SpawnAgentTool(
+            manager=mgr,
+            allowed_agents=["researcher", "writer", "reviewer"],
+        )
+        collect = CollectResultsTool(manager=mgr)
+
+        # Spawn three agents (simulates three tool_calls in one LLM turn)
+        r1 = spawn.run(agent_id="researcher", task="Research AI trends")
+        r2 = spawn.run(agent_id="writer", task="Draft blog post on AI")
+        r3 = spawn.run(agent_id="reviewer", task="Review checklist for AI post")
+        assert r1.success and r2.success and r3.success
+
+        sid1, sid2, sid3 = r1.data["session_id"], r2.data["session_id"], r3.data["session_id"]
+
+        # Collect (simulates second LLM turn)
+        result = collect.run(session_ids=f"{sid1},{sid2},{sid3}", timeout=5)
+        assert result.success
+        assert result.data["all_completed"]
+        assert len(result.data["results"]) == 3
+
+    def test_spawn_blocked_agent_fails(self):
+        """Orchestrator cannot spawn agents not in allowed_agents."""
+        mgr = SessionManager()
+        spawn = SpawnAgentTool(
+            manager=mgr,
+            allowed_agents=["researcher", "writer"],
+        )
+        result = spawn.run(agent_id="hacker", task="do bad things")
+        assert not result.success
+        assert "not in the allowed agents list" in result.error
+
+    def test_partial_collect_with_timeout(self):
+        """collect_agent_results returns partial results on timeout."""
+        mgr = SessionManager()
+        spawn = SpawnAgentTool(manager=mgr)
+
+        # Spawn a fast agent and a "hanging" one
+        r_fast = spawn.run(agent_id="fast", task="quick job")
+        assert r_fast.success
+
+        # Create a slow session manually
+        slow_session = mgr.create_session(name="slow")
+
+        def slow_task(s):
+            time.sleep(10)  # will exceed timeout
+            return "late"
+
+        mgr.start_session(slow_session.id, slow_task)
+
+        collect = CollectResultsTool(manager=mgr)
+        result = collect.run(
+            session_ids=f"{r_fast.data['session_id']},{slow_session.id}",
+            timeout=1,
+        )
+        assert result.success
+        # Not all completed because the slow one timed out
+        assert not result.data["all_completed"]
+
+    def test_spawn_with_parent_and_notify(self):
+        """Sub-agent notifies parent session after completing."""
+        mgr = SessionManager()
+
+        # Create parent session
+        parent = mgr.create_session(name="orchestrator")
+        mgr.start_session(parent.id, _quick_task)
+
+        # Spawn child with parent reference
+        spawn = SpawnAgentTool(manager=mgr)
+        r = spawn.run(
+            agent_id="worker",
+            task="do work",
+            parent_session_id=parent.id,
+        )
+        assert r.success
+        child_sid = r.data["session_id"]
+        child_session = mgr.get_session(child_sid)
+        assert child_session.metadata["parent_session_id"] == parent.id
+
+        # Child notifies parent
+        notify = NotifyParentTool(manager=mgr)
+        notify_result = notify.run(
+            session_id=child_sid,
+            message="work complete",
+            status="completed",
+        )
+        assert notify_result.success
+
+    def test_recursive_allowed_agents(self):
+        """Spawned agent can restrict its own children's allowed agents."""
+        mgr = SessionManager()
+        spawn = SpawnAgentTool(
+            manager=mgr,
+            allowed_agents=["level1"],
+        )
+        result = spawn.run(
+            agent_id="level1",
+            task="manage sub-tasks",
+            allowed_agents="level2a,level2b",
+        )
+        assert result.success
+        session = mgr.get_session(result.data["session_id"])
+        assert session.metadata["allowed_agents"] == ["level2a", "level2b"]
