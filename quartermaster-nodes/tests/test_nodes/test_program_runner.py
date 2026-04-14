@@ -156,6 +156,7 @@ class TestProgramRunnerThink:
 
     def test_executor_with_none_handle(self):
         """If handle is None and result is returned, no append should happen."""
+
         def mock_executor(pid, params, ctx):
             return "result"
 

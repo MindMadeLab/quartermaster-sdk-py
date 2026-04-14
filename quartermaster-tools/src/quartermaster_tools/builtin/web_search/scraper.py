@@ -31,7 +31,7 @@ _ITALIC_RE = re.compile(r"<(i|em)(?:\s[^>]*)?>(.+?)</\1>", re.DOTALL | re.IGNORE
 _LI_RE = re.compile(r"<li[^>]*>(.*?)</li>", re.DOTALL | re.IGNORECASE)
 _BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _P_RE = re.compile(r"<p[^>]*>(.*?)</p>", re.DOTALL | re.IGNORECASE)
-_IMG_RE = re.compile(r'<img[^>]*alt="([^"]*)"[^>]*/?>',  re.IGNORECASE)
+_IMG_RE = re.compile(r'<img[^>]*alt="([^"]*)"[^>]*/?>', re.IGNORECASE)
 
 
 def _strip_to_text(html_content: str) -> str:
@@ -49,7 +49,9 @@ def _strip_to_text(html_content: str) -> str:
     text = _COMMENT_RE.sub("", text)
     # Convert block elements to newlines
     text = re.sub(r"<(br|p|div|h[1-6]|li|tr|blockquote)[^>]*/?>", "\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"</(p|div|h[1-6]|li|tr|blockquote|ul|ol|table)>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"</(p|div|h[1-6]|li|tr|blockquote|ul|ol|table)>", "\n", text, flags=re.IGNORECASE
+    )
     text = _TAG_RE.sub("", text)
     text = html_mod.unescape(text)
     text = _SPACES_RE.sub(" ", text)

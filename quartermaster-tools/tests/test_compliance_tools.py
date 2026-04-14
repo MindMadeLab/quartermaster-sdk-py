@@ -20,6 +20,7 @@ from quartermaster_tools.builtin.compliance.risk_classifier import RiskClassifie
 # RiskClassifierTool
 # ---------------------------------------------------------------------------
 
+
 class TestRiskClassifierTool:
     def setup_method(self) -> None:
         self.tool = RiskClassifierTool
@@ -102,16 +103,12 @@ class TestRiskClassifierTool:
         assert not result.success
 
     def test_reasoning_present(self) -> None:
-        result = self.tool.run(
-            system_description="test", domain="healthcare"
-        )
+        result = self.tool.run(system_description="test", domain="healthcare")
         assert result.success
         assert len(result.data["reasoning"]) > 0
 
     def test_obligations_present(self) -> None:
-        result = self.tool.run(
-            system_description="test", domain="healthcare"
-        )
+        result = self.tool.run(system_description="test", domain="healthcare")
         assert result.success
         assert len(result.data["obligations"]) > 5
 
@@ -125,12 +122,11 @@ class TestRiskClassifierTool:
 # AuditLogTool
 # ---------------------------------------------------------------------------
 
+
 class TestAuditLogTool:
     def setup_method(self) -> None:
         self.tool = AuditLogTool
-        self._tmpfile = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".jsonl", delete=False
-        )
+        self._tmpfile = tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False)
         self._tmpfile.close()
         self.log_path = self._tmpfile.name
 
@@ -175,6 +171,7 @@ class TestAuditLogTool:
 
         # Second entry should hash the first line
         import hashlib
+
         expected = hashlib.sha256(lines[0].encode("utf-8")).hexdigest()
         assert entry1["previous_hash"] == expected
 
@@ -204,13 +201,12 @@ class TestAuditLogTool:
 # ReadAuditLogTool
 # ---------------------------------------------------------------------------
 
+
 class TestReadAuditLogTool:
     def setup_method(self) -> None:
         self.write_tool = AuditLogTool
         self.read_tool = ReadAuditLogTool
-        self._tmpfile = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".jsonl", delete=False
-        )
+        self._tmpfile = tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False)
         self._tmpfile.close()
         self.log_path = self._tmpfile.name
 
@@ -303,6 +299,7 @@ class TestReadAuditLogTool:
 # ---------------------------------------------------------------------------
 # ComplianceChecklistTool
 # ---------------------------------------------------------------------------
+
 
 class TestComplianceChecklistTool:
     def setup_method(self) -> None:

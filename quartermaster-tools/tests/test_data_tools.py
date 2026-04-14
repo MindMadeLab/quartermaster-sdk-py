@@ -29,6 +29,7 @@ from quartermaster_tools.builtin.data.parse_yaml import _parse_yaml as parse_yam
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _write_temp(content: str, suffix: str = ".txt") -> str:
     """Write content to a temp file and return its path."""
     fd, path = tempfile.mkstemp(suffix=suffix)
@@ -40,6 +41,7 @@ def _write_temp(content: str, suffix: str = ".txt") -> str:
 # ---------------------------------------------------------------------------
 # ParseCSVTool
 # ---------------------------------------------------------------------------
+
 
 class TestParseCSVTool:
     """Tests for parse_csv function tool."""
@@ -111,6 +113,7 @@ class TestParseCSVTool:
 # ParseJSONTool
 # ---------------------------------------------------------------------------
 
+
 class TestParseJSONTool:
     """Tests for parse_json function tool."""
 
@@ -121,7 +124,7 @@ class TestParseJSONTool:
 
     def test_parse_string_array(self) -> None:
         """Parse JSON array string."""
-        result = parse_json_data('[1, 2, 3]')
+        result = parse_json_data("[1, 2, 3]")
         assert result == [1, 2, 3]
 
     def test_parse_from_file(self) -> None:
@@ -169,6 +172,7 @@ class TestParseJSONTool:
 # ---------------------------------------------------------------------------
 # ParseYAMLTool
 # ---------------------------------------------------------------------------
+
 
 class TestParseYAMLTool:
     """Tests for parse_yaml function tool."""
@@ -221,6 +225,7 @@ class TestParseYAMLTool:
 # ---------------------------------------------------------------------------
 # ParseXMLTool
 # ---------------------------------------------------------------------------
+
 
 class TestParseXMLTool:
     """Tests for parse_xml function tool."""
@@ -290,6 +295,7 @@ class TestParseXMLTool:
 # ConvertFormatTool
 # ---------------------------------------------------------------------------
 
+
 class TestConvertFormatTool:
     """Tests for convert_format function tool."""
 
@@ -349,6 +355,7 @@ class TestConvertFormatTool:
 # DataFilterTool
 # ---------------------------------------------------------------------------
 
+
 class TestDataFilterTool:
     """Tests for data_filter function tool."""
 
@@ -369,9 +376,7 @@ class TestDataFilterTool:
 
     def test_filter_string_expression(self) -> None:
         """Filter with string comparison."""
-        result = filter_data(
-            self.sample_data, filter_expression="row['city'] == 'NYC'"
-        )
+        result = filter_data(self.sample_data, filter_expression="row['city'] == 'NYC'")
         assert len(result) == 2
 
     def test_sort_by(self) -> None:

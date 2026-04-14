@@ -149,6 +149,8 @@ class TestInstructionProgram:
 
 class TestInstructionProgramParameters:
     def test_stream_disabled(self):
-        from quartermaster_nodes.nodes.llm.instruction_program_parameters import InstructionProgramParameters1
+        from quartermaster_nodes.nodes.llm.instruction_program_parameters import (
+            InstructionProgramParameters1,
+        )
 
         assert InstructionProgramParameters1.metadata_stream_default_value is False

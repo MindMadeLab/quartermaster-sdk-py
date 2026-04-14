@@ -11,7 +11,7 @@ from uuid import UUID
 
 from quartermaster_engine.stores.base import ExecutionStore
 from quartermaster_engine.types import (
-    AgentGraph,
+    GraphSpec,
     GraphNode,
     Message,
     MessageRole,
@@ -34,7 +34,7 @@ class MessageRouter:
         self,
         flow_id: UUID,
         node: GraphNode,
-        graph: AgentGraph,
+        graph: GraphSpec,
     ) -> list[Message]:
         """Build the message list a node should receive.
 
@@ -95,7 +95,7 @@ class MessageRouter:
         self,
         flow_id: UUID,
         node: GraphNode,
-        graph: AgentGraph,
+        graph: GraphSpec,
     ) -> list[Message]:
         """Inherit the last message from each predecessor."""
         predecessors = graph.get_predecessors(node.id)
@@ -119,7 +119,7 @@ class MessageRouter:
         self,
         flow_id: UUID,
         node: GraphNode,
-        graph: AgentGraph,
+        graph: GraphSpec,
     ) -> list[Message]:
         """Continue with the full accumulated conversation history."""
         predecessors = graph.get_predecessors(node.id)

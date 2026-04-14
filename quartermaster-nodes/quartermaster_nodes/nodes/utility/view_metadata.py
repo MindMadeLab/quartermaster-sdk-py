@@ -44,5 +44,6 @@ class ViewMetadataNode(AbstractAssistantNode):
     def think(cls, ctx) -> None:
         if ctx.thought is not None and ctx.handle is not None:
             import json
+
             metadata_str = json.dumps(ctx.thought.metadata, indent=2, default=str)
             ctx.handle.append_text(f"Metadata:\n{metadata_str}")

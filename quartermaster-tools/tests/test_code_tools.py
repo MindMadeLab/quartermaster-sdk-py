@@ -391,8 +391,10 @@ class TestJavaScriptExecutorTool:
 
     def test_missing_node_handling(self) -> None:
         """Clear error when node is not found."""
-        with patch("quartermaster_tools.builtin.code.javascript_executor.subprocess.run",
-                    side_effect=FileNotFoundError("node not found")):
+        with patch(
+            "quartermaster_tools.builtin.code.javascript_executor.subprocess.run",
+            side_effect=FileNotFoundError("node not found"),
+        ):
             result = self.tool.run(code="console.log(1)")
         assert not result.success
         assert "not found" in result.error.lower()

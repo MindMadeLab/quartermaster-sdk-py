@@ -116,14 +116,16 @@ class TestInstructionNodeLLMConfig:
         assert llm_config.stream is True
 
     def test_custom_llm_config(self):
-        ctx = MockNodeContext(node_metadata={
-            "llm_model": "claude-3-opus",
-            "llm_provider": "anthropic",
-            "llm_temperature": 0.9,
-            "llm_stream": False,
-            "llm_max_input_tokens": 8192,
-            "llm_max_output_tokens": 4096,
-        })
+        ctx = MockNodeContext(
+            node_metadata={
+                "llm_model": "claude-3-opus",
+                "llm_provider": "anthropic",
+                "llm_temperature": 0.9,
+                "llm_stream": False,
+                "llm_max_input_tokens": 8192,
+                "llm_max_output_tokens": 4096,
+            }
+        )
         llm_config = InstructionNodeV1.llm_config(ctx)
         assert llm_config.model == "claude-3-opus"
         assert llm_config.provider == "anthropic"
@@ -156,9 +158,7 @@ class TestInstructionNodeLLMConfig:
         assert "helpful" in llm_config.system_message.lower()
 
     def test_custom_system_instruction(self):
-        ctx = MockNodeContext(node_metadata={
-            "llm_system_instruction": "You are a pirate."
-        })
+        ctx = MockNodeContext(node_metadata={"llm_system_instruction": "You are a pirate."})
         llm_config = InstructionNodeV1.llm_config(ctx)
         assert llm_config.system_message == "You are a pirate."
 
@@ -233,12 +233,14 @@ class TestInstructionNodeContextManagerConfig:
         assert cm_config.max_tool_result_tokens is None
 
     def test_custom_context_config(self):
-        ctx = MockNodeContext(node_metadata={
-            "context_tool_clearing_trigger": 10,
-            "context_tool_clearing_keep": 3,
-            "context_exclude_tools": ["tool_a"],
-            "context_max_tool_result_tokens": 1000,
-        })
+        ctx = MockNodeContext(
+            node_metadata={
+                "context_tool_clearing_trigger": 10,
+                "context_tool_clearing_keep": 3,
+                "context_exclude_tools": ["tool_a"],
+                "context_max_tool_result_tokens": 1000,
+            }
+        )
         llm_config = InstructionNodeV1.llm_config(ctx)
         cm_config = InstructionNodeV1.context_manager_config(ctx, llm_config)
 

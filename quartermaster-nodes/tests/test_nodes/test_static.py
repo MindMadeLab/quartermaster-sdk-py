@@ -104,7 +104,7 @@ class TestStaticNodeThink:
         assert ctx.handle.last_text == text
 
     def test_outputs_text_with_special_characters(self):
-        text = "Price: $100 & <special> \"chars\""
+        text = 'Price: $100 & <special> "chars"'
         ctx = MockNodeContext(node_metadata={"static_text": text})
         StaticNode1.think(ctx)
         assert ctx.handle.last_text == text

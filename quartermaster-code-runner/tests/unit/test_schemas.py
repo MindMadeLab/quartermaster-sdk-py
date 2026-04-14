@@ -93,13 +93,15 @@ class TestCodeExecutionRequest:
         assert req.cpu_shares == 256
         assert req.disk_limit == "100m"
 
-    def test_network_enabled_by_default(self) -> None:
+    def test_network_disabled_by_default(self) -> None:
+        # Security default: deny outbound network unless explicitly enabled.
+        # (Was True historically; flipped during the security-hardening pass.)
         req = CodeExecutionRequest(code="x")
-        assert req.allow_network is True
-
-    def test_network_can_be_disabled(self) -> None:
-        req = CodeExecutionRequest(code="x", allow_network=False)
         assert req.allow_network is False
+
+    def test_network_can_be_enabled(self) -> None:
+        req = CodeExecutionRequest(code="x", allow_network=True)
+        assert req.allow_network is True
 
 
 class TestCodeExecutionResponse:

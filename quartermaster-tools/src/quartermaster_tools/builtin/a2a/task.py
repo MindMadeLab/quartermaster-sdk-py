@@ -78,9 +78,7 @@ def a2a_send_task(
 
         if "error" in body:
             err = body["error"]
-            raise RuntimeError(
-                f"JSON-RPC error {err.get('code', '?')}: {err.get('message', '')}"
-            )
+            raise RuntimeError(f"JSON-RPC error {err.get('code', '?')}: {err.get('message', '')}")
 
         result = body.get("result", {})
         status = result.get("status", {})
@@ -143,9 +141,7 @@ def a2a_check_status(agent_url: str, task_id: str) -> dict:
 
         if "error" in body:
             err = body["error"]
-            raise RuntimeError(
-                f"JSON-RPC error {err.get('code', '?')}: {err.get('message', '')}"
-            )
+            raise RuntimeError(f"JSON-RPC error {err.get('code', '?')}: {err.get('message', '')}")
 
         result = body.get("result", {})
         status = result.get("status", {})
@@ -209,9 +205,7 @@ def a2a_collect_result(agent_url: str, task_id: str) -> dict:
 
         if "error" in body:
             err = body["error"]
-            raise RuntimeError(
-                f"JSON-RPC error {err.get('code', '?')}: {err.get('message', '')}"
-            )
+            raise RuntimeError(f"JSON-RPC error {err.get('code', '?')}: {err.get('message', '')}")
 
         result = body.get("result", {})
         status = result.get("status", {})
@@ -223,10 +217,12 @@ def a2a_collect_result(agent_url: str, task_id: str) -> dict:
         results: list[dict[str, str]] = []
         for artifact in artifacts:
             for part in artifact.get("parts", []):
-                results.append({
-                    "type": part.get("type", "text"),
-                    "content": part.get("text", ""),
-                })
+                results.append(
+                    {
+                        "type": part.get("type", "text"),
+                        "content": part.get("text", ""),
+                    }
+                )
 
         return {
             "task_id": result.get("id", task_id),

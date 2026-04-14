@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 
 from quartermaster_graph.enums import NodeType
-from quartermaster_graph.models import AgentGraph, GraphEdge, GraphNode
+from quartermaster_graph.models import GraphSpec, GraphEdge, GraphNode
 from quartermaster_graph.traversal import (
     find_decision_points,
     find_merge_points,
@@ -25,7 +25,7 @@ class TestGetStartNode:
 
     def test_raises_if_no_start(self, agent):
         end = GraphNode(type=NodeType.END, name="End")
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=uuid4(),
             nodes=[end],
@@ -78,7 +78,7 @@ class TestGetPath:
     def test_no_path(self, agent):
         a = GraphNode(type=NodeType.START, name="A")
         b = GraphNode(type=NodeType.END, name="B")
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=a.id,
             nodes=[a, b],
@@ -120,7 +120,7 @@ class TestTopologicalSort:
             GraphEdge(source_id=b.id, target_id=c.id),
             GraphEdge(source_id=c.id, target_id=b.id),  # cycle
         ]
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=a.id,
             nodes=[a, b, c],
@@ -148,7 +148,7 @@ class TestFindMergePoints:
             GraphEdge(source_id=b.id, target_id=merge.id),
             GraphEdge(source_id=merge.id, target_id=end.id),
         ]
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, a, b, merge, end],

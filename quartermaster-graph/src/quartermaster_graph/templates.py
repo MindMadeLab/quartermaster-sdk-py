@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from quartermaster_graph.builder import GraphBuilder
-from quartermaster_graph.models import AgentGraph
+from quartermaster_graph.models import GraphSpec
 
 
 class Templates:
@@ -14,7 +14,7 @@ class Templates:
         name: str = "Simple Chat Agent",
         model: str = "gpt-4o",
         system_instruction: str = "You are a helpful assistant.",
-    ) -> AgentGraph:
+    ) -> GraphSpec:
         """Start -> Instruction -> User -> (loop back to Instruction) -> End.
 
         A basic chat loop agent.
@@ -36,7 +36,7 @@ class Templates:
         question: str = "What should we do?",
         options: list[str] | None = None,
         model: str = "gpt-4o",
-    ) -> AgentGraph:
+    ) -> GraphSpec:
         """Start -> Decision -> branches -> End.
 
         A decision tree with labeled branches.
@@ -56,7 +56,7 @@ class Templates:
         name: str = "Multi-Step Agent",
         steps: list[str] | None = None,
         model: str = "gpt-4o",
-    ) -> AgentGraph:
+    ) -> GraphSpec:
         """Start -> Instruction -> Code -> Instruction -> End.
 
         Multi-step processing pipeline.
@@ -76,7 +76,7 @@ class Templates:
         name: str = "Parallel Processing",
         branches: list[str] | None = None,
         model: str = "gpt-4o",
-    ) -> AgentGraph:
+    ) -> GraphSpec:
         """Start -> Decision (fan-out) -> [branches] -> End.
 
         Parallel processing with multiple branches all ending.
@@ -96,7 +96,7 @@ class Templates:
         name: str = "Multi-Agent Supervisor",
         worker_names: list[str] | None = None,
         model: str = "gpt-4o",
-    ) -> AgentGraph:
+    ) -> GraphSpec:
         """Start -> Instruction (supervisor) -> Decision (route) -> [sub-agents] -> End.
 
         A supervisor agent that routes tasks to specialized worker sub-agents
@@ -127,4 +127,3 @@ class Templates:
                 .end()
             )
         return b.build(validate=True)
-

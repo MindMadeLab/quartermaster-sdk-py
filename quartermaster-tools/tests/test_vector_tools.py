@@ -183,7 +183,9 @@ class TestVectorSearchTool:
 
     def test_finds_relevant_docs(self):
         """Search returns documents, most similar first."""
-        self._populate(["the cat sat on the mat", "dogs are loyal animals", "cat food is expensive"])
+        self._populate(
+            ["the cat sat on the mat", "dogs are loyal animals", "cat food is expensive"]
+        )
         tool = VectorSearchTool
         result = tool.run(collection="docs", query="cat")
         assert result.success

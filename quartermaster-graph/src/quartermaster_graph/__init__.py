@@ -42,10 +42,11 @@ from quartermaster_graph.metadata import (
 )
 from quartermaster_graph.models import (
     Agent,
-    AgentGraph,
-    AgentVersion,  # backward-compat alias
+    AgentGraph,  # backward-compat alias for GraphSpec
+    AgentVersion,  # backward-compat alias for GraphSpec
     GraphEdge,
     GraphNode,
+    GraphSpec,
     NodePosition,
 )
 from quartermaster_graph.serialization import from_json, from_yaml, json_schema, to_json, to_yaml
@@ -74,8 +75,9 @@ __all__ = [
     "TraverseOut",
     # Models
     "Agent",
-    "AgentGraph",
-    "AgentVersion",  # deprecated alias for AgentGraph
+    "GraphSpec",
+    "AgentGraph",  # deprecated alias for GraphSpec
+    "AgentVersion",  # deprecated alias for GraphSpec
     "GraphEdge",
     "GraphNode",
     "NodePosition",

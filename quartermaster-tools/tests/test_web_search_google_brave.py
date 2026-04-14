@@ -75,6 +75,7 @@ class TestGoogleSearchTool:
     @patch("quartermaster_tools.builtin.web_search.google.httpx")
     def test_timeout_error(self, mock_httpx: MagicMock) -> None:
         import httpx
+
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
@@ -92,6 +93,7 @@ class TestGoogleSearchTool:
     @patch("quartermaster_tools.builtin.web_search.google.httpx")
     def test_http_error(self, mock_httpx: MagicMock) -> None:
         import httpx
+
         mock_response = MagicMock()
         mock_response.status_code = 403
         mock_response.text = "Forbidden"
@@ -126,7 +128,9 @@ class TestGoogleSearchTool:
         assert result.success is True
         # Verify params were passed
         call_kwargs = mock_client.get.call_args
-        params = call_kwargs[1]["params"] if "params" in call_kwargs[1] else call_kwargs.kwargs["params"]
+        params = (
+            call_kwargs[1]["params"] if "params" in call_kwargs[1] else call_kwargs.kwargs["params"]
+        )
         assert params["lr"] == "lang_en"
         assert params["gl"] == "us"
 
@@ -144,7 +148,9 @@ class TestGoogleSearchTool:
 
         self.tool.run(query="test", num_results=50)
         call_kwargs = mock_client.get.call_args
-        params = call_kwargs[1]["params"] if "params" in call_kwargs[1] else call_kwargs.kwargs["params"]
+        params = (
+            call_kwargs[1]["params"] if "params" in call_kwargs[1] else call_kwargs.kwargs["params"]
+        )
         assert params["num"] == 10  # clamped to max
 
 
@@ -191,7 +197,11 @@ class TestBraveSearchTool:
         mock_response.json.return_value = {
             "web": {
                 "results": [
-                    {"title": "Brave Result", "url": "https://brave.com", "description": "A snippet"},
+                    {
+                        "title": "Brave Result",
+                        "url": "https://brave.com",
+                        "description": "A snippet",
+                    },
                 ]
             }
         }
@@ -211,6 +221,7 @@ class TestBraveSearchTool:
     @patch("quartermaster_tools.builtin.web_search.brave.httpx")
     def test_timeout_error(self, mock_httpx: MagicMock) -> None:
         import httpx
+
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
@@ -239,7 +250,9 @@ class TestBraveSearchTool:
         result = self.tool.run(query="test", freshness="week")
         assert result.success is True
         call_kwargs = mock_client.get.call_args
-        params = call_kwargs[1]["params"] if "params" in call_kwargs[1] else call_kwargs.kwargs["params"]
+        params = (
+            call_kwargs[1]["params"] if "params" in call_kwargs[1] else call_kwargs.kwargs["params"]
+        )
         assert params["freshness"] == "week"
 
     @patch.dict("os.environ", {"BRAVE_API_KEY": "brave_key"})
@@ -256,5 +269,7 @@ class TestBraveSearchTool:
 
         self.tool.run(query="test", count=100)
         call_kwargs = mock_client.get.call_args
-        params = call_kwargs[1]["params"] if "params" in call_kwargs[1] else call_kwargs.kwargs["params"]
+        params = (
+            call_kwargs[1]["params"] if "params" in call_kwargs[1] else call_kwargs.kwargs["params"]
+        )
         assert params["count"] == 20  # clamped

@@ -100,9 +100,7 @@ def start_agent_session(
 
     def task_fn(s: AgentSession) -> Any:
         if system_prompt:
-            s.messages.append(
-                AgentMessage(role="system", content=system_prompt)
-            )
+            s.messages.append(AgentMessage(role="system", content=system_prompt))
         s.messages.append(AgentMessage(role="user", content=task))
         # Framework hook point: a real LLM loop would process here.
         # For now, mark as completed with the task as the result.
@@ -110,9 +108,7 @@ def start_agent_session(
 
     started = manager.start_session(session_id, task_fn)
     if not started:
-        return {
-            "error": f"Could not start session '{session_id}' (already running or not found)"
-        }
+        return {"error": f"Could not start session '{session_id}' (already running or not found)"}
 
     return {"session_id": session_id, "status": "running"}
 
@@ -273,8 +269,7 @@ def collect_agent_results(session_ids: str, timeout: float = 30) -> dict:
         for s in sessions
     ]
     all_completed = all(
-        s.status
-        in (SessionStatus.COMPLETED, SessionStatus.FAILED, SessionStatus.CANCELLED)
+        s.status in (SessionStatus.COMPLETED, SessionStatus.FAILED, SessionStatus.CANCELLED)
         for s in sessions
     )
 
@@ -445,9 +440,7 @@ def spawn_agent(
     # Build metadata
     meta: dict[str, Any] = {"agent_id": agent_id}
     if allowed_agents:
-        child_allowed = [
-            a.strip() for a in allowed_agents.split(",") if a.strip()
-        ]
+        child_allowed = [a.strip() for a in allowed_agents.split(",") if a.strip()]
         meta["allowed_agents"] = child_allowed
 
     # Create and start in one go
@@ -466,9 +459,7 @@ def spawn_agent(
 
     def task_fn(s: AgentSession) -> Any:
         if system_prompt:
-            s.messages.append(
-                AgentMessage(role="system", content=system_prompt)
-            )
+            s.messages.append(AgentMessage(role="system", content=system_prompt))
         s.messages.append(AgentMessage(role="user", content=task))
         # Framework hook point: a real LLM loop would process here.
         return {"task": task, "message_count": len(s.messages)}

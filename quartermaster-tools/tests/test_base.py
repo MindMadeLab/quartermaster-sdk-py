@@ -4,7 +4,13 @@ from typing import Any
 
 import pytest
 
-from quartermaster_tools import AbstractTool, AbstractLocalTool, ToolDescriptor, ToolParameter, ToolResult
+from quartermaster_tools import (
+    AbstractTool,
+    AbstractLocalTool,
+    ToolDescriptor,
+    ToolParameter,
+    ToolResult,
+)
 
 
 # --- Concrete test implementations ---

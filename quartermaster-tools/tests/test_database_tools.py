@@ -20,9 +20,7 @@ def db_path(tmp_path):
     """Create a temporary SQLite database with a sample table."""
     path = str(tmp_path / "test.db")
     conn = sqlite3.connect(path)
-    conn.execute(
-        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT)"
-    )
+    conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT)")
     conn.execute("INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com')")
     conn.execute("INSERT INTO users (name, email) VALUES ('Bob', 'bob@example.com')")
     conn.execute("INSERT INTO users (name, email) VALUES ('Charlie', 'charlie@example.com')")
@@ -205,7 +203,9 @@ class TestSQLiteWriteTool:
         )
         assert result.success is True
         # Verify table still intact with the malicious string stored as data
-        r2 = SQLiteQueryTool.run(database=db_path, sql="SELECT * FROM users WHERE name = ?", params=[malicious_name])
+        r2 = SQLiteQueryTool.run(
+            database=db_path, sql="SELECT * FROM users WHERE name = ?", params=[malicious_name]
+        )
         assert r2.data["row_count"] == 1
 
 

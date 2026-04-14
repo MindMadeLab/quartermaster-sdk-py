@@ -77,9 +77,7 @@ class TestStartNodeThink:
     def test_think_with_memory_initializer(self):
         initialized = []
         ctx = MockNodeContext(
-            node_metadata={
-                "_memory_initializer": lambda c: initialized.append(c)
-            }
+            node_metadata={"_memory_initializer": lambda c: initialized.append(c)}
         )
         StartNodeV1.think(ctx)
         assert len(initialized) == 1
@@ -92,9 +90,7 @@ class TestStartNodeThink:
             nonlocal call_count
             call_count += 1
 
-        ctx = MockNodeContext(
-            node_metadata={"_memory_initializer": counting_initializer}
-        )
+        ctx = MockNodeContext(node_metadata={"_memory_initializer": counting_initializer})
         StartNodeV1.think(ctx)
         assert call_count == 1
 
@@ -109,9 +105,7 @@ class TestStartNodeThink:
     def test_think_initializer_receives_context(self):
         received_ctx = []
         ctx = MockNodeContext(
-            node_metadata={
-                "_memory_initializer": lambda c: received_ctx.append(c)
-            }
+            node_metadata={"_memory_initializer": lambda c: received_ctx.append(c)}
         )
         StartNodeV1.think(ctx)
         assert received_ctx[0] is ctx
@@ -120,8 +114,6 @@ class TestStartNodeThink:
         def failing_initializer(c):
             raise RuntimeError("Init failed")
 
-        ctx = MockNodeContext(
-            node_metadata={"_memory_initializer": failing_initializer}
-        )
+        ctx = MockNodeContext(node_metadata={"_memory_initializer": failing_initializer})
         with pytest.raises(RuntimeError, match="Init failed"):
             StartNodeV1.think(ctx)

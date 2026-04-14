@@ -15,9 +15,16 @@ from quartermaster_tools.decorator import tool
 DEFAULT_MAX_CONTENT_SIZE = 10 * 1024 * 1024
 
 # Allowed encodings
-_ALLOWED_ENCODINGS = frozenset({
-    "utf-8", "utf-16", "utf-32", "ascii", "latin-1", "iso-8859-1",
-})
+_ALLOWED_ENCODINGS = frozenset(
+    {
+        "utf-8",
+        "utf-16",
+        "utf-32",
+        "ascii",
+        "latin-1",
+        "iso-8859-1",
+    }
+)
 
 # Paths that are never allowed to be written to
 _BLOCKED_PREFIXES = (
@@ -73,12 +80,16 @@ def _write_file_impl(
     if encoding.lower().replace("-", "") not in {
         e.lower().replace("-", "") for e in _ALLOWED_ENCODINGS
     }:
-        return {"error": f"Unsupported encoding: {encoding!r}. Allowed: {sorted(_ALLOWED_ENCODINGS)}"}
+        return {
+            "error": f"Unsupported encoding: {encoding!r}. Allowed: {sorted(_ALLOWED_ENCODINGS)}"
+        }
 
     # Check content size
     content_bytes = len(content.encode(encoding, errors="replace"))
     if content_bytes > max_content_size:
-        return {"error": f"Content too large: {content_bytes} bytes (limit: {max_content_size} bytes)"}
+        return {
+            "error": f"Content too large: {content_bytes} bytes (limit: {max_content_size} bytes)"
+        }
 
     # Validate path security
     error, real_path = _validate_write_path(path, allowed_base_dir)

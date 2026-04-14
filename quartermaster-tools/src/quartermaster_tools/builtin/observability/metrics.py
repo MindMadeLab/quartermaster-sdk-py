@@ -63,14 +63,16 @@ def metric(
             existing["value"] += value
             existing["timestamp"] = timestamp
         else:
-            _METRICS_STORE.append({
-                "name": name,
-                "value": value,
-                "unit": unit,
-                "tags": tags,
-                "type": "counter",
-                "timestamp": timestamp,
-            })
+            _METRICS_STORE.append(
+                {
+                    "name": name,
+                    "value": value,
+                    "unit": unit,
+                    "tags": tags,
+                    "type": "counter",
+                    "timestamp": timestamp,
+                }
+            )
     elif metric_type == "gauge":
         # Overwrite: find existing gauge and replace value
         existing = None
@@ -82,24 +84,28 @@ def metric(
             existing["value"] = value
             existing["timestamp"] = timestamp
         else:
-            _METRICS_STORE.append({
+            _METRICS_STORE.append(
+                {
+                    "name": name,
+                    "value": value,
+                    "unit": unit,
+                    "tags": tags,
+                    "type": "gauge",
+                    "timestamp": timestamp,
+                }
+            )
+    else:
+        # Histogram: always append
+        _METRICS_STORE.append(
+            {
                 "name": name,
                 "value": value,
                 "unit": unit,
                 "tags": tags,
-                "type": "gauge",
+                "type": "histogram",
                 "timestamp": timestamp,
-            })
-    else:
-        # Histogram: always append
-        _METRICS_STORE.append({
-            "name": name,
-            "value": value,
-            "unit": unit,
-            "tags": tags,
-            "type": "histogram",
-            "timestamp": timestamp,
-        })
+            }
+        )
 
     return {
         "recorded": True,
@@ -116,11 +122,7 @@ def get_metrics() -> list[dict[str, Any]]:
 
 def get_metric_summary(name: str) -> dict[str, Any]:
     """Return min/max/avg/count for histogram metrics with the given name."""
-    values = [
-        e["value"]
-        for e in _METRICS_STORE
-        if e["name"] == name and e["type"] == "histogram"
-    ]
+    values = [e["value"] for e in _METRICS_STORE if e["name"] == name and e["type"] == "histogram"]
     if not values:
         return {}
     return {

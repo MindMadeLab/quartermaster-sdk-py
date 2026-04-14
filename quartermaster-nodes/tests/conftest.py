@@ -89,6 +89,7 @@ class MockExpressionEvaluator:
         # Fall back to safe AST evaluator for simple expressions
         try:
             from quartermaster_nodes.safe_eval import safe_eval
+
             result = safe_eval(expression, context)
             return ExpressionResult(result=result)
         except Exception as e:
@@ -142,9 +143,8 @@ def mock_edges():
     """Create a factory for mock edges."""
 
     def _make(*edges: tuple[Any, bool, str]) -> MockEdgeQuerySet:
-        return MockEdgeQuerySet([
-            MockEdge(tail_id=tid, main_direction=md, direction_text=dt)
-            for tid, md, dt in edges
-        ])
+        return MockEdgeQuerySet(
+            [MockEdge(tail_id=tid, main_direction=md, direction_text=dt) for tid, md, dt in edges]
+        )
 
     return _make

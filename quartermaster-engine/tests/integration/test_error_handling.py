@@ -5,7 +5,13 @@ from __future__ import annotations
 from uuid import uuid4
 
 from quartermaster_engine.context.execution_context import ExecutionContext
-from quartermaster_engine.events import FlowError, FlowEvent, FlowFinished, NodeFinished, NodeStarted
+from quartermaster_engine.events import (
+    FlowError,
+    FlowEvent,
+    FlowFinished,
+    NodeFinished,
+    NodeStarted,
+)
 from quartermaster_engine.nodes import NodeResult, SimpleNodeRegistry
 from quartermaster_engine.runner.flow_runner import FlowRunner
 from quartermaster_engine.stores.memory_store import InMemoryStore

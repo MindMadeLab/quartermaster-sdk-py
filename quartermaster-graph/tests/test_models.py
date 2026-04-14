@@ -13,7 +13,7 @@ from quartermaster_graph.enums import (
 )
 from quartermaster_graph.models import (
     Agent,
-    AgentGraph,
+    GraphSpec,
     GraphEdge,
     GraphNode,
     NodePosition,
@@ -137,13 +137,13 @@ class TestAgent:
         assert restored.name == agent.name
 
 
-class TestAgentGraph:
+class TestGraphSpec:
     def test_creation(self, simple_graph):
         assert len(simple_graph.nodes) == 3
         assert len(simple_graph.edges) == 2
 
     def test_serialization_roundtrip(self, simple_graph):
         data = simple_graph.model_dump(mode="json")
-        restored = AgentGraph.model_validate(data)
+        restored = GraphSpec.model_validate(data)
         assert len(restored.nodes) == len(simple_graph.nodes)
         assert len(restored.edges) == len(simple_graph.edges)

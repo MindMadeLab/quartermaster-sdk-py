@@ -86,6 +86,7 @@ class IfNode(AbstractAssistantNode):
             eval_result = result.result
         else:
             from quartermaster_nodes.safe_eval import safe_eval
+
             eval_result = safe_eval(if_expression, metadata)
 
         picked_node = true_node if eval_result else false_node

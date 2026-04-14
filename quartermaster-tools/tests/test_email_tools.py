@@ -63,7 +63,10 @@ class TestSendEmailTool:
         assert "smtp" in result.error.lower()
 
     @patch("quartermaster_tools.builtin.email.tools.smtplib.SMTP")
-    @patch.dict("os.environ", {"SMTP_HOST": "mail.example.com", "SMTP_USER": "user", "SMTP_PASSWORD": "pass"})
+    @patch.dict(
+        "os.environ",
+        {"SMTP_HOST": "mail.example.com", "SMTP_USER": "user", "SMTP_PASSWORD": "pass"},
+    )
     def test_successful_send(self, mock_smtp_cls: MagicMock) -> None:
         mock_server = MagicMock()
         mock_smtp_cls.return_value.__enter__ = MagicMock(return_value=mock_server)
@@ -77,15 +80,17 @@ class TestSendEmailTool:
         mock_server.sendmail.assert_called_once()
 
     @patch("quartermaster_tools.builtin.email.tools.smtplib.SMTP")
-    @patch.dict("os.environ", {"SMTP_HOST": "mail.example.com", "SMTP_USER": "user", "SMTP_PASSWORD": "pass"})
+    @patch.dict(
+        "os.environ",
+        {"SMTP_HOST": "mail.example.com", "SMTP_USER": "user", "SMTP_PASSWORD": "pass"},
+    )
     def test_send_with_cc_bcc(self, mock_smtp_cls: MagicMock) -> None:
         mock_server = MagicMock()
         mock_smtp_cls.return_value.__enter__ = MagicMock(return_value=mock_server)
         mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
 
         result = send_email.run(
-            to="a@b.com", subject="Test", body="Hello",
-            cc="c@d.com", bcc="e@f.com"
+            to="a@b.com", subject="Test", body="Hello", cc="c@d.com", bcc="e@f.com"
         )
         assert result.success is True
         sendmail_args = mock_server.sendmail.call_args[0]
@@ -103,8 +108,7 @@ class TestSendEmailTool:
         mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
 
         result = send_email.run(
-            to="a@b.com", subject="Test", body="Hello",
-            smtp_user="bad", smtp_password="creds"
+            to="a@b.com", subject="Test", body="Hello", smtp_user="bad", smtp_password="creds"
         )
         assert result.success is False
         assert "authentication" in result.error.lower()
@@ -112,6 +116,7 @@ class TestSendEmailTool:
     @patch.dict("os.environ", {"SMTP_HOST": "mail.example.com"})
     def test_rate_limit(self) -> None:
         import time
+
         # Fill up rate limit
         now = time.time()
         _send_timestamps.clear()
@@ -141,7 +146,10 @@ class TestReadEmailTool:
         assert "imap" in result.error.lower()
 
     @patch("quartermaster_tools.builtin.email.tools.imaplib.IMAP4_SSL")
-    @patch.dict("os.environ", {"IMAP_HOST": "imap.example.com", "IMAP_USER": "user", "IMAP_PASSWORD": "pass"})
+    @patch.dict(
+        "os.environ",
+        {"IMAP_HOST": "imap.example.com", "IMAP_USER": "user", "IMAP_PASSWORD": "pass"},
+    )
     def test_successful_read(self, mock_imap_cls: MagicMock) -> None:
         mock_conn = MagicMock()
         mock_imap_cls.return_value = mock_conn
@@ -163,7 +171,10 @@ class TestReadEmailTool:
         mock_conn.logout.assert_called_once()
 
     @patch("quartermaster_tools.builtin.email.tools.imaplib.IMAP4_SSL")
-    @patch.dict("os.environ", {"IMAP_HOST": "imap.example.com", "IMAP_USER": "user", "IMAP_PASSWORD": "pass"})
+    @patch.dict(
+        "os.environ",
+        {"IMAP_HOST": "imap.example.com", "IMAP_USER": "user", "IMAP_PASSWORD": "pass"},
+    )
     def test_imap_error(self, mock_imap_cls: MagicMock) -> None:
         mock_imap_cls.side_effect = imaplib.IMAP4.error("Login failed")
         result = read_email.run()
@@ -171,7 +182,10 @@ class TestReadEmailTool:
         assert "imap" in result.error.lower()
 
     @patch("quartermaster_tools.builtin.email.tools.imaplib.IMAP4_SSL")
-    @patch.dict("os.environ", {"IMAP_HOST": "imap.example.com", "IMAP_USER": "user", "IMAP_PASSWORD": "pass"})
+    @patch.dict(
+        "os.environ",
+        {"IMAP_HOST": "imap.example.com", "IMAP_USER": "user", "IMAP_PASSWORD": "pass"},
+    )
     def test_read_all_not_unread_only(self, mock_imap_cls: MagicMock) -> None:
         mock_conn = MagicMock()
         mock_imap_cls.return_value = mock_conn
@@ -205,7 +219,10 @@ class TestSearchEmailTool:
         assert "imap" in result.error.lower()
 
     @patch("quartermaster_tools.builtin.email.tools.imaplib.IMAP4_SSL")
-    @patch.dict("os.environ", {"IMAP_HOST": "imap.example.com", "IMAP_USER": "user", "IMAP_PASSWORD": "pass"})
+    @patch.dict(
+        "os.environ",
+        {"IMAP_HOST": "imap.example.com", "IMAP_USER": "user", "IMAP_PASSWORD": "pass"},
+    )
     def test_successful_search(self, mock_imap_cls: MagicMock) -> None:
         mock_conn = MagicMock()
         mock_imap_cls.return_value = mock_conn
@@ -222,7 +239,10 @@ class TestSearchEmailTool:
         assert result.data["emails"][0]["subject"] == "Found Email"
 
     @patch("quartermaster_tools.builtin.email.tools.imaplib.IMAP4_SSL")
-    @patch.dict("os.environ", {"IMAP_HOST": "imap.example.com", "IMAP_USER": "user", "IMAP_PASSWORD": "pass"})
+    @patch.dict(
+        "os.environ",
+        {"IMAP_HOST": "imap.example.com", "IMAP_USER": "user", "IMAP_PASSWORD": "pass"},
+    )
     def test_search_with_date_and_sender(self, mock_imap_cls: MagicMock) -> None:
         mock_conn = MagicMock()
         mock_imap_cls.return_value = mock_conn

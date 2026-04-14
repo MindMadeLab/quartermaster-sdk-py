@@ -92,17 +92,21 @@ class InstructionParameters1(AbstractLLMAssistantNode):
             ctx, cls.metadata_function_name_key, cls.metadata_function_name_default_value
         )
         func_desc = cls.get_metadata_key_value(
-            ctx, cls.metadata_function_description_key, cls.metadata_function_description_default_value
+            ctx,
+            cls.metadata_function_description_key,
+            cls.metadata_function_description_default_value,
         )
 
         tool = ProgramContainer(func_name, func_desc)
         for param in parameters:
-            tool.add_parameter(ParameterContainer(
-                name=param.get("name", ""),
-                type=param.get("type", "string"),
-                description=param.get("description", ""),
-                is_required=param.get("required", False),
-            ))
+            tool.add_parameter(
+                ParameterContainer(
+                    name=param.get("name", ""),
+                    type=param.get("type", "string"),
+                    description=param.get("description", ""),
+                    is_required=param.get("required", False),
+                )
+            )
 
         initial_data = {
             "memory_id": ctx.thought_id,
@@ -110,11 +114,10 @@ class InstructionParameters1(AbstractLLMAssistantNode):
             "ctx": ctx,
         }
 
-        Chain() \
-            .add_handler(ValidateMemoryID()) \
-            .add_handler(PrepareMessages(client, llm_config)) \
-            .add_handler(ContextManager(client, llm_config, context_config)) \
-            .add_handler(TransformToProvider(transformer)) \
-            .add_handler(GenerateToolCall(client, [tool], llm_config)) \
-            .add_handler(ProcessStreamResponse()) \
-            .run(initial_data)
+        Chain().add_handler(ValidateMemoryID()).add_handler(
+            PrepareMessages(client, llm_config)
+        ).add_handler(ContextManager(client, llm_config, context_config)).add_handler(
+            TransformToProvider(transformer)
+        ).add_handler(GenerateToolCall(client, [tool], llm_config)).add_handler(
+            ProcessStreamResponse()
+        ).run(initial_data)

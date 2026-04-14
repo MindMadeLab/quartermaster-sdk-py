@@ -170,9 +170,7 @@ class FlowRunConfig:
             else None,
             "user_id": str(self.user_id) if self.user_id is not None else None,
             "chat_id": str(self.chat_id) if self.chat_id is not None else None,
-            "environment_id": str(self.environment_id)
-            if self.environment_id is not None
-            else None,
+            "environment_id": str(self.environment_id) if self.environment_id is not None else None,
             "previous_thought_id": str(self.previous_thought_id)
             if self.previous_thought_id is not None
             else None,

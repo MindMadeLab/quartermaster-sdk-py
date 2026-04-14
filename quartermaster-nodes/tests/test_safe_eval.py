@@ -290,9 +290,7 @@ class TestComprehensions:
         ) == {"a": 1, "b": 2}
 
     def test_nested_comp(self) -> None:
-        assert safe_eval(
-            "[x + y for x in [1, 2] for y in [10, 20]]"
-        ) == [11, 21, 12, 22]
+        assert safe_eval("[x + y for x in [1, 2] for y in [10, 20]]") == [11, 21, 12, 22]
 
 
 # ── Blocked constructs (security) ──────────────────────────────────────
@@ -391,7 +389,10 @@ class TestNodeExpressions:
             "priority": 3,
             "tags": ["urgent", "bug"],
         }
-        assert safe_eval(
-            "category == 'tech' and priority > 2 and 'urgent' in tags",
-            ctx,
-        ) is True
+        assert (
+            safe_eval(
+                "category == 'tech' and priority > 2 and 'urgent' in tags",
+                ctx,
+            )
+            is True
+        )

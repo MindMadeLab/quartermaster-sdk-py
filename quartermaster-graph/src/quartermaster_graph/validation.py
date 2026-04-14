@@ -20,7 +20,7 @@ class ValidationError:
     severity: str = "error"  # "error" or "warning"
 
 
-def validate_graph(version: AgentGraph) -> list[ValidationError]:  # type: ignore[name-defined]  # noqa: F821
+def validate_graph(version: GraphSpec) -> list[ValidationError]:  # type: ignore[name-defined]  # noqa: F821
     """Validate an agent graph version, returning all issues found.
 
     Checks:
@@ -32,19 +32,21 @@ def validate_graph(version: AgentGraph) -> list[ValidationError]:  # type: ignor
     - All edge source/target IDs reference existing nodes
     - Start node ID is valid
     """
-    from quartermaster_graph.models import AgentGraph
+    from quartermaster_graph.models import GraphSpec
 
-    assert isinstance(version, AgentGraph)
+    assert isinstance(version, GraphSpec)
     errors: list[ValidationError] = []
     node_map = {n.id: n for n in version.nodes}
 
     # --- Start node ---
     start_nodes = [n for n in version.nodes if n.type == NodeType.START]
     if len(start_nodes) == 0:
-        errors.append(ValidationError(
-            code="no_start",
-            message="Graph must have exactly one Start node",
-        ))
+        errors.append(
+            ValidationError(
+                code="no_start",
+                message="Graph must have exactly one Start node",
+            )
+        )
     elif len(start_nodes) > 1:
         for sn in start_nodes[1:]:
             errors.append(
@@ -58,10 +60,12 @@ def validate_graph(version: AgentGraph) -> list[ValidationError]:  # type: ignor
     # --- End node ---
     end_nodes = [n for n in version.nodes if n.type == NodeType.END]
     if len(end_nodes) == 0:
-        errors.append(ValidationError(
-            code="no_end",
-            message="Graph must have at least one End node",
-        ))
+        errors.append(
+            ValidationError(
+                code="no_end",
+                message="Graph must have at least one End node",
+            )
+        )
 
     # --- Start node ID valid ---
     if version.start_node_id not in node_map:
@@ -69,8 +73,7 @@ def validate_graph(version: AgentGraph) -> list[ValidationError]:  # type: ignor
             ValidationError(
                 code="invalid_start_id",
                 message=(
-                    f"start_node_id {version.start_node_id} "
-                    "does not reference a node in the graph"
+                    f"start_node_id {version.start_node_id} does not reference a node in the graph"
                 ),
             )
         )
@@ -126,8 +129,7 @@ def validate_graph(version: AgentGraph) -> list[ValidationError]:  # type: ignor
                     ValidationError(
                         code="orphan_node",
                         message=(
-                            f"Node '{node.name or node.type.value}' "
-                            "is not reachable from Start"
+                            f"Node '{node.name or node.type.value}' is not reachable from Start"
                         ),
                         node_id=node.id,
                     )
@@ -142,9 +144,7 @@ def validate_graph(version: AgentGraph) -> list[ValidationError]:  # type: ignor
                 adj_cycle[edge.source_id].append(edge.target_id)
                 in_degree[edge.target_id] += 1
 
-        queue_cycle: deque[UUID] = deque(
-            nid for nid, deg in in_degree.items() if deg == 0
-        )
+        queue_cycle: deque[UUID] = deque(nid for nid, deg in in_degree.items() if deg == 0)
         visited_count = 0
         while queue_cycle:
             nid = queue_cycle.popleft()
@@ -186,8 +186,14 @@ def validate_graph(version: AgentGraph) -> list[ValidationError]:  # type: ignor
         elif node.type == NodeType.IF:
             labels = {e.label for e in out_edges}
             bool_labels = {
-                "true", "false", "True", "False",
-                "yes", "no", "Yes", "No",
+                "true",
+                "false",
+                "True",
+                "False",
+                "yes",
+                "no",
+                "Yes",
+                "No",
             }
             if out_edges and not labels.intersection(bool_labels):
                 errors.append(
@@ -204,10 +210,7 @@ def validate_graph(version: AgentGraph) -> list[ValidationError]:  # type: ignor
                 errors.append(
                     ValidationError(
                         code="switch_unlabeled_edges",
-                        message=(
-                            f"Switch node '{node.name}' has "
-                            "unlabeled outgoing edges"
-                        ),
+                        message=(f"Switch node '{node.name}' has unlabeled outgoing edges"),
                         node_id=node.id,
                     )
                 )

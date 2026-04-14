@@ -46,9 +46,9 @@ from quartermaster_engine.stores.memory_store import InMemoryStore
 from quartermaster_engine.traversal.traverse_in import TraverseInGate
 from quartermaster_engine.traversal.traverse_out import TraverseOutGate
 from quartermaster_engine.types import (
-    AgentGraph,
     ErrorStrategy,
     GraphNode,
+    GraphSpec,
     Message,
     MessageRole,
     NodeType,
@@ -81,7 +81,7 @@ class FlowRunner:
 
     def __init__(
         self,
-        graph: AgentGraph,
+        graph: GraphSpec,
         node_registry: NodeRegistry,
         store: ExecutionStore | None = None,
         dispatcher: Any | None = None,

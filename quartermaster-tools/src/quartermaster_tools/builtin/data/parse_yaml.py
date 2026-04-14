@@ -39,9 +39,7 @@ def _parse_yaml(source: str) -> Any:
         ValueError: When the source cannot be parsed as YAML.
     """
     if _yaml is None:
-        raise RuntimeError(
-            "pyyaml is not installed. Install it with: pip install pyyaml"
-        )
+        raise RuntimeError("pyyaml is not installed. Install it with: pip install pyyaml")
 
     text = _read_source(source)
     try:

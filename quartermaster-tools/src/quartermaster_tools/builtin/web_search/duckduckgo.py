@@ -27,9 +27,7 @@ _RESULT_BLOCK_RE = re.compile(
 )
 _TITLE_RE = re.compile(r'<a[^>]*class="result__a"[^>]*>(.*?)</a>', re.DOTALL)
 _URL_RE = re.compile(r'<a[^>]*class="result__a"[^>]*href="([^"]*)"', re.DOTALL)
-_SNIPPET_RE = re.compile(
-    r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>', re.DOTALL
-)
+_SNIPPET_RE = re.compile(r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>', re.DOTALL)
 
 
 def _strip_html_tags(text: str) -> str:
@@ -76,11 +74,13 @@ def _parse_results(html_body: str, max_results: int) -> list[dict[str, str]]:
         url = _extract_url(url_match.group(1))
         snippet = _strip_html_tags(snippet_match.group(1)) if snippet_match else ""
 
-        results.append({
-            "title": title,
-            "url": url,
-            "snippet": snippet,
-        })
+        results.append(
+            {
+                "title": title,
+                "url": url,
+                "snippet": snippet,
+            }
+        )
 
     return results
 

@@ -83,20 +83,20 @@ def brave_search(
     except httpx.TimeoutException:
         raise TimeoutError("Brave search request timed out.")
     except httpx.HTTPStatusError as e:
-        raise RuntimeError(
-            f"Brave API HTTP error {e.response.status_code}: {e.response.text}"
-        )
+        raise RuntimeError(f"Brave API HTTP error {e.response.status_code}: {e.response.text}")
     except httpx.HTTPError as e:
         raise RuntimeError(f"HTTP error during search: {e}")
 
     results = []
     web_results = data.get("web", {}).get("results", [])
     for item in web_results:
-        results.append({
-            "title": item.get("title", ""),
-            "url": item.get("url", ""),
-            "snippet": item.get("description", ""),
-        })
+        results.append(
+            {
+                "title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "snippet": item.get("description", ""),
+            }
+        )
 
     return {
         "query": query,

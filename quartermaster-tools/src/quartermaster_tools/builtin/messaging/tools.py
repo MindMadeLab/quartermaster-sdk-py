@@ -142,12 +142,14 @@ def slack_read(
 
     messages = []
     for msg in data.get("messages", []):
-        messages.append({
-            "user": msg.get("user", ""),
-            "text": msg.get("text", ""),
-            "ts": msg.get("ts", ""),
-            "type": msg.get("type", ""),
-        })
+        messages.append(
+            {
+                "user": msg.get("user", ""),
+                "text": msg.get("text", ""),
+                "ts": msg.get("ts", ""),
+                "type": msg.get("type", ""),
+            }
+        )
 
     return {"channel": channel, "messages": messages, "message_count": len(messages)}
 
@@ -195,9 +197,7 @@ def webhook_notify(
     except httpx.TimeoutException:
         raise TimeoutError("Webhook request timed out.")
     except httpx.HTTPStatusError as e:
-        raise RuntimeError(
-            f"Webhook HTTP error {e.response.status_code}: {e.response.text}"
-        )
+        raise RuntimeError(f"Webhook HTTP error {e.response.status_code}: {e.response.text}")
     except httpx.HTTPError as e:
         raise RuntimeError(f"HTTP error: {e}")
 
@@ -238,9 +238,7 @@ def discord_message(webhook_url: str, content: str) -> dict:
     except httpx.TimeoutException:
         raise TimeoutError("Discord webhook request timed out.")
     except httpx.HTTPStatusError as e:
-        raise RuntimeError(
-            f"Discord HTTP error {e.response.status_code}: {e.response.text}"
-        )
+        raise RuntimeError(f"Discord HTTP error {e.response.status_code}: {e.response.text}")
     except httpx.HTTPError as e:
         raise RuntimeError(f"HTTP error: {e}")
 

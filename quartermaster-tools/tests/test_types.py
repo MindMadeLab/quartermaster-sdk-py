@@ -179,7 +179,9 @@ class TestToolDescriptorBridge:
 
         d = self._make_descriptor()
         # Temporarily block quartermaster_providers import
-        with unittest.mock.patch.dict(sys.modules, {"quartermaster_providers": None, "quartermaster_providers.types": None}):
+        with unittest.mock.patch.dict(
+            sys.modules, {"quartermaster_providers": None, "quartermaster_providers.types": None}
+        ):
             import pytest
 
             with pytest.raises(ImportError, match="quartermaster-providers is required"):

@@ -112,10 +112,12 @@ class TestDecisionPrepareMessage:
                 "suffix_message": "",
             },
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id=edge1_id, main_direction=True, direction_text="Go left"),
-                    MockEdge(tail_id=edge2_id, main_direction=False, direction_text="Go right"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id=edge1_id, main_direction=True, direction_text="Go left"),
+                        MockEdge(tail_id=edge2_id, main_direction=False, direction_text="Go right"),
+                    ]
+                )
             ),
         )
         msg = Decision1.prepare_decision_message(ctx)
@@ -128,9 +130,11 @@ class TestDecisionPrepareMessage:
     def test_uses_default_prefix(self):
         ctx = MockNodeContext(
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id="e1", main_direction=True, direction_text="yes"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id="e1", main_direction=True, direction_text="yes"),
+                    ]
+                )
             ),
         )
         msg = Decision1.prepare_decision_message(ctx)
@@ -140,9 +144,11 @@ class TestDecisionPrepareMessage:
         ctx = MockNodeContext(
             node_metadata={"suffix_message": "Choose wisely."},
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id="e1", main_direction=True, direction_text="option"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id="e1", main_direction=True, direction_text="option"),
+                    ]
+                )
             ),
         )
         msg = Decision1.prepare_decision_message(ctx)
@@ -150,9 +156,7 @@ class TestDecisionPrepareMessage:
 
     def test_empty_edges(self):
         ctx = MockNodeContext(
-            assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([])
-            ),
+            assistant_node=MockAssistantNode(predecessor_edges=MockEdgeQuerySet([])),
         )
         msg = Decision1.prepare_decision_message(ctx)
         assert isinstance(msg, str)
@@ -171,9 +175,11 @@ class TestDecisionThink:
             node_metadata={"_transformer": MagicMock(), "_client": MagicMock()},
             thought_id=uuid4(),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id="e1", main_direction=True, direction_text="yes"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id="e1", main_direction=True, direction_text="yes"),
+                    ]
+                )
             ),
         )
 
@@ -195,9 +201,7 @@ class TestDecisionThink:
                 "_client": None,
                 "llm_stream": True,  # Even if set to True, Decision forces False
             },
-            assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([])
-            ),
+            assistant_node=MockAssistantNode(predecessor_edges=MockEdgeQuerySet([])),
         )
 
         Decision1.think(ctx)
@@ -216,9 +220,7 @@ class TestDecisionThink:
             node_metadata={"_transformer": None, "_client": None},
             thought_id=thought_id,
             flow_node_id=flow_node_id,
-            assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([])
-            ),
+            assistant_node=MockAssistantNode(predecessor_edges=MockEdgeQuerySet([])),
         )
 
         Decision1.think(ctx)

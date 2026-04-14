@@ -82,14 +82,16 @@ class NodeRegistry:
 
             info = node_cls.info()
             config = node_cls.flow_config()
-            result.append({
-                "name": node_cls.name(),
-                "version": node_cls.version(),
-                "description": info.description,
-                "deprecated": node_cls.deprecated(),
-                "flow_config": config.asdict(),
-                "metadata_schema": info.metadata,
-            })
+            result.append(
+                {
+                    "name": node_cls.name(),
+                    "version": node_cls.version(),
+                    "description": info.description,
+                    "deprecated": node_cls.deprecated(),
+                    "flow_config": config.asdict(),
+                    "metadata_schema": info.metadata,
+                }
+            )
         return sorted(result, key=lambda x: x["name"])
 
     def catalog_json(self) -> List[Dict[str, Any]]:
@@ -114,9 +116,7 @@ class NodeRegistry:
             logger.warning("Could not import package %s", package)
             return 0
 
-        for importer, modname, ispkg in pkgutil.walk_packages(
-            pkg.__path__, prefix=package + "."
-        ):
+        for importer, modname, ispkg in pkgutil.walk_packages(pkg.__path__, prefix=package + "."):
             try:
                 module = importlib.import_module(modname)
                 for attr_name in dir(module):

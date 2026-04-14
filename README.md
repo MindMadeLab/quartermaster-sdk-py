@@ -193,7 +193,7 @@ quartermaster-code-runner   Standalone Docker code execution
 ## Key Concepts
 
 - **Graph** -- A directed graph (supports cycles via `connect()` for loops) of nodes and edges. Built with the fluent `Graph("name").start().user("Input")...end()` API.
-- **AgentGraph** -- The serializable graph model (`AgentGraph` in quartermaster-graph). Produced by `Graph.build()`.
+- **GraphSpec** -- The serializable graph model (`GraphSpec` in quartermaster-graph) returned by `Graph.build()`. `AgentGraph` remains as a deprecated backward-compat alias.
 - **User Node** -- Every graph starts with `.user()` after `.start()` to collect user input.
 - **Nodes** -- Units of work: LLM calls, decisions, user input, memory, tools, templates.
 - **Edges** -- Directed connections between nodes. Decision/IF/Switch edges carry labels.

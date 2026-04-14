@@ -103,9 +103,7 @@ def a2a_discover(agent_url: str) -> dict:
             response = client.get(card_url)
 
         if response.status_code != 200:
-            raise RuntimeError(
-                f"Agent card request failed with status {response.status_code}"
-            )
+            raise RuntimeError(f"Agent card request failed with status {response.status_code}")
 
         card = response.json()
         return {

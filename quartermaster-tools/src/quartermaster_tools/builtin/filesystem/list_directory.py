@@ -33,7 +33,9 @@ def _entry_info(full_path: str, base: str) -> dict[str, Any]:
 
 
 @tool()
-def list_directory(path: str, recursive: bool = False, pattern: str = "*", include_hidden: bool = False) -> dict:
+def list_directory(
+    path: str, recursive: bool = False, pattern: str = "*", include_hidden: bool = False
+) -> dict:
     """List directory entries with type, size, and modification time.
 
     Args:

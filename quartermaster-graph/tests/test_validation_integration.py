@@ -13,7 +13,7 @@ import pytest
 
 from quartermaster_graph.builder import GraphBuilder
 from quartermaster_graph.enums import NodeType, TraverseOut
-from quartermaster_graph.models import Agent, AgentGraph, GraphEdge, GraphNode
+from quartermaster_graph.models import Agent, GraphSpec, GraphEdge, GraphNode
 from quartermaster_graph.validation import ValidationError, validate_graph
 
 
@@ -38,7 +38,7 @@ class TestMissingStartNode:
         inst = GraphNode(type=NodeType.INSTRUCTION, name="Inst")
         end = GraphNode(type=NodeType.END, name="End")
         edge = GraphEdge(source_id=inst.id, target_id=end.id)
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=inst.id,
             nodes=[inst, end],
@@ -53,7 +53,7 @@ class TestMissingStartNode:
         start = GraphNode(type=NodeType.START, name="Start")
         end = GraphNode(type=NodeType.END, name="End")
         edge = GraphEdge(source_id=start.id, target_id=end.id)
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=uuid4(),  # does not exist
             nodes=[start, end],
@@ -68,7 +68,7 @@ class TestMissingStartNode:
         start = GraphNode(type=NodeType.START, name="Start")
         end = GraphNode(type=NodeType.END, name="End")
         edge = GraphEdge(source_id=start.id, target_id=end.id)
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=end.id,  # wrong type
             nodes=[start, end],
@@ -87,7 +87,7 @@ class TestMissingEndNode:
         start = GraphNode(type=NodeType.START, name="Start")
         inst = GraphNode(type=NodeType.INSTRUCTION, name="Process")
         edge = GraphEdge(source_id=start.id, target_id=inst.id)
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, inst],
@@ -107,7 +107,7 @@ class TestOrphanNodes:
         end = GraphNode(type=NodeType.END, name="End")
         orphan = GraphNode(type=NodeType.INSTRUCTION, name="Lonely")
         edge = GraphEdge(source_id=start.id, target_id=end.id)
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, end, orphan],
@@ -125,7 +125,7 @@ class TestOrphanNodes:
         orphan_a = GraphNode(type=NodeType.INSTRUCTION, name="Orphan A")
         orphan_b = GraphNode(type=NodeType.INSTRUCTION, name="Orphan B")
         edge = GraphEdge(source_id=start.id, target_id=end.id)
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, end, orphan_a, orphan_b],
@@ -142,7 +142,7 @@ class TestOrphanNodes:
         end = GraphNode(type=NodeType.END, name="End")
         comment = GraphNode(type=NodeType.COMMENT, name="Note")
         edge = GraphEdge(source_id=start.id, target_id=end.id)
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, end, comment],
@@ -168,7 +168,7 @@ class TestCycleDetection:
             GraphEdge(source_id=b.id, target_id=a.id),  # cycle
             GraphEdge(source_id=b.id, target_id=end.id),
         ]
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, a, b, end],
@@ -188,7 +188,7 @@ class TestCycleDetection:
             GraphEdge(source_id=inst.id, target_id=inst.id),  # self-loop
             GraphEdge(source_id=inst.id, target_id=end.id),
         ]
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, inst, end],
@@ -197,6 +197,7 @@ class TestCycleDetection:
         errors = validate_graph(version)
         error_codes = {e.code for e in errors if e.severity == "error"}
         assert "cycle_detected" in error_codes
+
 
 class TestInvalidEdges:
     """Validation must detect edges referencing nonexistent nodes."""
@@ -207,7 +208,7 @@ class TestInvalidEdges:
         end = GraphNode(type=NodeType.END, name="End")
         bad_edge = GraphEdge(source_id=uuid4(), target_id=end.id)
         good_edge = GraphEdge(source_id=start.id, target_id=end.id)
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, end],
@@ -223,7 +224,7 @@ class TestInvalidEdges:
         end = GraphNode(type=NodeType.END, name="End")
         bad_edge = GraphEdge(source_id=start.id, target_id=uuid4())
         good_edge = GraphEdge(source_id=start.id, target_id=end.id)
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, end],
@@ -239,7 +240,7 @@ class TestInvalidEdges:
         end = GraphNode(type=NodeType.END, name="End")
         bad_edge = GraphEdge(source_id=uuid4(), target_id=uuid4())
         good_edge = GraphEdge(source_id=start.id, target_id=end.id)
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, end],
@@ -269,7 +270,7 @@ class TestDecisionEdgeLabels:
             GraphEdge(source_id=decision.id, target_id=a.id),  # no label
             GraphEdge(source_id=decision.id, target_id=b.id, label="No"),
         ]
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, decision, a, b],
@@ -290,7 +291,7 @@ class TestDecisionEdgeLabels:
             GraphEdge(source_id=if_node.id, target_id=a.id, label="maybe"),
             GraphEdge(source_id=if_node.id, target_id=b.id, label="perhaps"),
         ]
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, if_node, a, b],
@@ -311,7 +312,7 @@ class TestDecisionEdgeLabels:
             GraphEdge(source_id=switch.id, target_id=a.id),  # no label
             GraphEdge(source_id=switch.id, target_id=b.id, label="case2"),
         ]
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=start.id,
             nodes=[start, switch, a, b],
@@ -330,7 +331,7 @@ class TestMultipleValidationErrors:
         # No start node, no end node, invalid edge
         inst = GraphNode(type=NodeType.INSTRUCTION, name="Lonely")
         bad_edge = GraphEdge(source_id=inst.id, target_id=uuid4())
-        version = AgentGraph(
+        version = GraphSpec(
             agent_id=agent.id,
             start_node_id=inst.id,
             nodes=[inst],

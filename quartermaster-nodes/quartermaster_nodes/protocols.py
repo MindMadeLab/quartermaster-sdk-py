@@ -130,9 +130,7 @@ class NodeContext(Protocol):
 class LLMProvider(Protocol):
     """Interface for LLM service providers."""
 
-    def generate_stream(
-        self, messages: list[dict], config: Any, **kwargs: Any
-    ) -> Any:
+    def generate_stream(self, messages: list[dict], config: Any, **kwargs: Any) -> Any:
         """Generate a streaming response."""
         ...
 

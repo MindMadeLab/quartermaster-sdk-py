@@ -21,9 +21,15 @@ class TestNodeType:
 
     def test_essential_types_exist(self):
         essential = [
-            NodeType.START, NodeType.END, NodeType.INSTRUCTION,
-            NodeType.DECISION, NodeType.IF, NodeType.SWITCH,
-            NodeType.MERGE, NodeType.CODE, NodeType.USER,
+            NodeType.START,
+            NodeType.END,
+            NodeType.INSTRUCTION,
+            NodeType.DECISION,
+            NodeType.IF,
+            NodeType.SWITCH,
+            NodeType.MERGE,
+            NodeType.CODE,
+            NodeType.USER,
         ]
         for t in essential:
             assert t in NodeType

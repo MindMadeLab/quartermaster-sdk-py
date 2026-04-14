@@ -34,12 +34,12 @@ pip install quartermaster-engine[sqlite]
 from uuid import uuid4
 from quartermaster_engine import FlowRunner, InMemoryStore
 from quartermaster_engine.nodes import SimpleNodeRegistry, NodeResult
-from quartermaster_graph import AgentGraph, GraphNode, GraphEdge, NodeType
+from quartermaster_graph import GraphSpec, GraphNode, GraphEdge, NodeType
 
 # 1. Define the graph
 start_id, process_id, end_id = uuid4(), uuid4(), uuid4()
 
-graph = AgentGraph(
+graph = GraphSpec(
     id=uuid4(),
     agent_id=uuid4(),
     start_node_id=start_id,
@@ -152,7 +152,7 @@ and the pause/resume cycle for interactive User nodes.
 
 ### FlowRunner
 
-The core orchestration class. Accepts an `AgentGraph` from `quartermaster-graph`.
+The core orchestration class. Accepts a `GraphSpec` from `quartermaster-graph` (`AgentGraph` still works as a deprecated alias).
 
 ```python
 from quartermaster_engine import FlowRunner
@@ -160,7 +160,7 @@ from quartermaster_engine.dispatchers.sync_dispatcher import SyncDispatcher
 from quartermaster_engine.messaging.context_manager import ContextManager
 
 runner = FlowRunner(
-    graph=agent_graph,               # AgentGraph from quartermaster-graph
+    graph=spec,                      # GraphSpec from quartermaster-graph
     node_registry=registry,          # Maps node types to executors
     store=InMemoryStore(),           # Execution state storage
     dispatcher=SyncDispatcher(),     # How branches are dispatched
@@ -318,7 +318,7 @@ The runtime context passed to each node executor:
 |-------|------|-------------|
 | `flow_id` | `UUID` | Flow execution identifier |
 | `node_id` | `UUID` | Current node identifier |
-| `graph` | `AgentGraph` | Full graph definition |
+| `graph` | `GraphSpec` | Full graph definition |
 | `current_node` | `GraphNode` | Current node definition |
 | `messages` | `list[Message]` | Conversation history |
 | `memory` | `dict[str, Any]` | Flow-scoped memory snapshot |

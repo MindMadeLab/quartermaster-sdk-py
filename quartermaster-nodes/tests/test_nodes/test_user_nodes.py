@@ -27,9 +27,7 @@ class TestUserNode:
 
         updates = []
         ctx = MockNodeContext(
-            node_metadata={
-                "_status_updater": lambda fid, status: updates.append((fid, status))
-            }
+            node_metadata={"_status_updater": lambda fid, status: updates.append((fid, status))}
         )
 
         with pytest.raises(ProcessStopException):

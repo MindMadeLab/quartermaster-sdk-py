@@ -37,8 +37,7 @@ def _mask_value(entity_type: str, value: str) -> str:
             masked_local = local[0] + "***" if len(local) > 1 else local
             domain_parts = domain.split(".")
             masked_domain = ".".join(
-                p[0] + "*" * (len(p) - 1) if len(p) > 1 else p
-                for p in domain_parts
+                p[0] + "*" * (len(p) - 1) if len(p) > 1 else p for p in domain_parts
             )
             return f"{masked_local}@{masked_domain}"
     if entity_type == "phone":
@@ -124,9 +123,7 @@ def redact_pii(text: str, strategy: str = "redact", entities: list = None) -> di
         raise ValueError("Parameter 'text' is required")
 
     if strategy not in ("redact", "mask", "hash"):
-        raise ValueError(
-            f"Invalid strategy: {strategy!r}. Must be 'redact', 'mask', or 'hash'."
-        )
+        raise ValueError(f"Invalid strategy: {strategy!r}. Must be 'redact', 'mask', or 'hash'.")
 
     entities_filter: list[str] | None = entities
     redacted, found = redact_text(text, strategy, entities_filter)

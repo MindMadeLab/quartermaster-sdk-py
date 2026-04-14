@@ -27,6 +27,7 @@ class BrowserSessionManager:
         """Check whether Playwright is installed."""
         try:
             import playwright.sync_api  # noqa: F401
+
             return True
         except ImportError:
             return False

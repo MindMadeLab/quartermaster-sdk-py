@@ -16,10 +16,21 @@ from quartermaster_tools.decorator import tool
 # -- Safe filter evaluator backed by simpleeval ----------------------------
 
 _FILTER_SAFE_FUNCS: dict[str, Any] = {
-    "len": len, "int": int, "float": float, "str": str, "bool": bool,
-    "abs": abs, "min": min, "max": max, "round": round, "sum": sum,
-    "sorted": sorted, "any": any, "all": all,
-    "isinstance": isinstance, "hasattr": hasattr,
+    "len": len,
+    "int": int,
+    "float": float,
+    "str": str,
+    "bool": bool,
+    "abs": abs,
+    "min": min,
+    "max": max,
+    "round": round,
+    "sum": sum,
+    "sorted": sorted,
+    "any": any,
+    "all": all,
+    "isinstance": isinstance,
+    "hasattr": hasattr,
 }
 
 
@@ -38,8 +49,16 @@ def _safe_eval_filter(expression: str, context: dict[str, Any]) -> Any:
 
     try:
         return evaluator.eval(expression)
-    except (FeatureNotAvailable, NameNotDefined, TypeError, ValueError,
-            AttributeError, KeyError, IndexError, ZeroDivisionError) as e:
+    except (
+        FeatureNotAvailable,
+        NameNotDefined,
+        TypeError,
+        ValueError,
+        AttributeError,
+        KeyError,
+        IndexError,
+        ZeroDivisionError,
+    ) as e:
         raise ValueError(str(e)) from e
     except Exception as e:
         raise ValueError(f"Evaluation failed: {e}") from e
@@ -48,9 +67,25 @@ def _safe_eval_filter(expression: str, context: dict[str, Any]) -> Any:
 def _validate_expression(expr: str) -> str | None:
     """Return an error message if *expr* uses blocked constructs, else None."""
     _blocked = {
-        "__import__", "eval", "exec", "compile", "open",
-        "getattr", "setattr", "delattr", "globals", "locals", "vars", "dir",
-        "type", "breakpoint", "exit", "quit", "input", "print", "__builtins__",
+        "__import__",
+        "eval",
+        "exec",
+        "compile",
+        "open",
+        "getattr",
+        "setattr",
+        "delattr",
+        "globals",
+        "locals",
+        "vars",
+        "dir",
+        "type",
+        "breakpoint",
+        "exit",
+        "quit",
+        "input",
+        "print",
+        "__builtins__",
     }
     for name in _blocked:
         if name in expr:
@@ -97,9 +132,7 @@ def _filter_data(
                 if _safe_eval_filter(filter_expression, {"row": row}):
                     filtered.append(row)
             except Exception as exc:
-                raise ValueError(
-                    f"Error evaluating expression on row {row!r}: {exc}"
-                ) from exc
+                raise ValueError(f"Error evaluating expression on row {row!r}: {exc}") from exc
         result = filtered
 
     # Sort
@@ -112,13 +145,15 @@ def _filter_data(
 
     # Limit
     if limit is not None:
-        result = result[:int(limit)]
+        result = result[: int(limit)]
 
     return result
 
 
 @tool()
-def data_filter(data: list, filter_expression: str = None, sort_by: str = None, limit: int = None) -> dict:
+def data_filter(
+    data: list, filter_expression: str = None, sort_by: str = None, limit: int = None
+) -> dict:
     """Filter, sort, and limit structured data.
 
     Operates on a list of dicts. Supports filtering via a simple Python

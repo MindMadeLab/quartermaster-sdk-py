@@ -9,7 +9,9 @@ An agent graph is a **directed acyclic graph (DAG)** where:
 - **Edges** represent the flow of execution between nodes
 - **Versions** snapshot the graph at a point in time
 
-## Top-Level Structure: AgentVersion
+## Top-Level Structure: GraphSpec
+
+> **Note:** Previous versions called this `AgentVersion` and `AgentGraph`. Both names remain as backward-compatible aliases.
 
 ```json
 {

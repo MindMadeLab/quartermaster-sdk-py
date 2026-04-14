@@ -164,14 +164,16 @@ def sqlite_schema(
                 cursor = conn.execute(f"PRAGMA table_info({table})")
                 columns = []
                 for row in cursor.fetchall():
-                    columns.append({
-                        "cid": row["cid"],
-                        "name": row["name"],
-                        "type": row["type"],
-                        "notnull": bool(row["notnull"]),
-                        "default_value": row["dflt_value"],
-                        "primary_key": bool(row["pk"]),
-                    })
+                    columns.append(
+                        {
+                            "cid": row["cid"],
+                            "name": row["name"],
+                            "type": row["type"],
+                            "notnull": bool(row["notnull"]),
+                            "default_value": row["dflt_value"],
+                            "primary_key": bool(row["pk"]),
+                        }
+                    )
                 if not columns:
                     return ToolResult(
                         success=False,

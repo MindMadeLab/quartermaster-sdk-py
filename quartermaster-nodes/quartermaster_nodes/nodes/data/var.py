@@ -79,6 +79,7 @@ class VarNode(AbstractAssistantNode):
             eval_result = result.result
         else:
             from quartermaster_nodes.safe_eval import safe_eval
+
             eval_result = safe_eval(expression, metadata)
 
         assert ctx.handle is not None, "handle not set"

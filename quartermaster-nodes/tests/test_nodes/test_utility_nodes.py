@@ -32,9 +32,7 @@ class TestViewMetadataNode:
     def test_outputs_metadata(self):
         from quartermaster_nodes.nodes.utility.view_metadata import ViewMetadataNode
 
-        ctx = MockNodeContext(
-            thought=MockThought(metadata={"key": "value", "number": 42})
-        )
+        ctx = MockNodeContext(thought=MockThought(metadata={"key": "value", "number": 42}))
         ViewMetadataNode.think(ctx)
         assert "key" in ctx.handle.last_text
         assert "value" in ctx.handle.last_text
@@ -62,9 +60,7 @@ class TestUnselectEnvironmentNode:
 
         deactivated = []
         ctx = MockNodeContext(
-            node_metadata={
-                "_environment_deactivator": lambda c: deactivated.append(True)
-            }
+            node_metadata={"_environment_deactivator": lambda c: deactivated.append(True)}
         )
         UnselectEnvironmentNode.think(ctx)
         assert len(deactivated) == 1

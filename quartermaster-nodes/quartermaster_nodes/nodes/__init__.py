@@ -14,7 +14,9 @@ from quartermaster_nodes.nodes.llm.instruction import InstructionNodeV1
 from quartermaster_nodes.nodes.llm.instruction_image_vision import InstructionImageVision1
 from quartermaster_nodes.nodes.llm.instruction_parameters import InstructionParameters1
 from quartermaster_nodes.nodes.llm.instruction_program import InstructionProgram1
-from quartermaster_nodes.nodes.llm.instruction_program_parameters import InstructionProgramParameters1
+from quartermaster_nodes.nodes.llm.instruction_program_parameters import (
+    InstructionProgramParameters1,
+)
 from quartermaster_nodes.nodes.llm.decision import Decision1
 
 from quartermaster_nodes.nodes.llm.agent import AgentNodeV1
@@ -69,7 +71,6 @@ __all__ = [
     "InstructionProgram1",
     "InstructionProgramParameters1",
     "Decision1",
-
     "AgentNodeV1",
     "Summarize1",
     "Merge1",

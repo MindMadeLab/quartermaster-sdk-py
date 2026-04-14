@@ -61,18 +61,23 @@ class PrepareMessages(Handler):
 
         # Add system message if configured
         if self.llm_config.system_message:
-            messages.insert(0, {
-                "role": "system",
-                "content": self.llm_config.system_message,
-            })
+            messages.insert(
+                0,
+                {
+                    "role": "system",
+                    "content": self.llm_config.system_message,
+                },
+            )
 
         # Add additional message if provided
         if self.additional_message:
             role = self.additional_message_role or "user"
-            messages.append({
-                "role": role,
-                "content": self.additional_message,
-            })
+            messages.append(
+                {
+                    "role": role,
+                    "content": self.additional_message,
+                }
+            )
 
         data["messages"] = messages
         return data
@@ -99,7 +104,10 @@ class ContextManager(Handler):
         messages = data.get("messages", [])
 
         # Apply max messages limit
-        if self.context_config.max_messages > 0 and len(messages) > self.context_config.max_messages:
+        if (
+            self.context_config.max_messages > 0
+            and len(messages) > self.context_config.max_messages
+        ):
             # Keep system message + last N messages
             system_msgs = [m for m in messages if m.get("role") == "system"]
             non_system = [m for m in messages if m.get("role") != "system"]

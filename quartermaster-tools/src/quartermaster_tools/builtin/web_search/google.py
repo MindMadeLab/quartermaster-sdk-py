@@ -82,19 +82,19 @@ def google_search(
     except httpx.TimeoutException:
         raise TimeoutError("Google search request timed out.")
     except httpx.HTTPStatusError as e:
-        raise RuntimeError(
-            f"Google API HTTP error {e.response.status_code}: {e.response.text}"
-        )
+        raise RuntimeError(f"Google API HTTP error {e.response.status_code}: {e.response.text}")
     except httpx.HTTPError as e:
         raise RuntimeError(f"HTTP error during search: {e}")
 
     results = []
     for item in data.get("items", []):
-        results.append({
-            "title": item.get("title", ""),
-            "url": item.get("link", ""),
-            "snippet": item.get("snippet", ""),
-        })
+        results.append(
+            {
+                "title": item.get("title", ""),
+                "url": item.get("link", ""),
+                "snippet": item.get("snippet", ""),
+            }
+        )
 
     return {
         "query": query,

@@ -20,7 +20,7 @@ from quartermaster_engine.nodes import NodeExecutor, NodeResult, SimpleNodeRegis
 from quartermaster_engine.runner.flow_runner import FlowRunner
 from quartermaster_engine.stores.memory_store import InMemoryStore
 from quartermaster_engine.types import (
-    AgentGraph,
+    GraphSpec,
     GraphEdge,
     GraphNode,
     Message,
@@ -139,8 +139,13 @@ class MockIfExecutor(NodeExecutor):
 class MockLoopCounterExecutor(NodeExecutor):
     """Increments a counter in memory, picks loop or exit based on threshold."""
 
-    def __init__(self, counter_key: str = "__counter__", threshold: int = 3,
-                 loop_target: str = "LoopBody", exit_target: str = "End"):
+    def __init__(
+        self,
+        counter_key: str = "__counter__",
+        threshold: int = 3,
+        loop_target: str = "LoopBody",
+        exit_target: str = "End",
+    ):
         self._counter_key = counter_key
         self._threshold = threshold
         self._loop_target = loop_target
@@ -258,8 +263,8 @@ def make_edge(source: GraphNode, target: GraphNode, label: str = "") -> GraphEdg
     return GraphEdge(source_id=source.id, target_id=target.id, label=label)
 
 
-def make_graph(nodes: list[GraphNode], edges: list[GraphEdge], start_node: GraphNode) -> AgentGraph:
-    return AgentGraph(
+def make_graph(nodes: list[GraphNode], edges: list[GraphEdge], start_node: GraphNode) -> GraphSpec:
+    return GraphSpec(
         id=uuid4(),
         agent_id=uuid4(),
         start_node_id=start_node.id,
@@ -299,7 +304,9 @@ def build_registry(**extra_executors: NodeExecutor) -> SimpleNodeRegistry:
 class TestMessageRouterThoughtTypes:
     """Test how ThoughtType affects what messages a node receives."""
 
-    def _make_simple_graph(self, thought_type: ThoughtType) -> tuple[AgentGraph, GraphNode, GraphNode, GraphNode]:
+    def _make_simple_graph(
+        self, thought_type: ThoughtType
+    ) -> tuple[GraphSpec, GraphNode, GraphNode, GraphNode]:
         """Build Start -> A -> End with A having the given thought_type."""
         start = make_node(NodeType.START, "Start")
         a = make_node(NodeType.INSTRUCTION, "A", thought_type=thought_type)
@@ -319,8 +326,12 @@ class TestMessageRouterThoughtTypes:
     def test_new_thought_returns_system_message_if_present(self):
         """ThoughtType.NEW with system_instruction returns [system_msg]."""
         start = make_node(NodeType.START, "Start")
-        a = make_node(NodeType.INSTRUCTION, "A", thought_type=ThoughtType.NEW,
-                       metadata={"system_instruction": "You are helpful."})
+        a = make_node(
+            NodeType.INSTRUCTION,
+            "A",
+            thought_type=ThoughtType.NEW,
+            metadata={"system_instruction": "You are helpful."},
+        )
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
         graph = make_graph([start, a, end], [make_edge(start, a), make_edge(a, end)], start)
 
@@ -383,14 +394,20 @@ class TestMessageRouterThoughtTypes:
         start = make_node(NodeType.START, "Start")
         pred1 = make_node(NodeType.INSTRUCTION, "Pred1")
         pred2 = make_node(NodeType.INSTRUCTION, "Pred2")
-        a = make_node(NodeType.INSTRUCTION, "A", thought_type=ThoughtType.INHERIT,
-                       traverse_in=TraverseIn.AWAIT_ALL)
+        a = make_node(
+            NodeType.INSTRUCTION,
+            "A",
+            thought_type=ThoughtType.INHERIT,
+            traverse_in=TraverseIn.AWAIT_ALL,
+        )
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
         graph = make_graph(
             [start, pred1, pred2, a, end],
             [
-                make_edge(start, pred1), make_edge(start, pred2),
-                make_edge(pred1, a), make_edge(pred2, a),
+                make_edge(start, pred1),
+                make_edge(start, pred2),
+                make_edge(pred1, a),
+                make_edge(pred2, a),
                 make_edge(a, end),
             ],
             start,
@@ -400,12 +417,20 @@ class TestMessageRouterThoughtTypes:
         router = MessageRouter(store)
         flow_id = uuid4()
 
-        router.save_node_output(flow_id, pred1.id, [
-            Message(role=MessageRole.ASSISTANT, content="from pred1"),
-        ])
-        router.save_node_output(flow_id, pred2.id, [
-            Message(role=MessageRole.ASSISTANT, content="from pred2"),
-        ])
+        router.save_node_output(
+            flow_id,
+            pred1.id,
+            [
+                Message(role=MessageRole.ASSISTANT, content="from pred1"),
+            ],
+        )
+        router.save_node_output(
+            flow_id,
+            pred2.id,
+            [
+                Message(role=MessageRole.ASSISTANT, content="from pred2"),
+            ],
+        )
 
         msgs = router.get_messages_for_node(flow_id, a, graph)
         assert len(msgs) == 2
@@ -417,8 +442,12 @@ class TestMessageRouterThoughtTypes:
         """INHERIT prepends system instruction if present."""
         start = make_node(NodeType.START, "Start")
         pred = make_node(NodeType.INSTRUCTION, "Pred")
-        a = make_node(NodeType.INSTRUCTION, "A", thought_type=ThoughtType.INHERIT,
-                       metadata={"system_instruction": "Be concise."})
+        a = make_node(
+            NodeType.INSTRUCTION,
+            "A",
+            thought_type=ThoughtType.INHERIT,
+            metadata={"system_instruction": "Be concise."},
+        )
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
         graph = make_graph(
             [start, pred, a, end],
@@ -429,9 +458,13 @@ class TestMessageRouterThoughtTypes:
         store = InMemoryStore()
         router = MessageRouter(store)
         flow_id = uuid4()
-        router.save_node_output(flow_id, pred.id, [
-            Message(role=MessageRole.ASSISTANT, content="pred output"),
-        ])
+        router.save_node_output(
+            flow_id,
+            pred.id,
+            [
+                Message(role=MessageRole.ASSISTANT, content="pred output"),
+            ],
+        )
 
         msgs = router.get_messages_for_node(flow_id, a, graph)
         assert len(msgs) == 2
@@ -471,8 +504,12 @@ class TestMessageRouterThoughtTypes:
         """CONTINUE prepends system instruction then full history."""
         start = make_node(NodeType.START, "Start")
         pred = make_node(NodeType.INSTRUCTION, "Pred")
-        a = make_node(NodeType.INSTRUCTION, "A", thought_type=ThoughtType.CONTINUE,
-                       metadata={"system_instruction": "System msg."})
+        a = make_node(
+            NodeType.INSTRUCTION,
+            "A",
+            thought_type=ThoughtType.CONTINUE,
+            metadata={"system_instruction": "System msg."},
+        )
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
         graph = make_graph(
             [start, pred, a, end],
@@ -483,9 +520,13 @@ class TestMessageRouterThoughtTypes:
         store = InMemoryStore()
         router = MessageRouter(store)
         flow_id = uuid4()
-        router.save_node_output(flow_id, pred.id, [
-            Message(role=MessageRole.USER, content="hello"),
-        ])
+        router.save_node_output(
+            flow_id,
+            pred.id,
+            [
+                Message(role=MessageRole.USER, content="hello"),
+            ],
+        )
 
         msgs = router.get_messages_for_node(flow_id, a, graph)
         assert len(msgs) == 2
@@ -541,8 +582,9 @@ class TestMessageRouterBuildInputMessage:
 
     def test_variable_message_type_reads_from_memory(self):
         """MessageType.VARIABLE reads var from memory."""
-        node = make_node(message_type=MessageType.VARIABLE, name="VarNode",
-                          metadata={"variable_name": "my_var"})
+        node = make_node(
+            message_type=MessageType.VARIABLE, name="VarNode", metadata={"variable_name": "my_var"}
+        )
         router = MessageRouter(InMemoryStore())
         msg = router.build_input_message(node, "ignored", {"my_var": "from memory"})
         assert msg is not None
@@ -551,8 +593,11 @@ class TestMessageRouterBuildInputMessage:
 
     def test_variable_message_type_missing_var(self):
         """MessageType.VARIABLE with missing var returns empty string content."""
-        node = make_node(message_type=MessageType.VARIABLE, name="VarNode",
-                          metadata={"variable_name": "missing_var"})
+        node = make_node(
+            message_type=MessageType.VARIABLE,
+            name="VarNode",
+            metadata={"variable_name": "missing_var"},
+        )
         router = MessageRouter(InMemoryStore())
         msg = router.build_input_message(node, "ignored", {})
         assert msg is not None
@@ -560,8 +605,11 @@ class TestMessageRouterBuildInputMessage:
 
     def test_assistant_message_type(self):
         """MessageType.ASSISTANT creates an assistant message from metadata."""
-        node = make_node(message_type=MessageType.ASSISTANT, name="AssistNode",
-                          metadata={"assistant_message": "I am ready."})
+        node = make_node(
+            message_type=MessageType.ASSISTANT,
+            name="AssistNode",
+            metadata={"assistant_message": "I am ready."},
+        )
         router = MessageRouter(InMemoryStore())
         msg = router.build_input_message(node, "ignored", {})
         assert msg is not None
@@ -577,8 +625,9 @@ class TestMessageRouterBuildInputMessage:
 
     def test_variable_message_type_non_string_value(self):
         """MessageType.VARIABLE converts non-string values to str."""
-        node = make_node(message_type=MessageType.VARIABLE, name="VarNode",
-                          metadata={"variable_name": "count"})
+        node = make_node(
+            message_type=MessageType.VARIABLE, name="VarNode", metadata={"variable_name": "count"}
+        )
         router = MessageRouter(InMemoryStore())
         msg = router.build_input_message(node, "ignored", {"count": 42})
         assert msg is not None
@@ -614,7 +663,9 @@ class TestMessageRouterSaveAndRetrieve:
         node_id = uuid4()
 
         router.save_node_output(flow_id, node_id, [Message(role=MessageRole.USER, content="first")])
-        router.save_node_output(flow_id, node_id, [Message(role=MessageRole.USER, content="second")])
+        router.save_node_output(
+            flow_id, node_id, [Message(role=MessageRole.USER, content="second")]
+        )
 
         retrieved = store.get_messages(flow_id, node_id)
         assert len(retrieved) == 1
@@ -628,7 +679,9 @@ class TestMessageRouterSaveAndRetrieve:
         node_id = uuid4()
 
         router.save_node_output(flow_id, node_id, [Message(role=MessageRole.USER, content="first")])
-        router.append_to_node(flow_id, node_id, Message(role=MessageRole.ASSISTANT, content="second"))
+        router.append_to_node(
+            flow_id, node_id, Message(role=MessageRole.ASSISTANT, content="second")
+        )
 
         retrieved = store.get_messages(flow_id, node_id)
         assert len(retrieved) == 2
@@ -701,7 +754,12 @@ class TestMemoryPropagation:
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
         graph = make_graph(
             [start, w1, w2, reader, end],
-            [make_edge(start, w1), make_edge(w1, w2), make_edge(w2, reader), make_edge(reader, end)],
+            [
+                make_edge(start, w1),
+                make_edge(w1, w2),
+                make_edge(w2, reader),
+                make_edge(reader, end),
+            ],
             start,
         )
 
@@ -966,9 +1024,12 @@ class TestDecisionExecution:
     def test_decision_picks_correct_branch_by_name(self):
         """Decision picks branch A when output matches edge label 'A'."""
         start = make_node(NodeType.START, "Start")
-        decision = make_node(NodeType.DECISION, "Decide",
-                              traverse_out=TraverseOut.SPAWN_PICKED,
-                              metadata={"pick": "A"})
+        decision = make_node(
+            NodeType.DECISION,
+            "Decide",
+            traverse_out=TraverseOut.SPAWN_PICKED,
+            metadata={"pick": "A"},
+        )
         branch_a = make_node(NodeType.INSTRUCTION, "A")
         branch_b = make_node(NodeType.INSTRUCTION, "B")
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
@@ -998,9 +1059,12 @@ class TestDecisionExecution:
     def test_decision_picks_branch_b(self):
         """Decision picks branch B."""
         start = make_node(NodeType.START, "Start")
-        decision = make_node(NodeType.DECISION, "Decide",
-                              traverse_out=TraverseOut.SPAWN_PICKED,
-                              metadata={"pick": "B"})
+        decision = make_node(
+            NodeType.DECISION,
+            "Decide",
+            traverse_out=TraverseOut.SPAWN_PICKED,
+            metadata={"pick": "B"},
+        )
         branch_a = make_node(NodeType.INSTRUCTION, "A")
         branch_b = make_node(NodeType.INSTRUCTION, "B")
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
@@ -1034,9 +1098,12 @@ class TestIfExecution:
     def test_if_true_branch(self):
         """IF with true expression picks 'true' branch."""
         start = make_node(NodeType.START, "Start")
-        if_node = make_node(NodeType.IF, "Check",
-                             traverse_out=TraverseOut.SPAWN_PICKED,
-                             metadata={"if_expression": "True"})
+        if_node = make_node(
+            NodeType.IF,
+            "Check",
+            traverse_out=TraverseOut.SPAWN_PICKED,
+            metadata={"if_expression": "True"},
+        )
         true_branch = make_node(NodeType.INSTRUCTION, "true")
         false_branch = make_node(NodeType.INSTRUCTION, "false")
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
@@ -1066,9 +1133,12 @@ class TestIfExecution:
     def test_if_false_branch(self):
         """IF with false expression picks 'false' branch."""
         start = make_node(NodeType.START, "Start")
-        if_node = make_node(NodeType.IF, "Check",
-                             traverse_out=TraverseOut.SPAWN_PICKED,
-                             metadata={"if_expression": "False"})
+        if_node = make_node(
+            NodeType.IF,
+            "Check",
+            traverse_out=TraverseOut.SPAWN_PICKED,
+            metadata={"if_expression": "False"},
+        )
         true_branch = make_node(NodeType.INSTRUCTION, "true")
         false_branch = make_node(NodeType.INSTRUCTION, "false")
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
@@ -1099,9 +1169,12 @@ class TestIfExecution:
         """IF expression can reference flow memory variables."""
         start = make_node(NodeType.START, "Start")
         writer = make_node(NodeType.INSTRUCTION, "Writer")
-        if_node = make_node(NodeType.IF, "Check",
-                             traverse_out=TraverseOut.SPAWN_PICKED,
-                             metadata={"if_expression": "score > 5"})
+        if_node = make_node(
+            NodeType.IF,
+            "Check",
+            traverse_out=TraverseOut.SPAWN_PICKED,
+            metadata={"if_expression": "score > 5"},
+        )
         yes = make_node(NodeType.STATIC, "true")
         no = make_node(NodeType.SUMMARIZE, "false")
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
@@ -1139,8 +1212,7 @@ class TestParallelExecution:
         fork = make_node(NodeType.INSTRUCTION, "Fork")
         a = make_node(NodeType.INSTRUCTION, "BranchA")
         b = make_node(NodeType.STATIC, "BranchB")
-        merge = make_node(NodeType.MERGE, "Merge",
-                           traverse_in=TraverseIn.AWAIT_ALL)
+        merge = make_node(NodeType.MERGE, "Merge", traverse_in=TraverseIn.AWAIT_ALL)
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
         graph = make_graph(
             [start, fork, a, b, merge, end],
@@ -1337,9 +1409,12 @@ class TestTraverseOutStrategies:
     def test_spawn_picked_only_one_fires(self):
         """SPAWN_PICKED dispatches only the selected successor."""
         start = make_node(NodeType.START, "Start")
-        decision = make_node(NodeType.DECISION, "D",
-                              traverse_out=TraverseOut.SPAWN_PICKED,
-                              metadata={"pick": "Alpha"})
+        decision = make_node(
+            NodeType.DECISION,
+            "D",
+            traverse_out=TraverseOut.SPAWN_PICKED,
+            metadata={"pick": "Alpha"},
+        )
         alpha = make_node(NodeType.INSTRUCTION, "Alpha")
         beta = make_node(NodeType.INSTRUCTION, "Beta")
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
@@ -1461,7 +1536,9 @@ class TestConversationCompositionBasic:
     def test_var_node_does_not_appear_in_conversation(self):
         """Var node writes to memory but does NOT touch __conversation__."""
         start = make_node(NodeType.START, "Start")
-        var = make_node(NodeType.VAR, "SetVar", metadata={"name": "my_var", "expression": "'hello'"})
+        var = make_node(
+            NodeType.VAR, "SetVar", metadata={"name": "my_var", "expression": "'hello'"}
+        )
         instr = make_node(NodeType.INSTRUCTION, "Worker")
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
         graph = make_graph(
@@ -1521,9 +1598,12 @@ class TestConversationCompositionBasic:
         """Decision node receives conversation history from memory."""
         start = make_node(NodeType.START, "Start")
         instr = make_node(NodeType.INSTRUCTION, "Setup")
-        decision = make_node(NodeType.DECISION, "Route",
-                              traverse_out=TraverseOut.SPAWN_PICKED,
-                              metadata={"pick": "PathA"})
+        decision = make_node(
+            NodeType.DECISION,
+            "Route",
+            traverse_out=TraverseOut.SPAWN_PICKED,
+            metadata={"pick": "PathA"},
+        )
         path_a = make_node(NodeType.STATIC, "PathA")
         end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE)
         graph = make_graph(
@@ -1581,7 +1661,9 @@ class TestConversationCompositionMemory:
 class TestConversationCompositionLoops:
     """Test conversation accumulation across loop iterations."""
 
-    def _build_loop_graph(self, threshold: int = 3) -> tuple[AgentGraph, SimpleNodeRegistry, TrackingLLMExecutor]:
+    def _build_loop_graph(
+        self, threshold: int = 3
+    ) -> tuple[GraphSpec, SimpleNodeRegistry, TrackingLLMExecutor]:
         """Build: Start -> Body -> Counter (if < threshold -> Body, else -> End)."""
         start = make_node(NodeType.START, "Start")
         body = make_node(NodeType.INSTRUCTION, "LoopBody", traverse_in=TraverseIn.AWAIT_FIRST)
@@ -1899,8 +1981,12 @@ class TestConversationCompositionEdgeCases:
         """FlowResult.final_output comes from the End node."""
         start = make_node(NodeType.START, "Start")
         a = make_node(NodeType.INSTRUCTION, "A")
-        end = make_node(NodeType.END, "End", traverse_out=TraverseOut.SPAWN_NONE,
-                         thought_type=ThoughtType.CONTINUE)
+        end = make_node(
+            NodeType.END,
+            "End",
+            traverse_out=TraverseOut.SPAWN_NONE,
+            thought_type=ThoughtType.CONTINUE,
+        )
         graph = make_graph(
             [start, a, end],
             [make_edge(start, a), make_edge(a, end)],

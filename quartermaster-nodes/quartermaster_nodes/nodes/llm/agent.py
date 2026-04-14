@@ -137,13 +137,15 @@ class AgentNodeV1(AbstractLLMAssistantNode):
                 logger.info("Agent stopped by signal at iteration %d", iteration)
                 break
 
-            chain = Chain() \
-                .add_handler(ValidateMemoryID()) \
-                .add_handler(PrepareMessages(client, llm_config)) \
-                .add_handler(ContextManager(client, llm_config, context_config)) \
-                .add_handler(TransformToProvider(transformer)) \
-                .add_handler(GenerateNativeResponse(client, tools, llm_config)) \
+            chain = (
+                Chain()
+                .add_handler(ValidateMemoryID())
+                .add_handler(PrepareMessages(client, llm_config))
+                .add_handler(ContextManager(client, llm_config, context_config))
+                .add_handler(TransformToProvider(transformer))
+                .add_handler(GenerateNativeResponse(client, tools, llm_config))
                 .add_handler(ProcessStreamResponse())
+            )
 
             result = chain.run(initial_data)
 

@@ -59,11 +59,13 @@ simpleeval.MAX_POWER = 10_000
 
 # ── Exception ────────────────────────────────────────────────────────
 
+
 class SafeEvalError(Exception):
     """Raised when a safe-eval expression is invalid or forbidden."""
 
 
 # ── Extended evaluator ───────────────────────────────────────────────
+
 
 class _SafeEvaluator(EvalWithCompoundTypes):
     """Extends ``EvalWithCompoundTypes`` with set-comprehension support."""
@@ -117,6 +119,7 @@ class _SafeEvaluator(EvalWithCompoundTypes):
 
 # ── Public API ───────────────────────────────────────────────────────
 
+
 def safe_eval(expression: str, context: dict[str, Any] | None = None) -> Any:
     """Safely evaluate a Python expression against a context dict.
 
@@ -156,29 +159,31 @@ def safe_eval(expression: str, context: dict[str, Any] | None = None) -> Any:
     evaluator = _SafeEvaluator(names=context or {})
 
     # Add safe built-in functions
-    evaluator.functions.update({
-        "int": int,
-        "float": float,
-        "str": str,
-        "bool": bool,
-        "list": list,
-        "dict": dict,
-        "tuple": tuple,
-        "set": set,
-        "abs": abs,
-        "round": round,
-        "min": min,
-        "max": max,
-        "sum": sum,
-        "len": len,
-        "sorted": sorted,
-        "range": range,
-        "enumerate": enumerate,
-        "zip": zip,
-        "any": any,
-        "all": all,
-        "isinstance": isinstance,
-    })
+    evaluator.functions.update(
+        {
+            "int": int,
+            "float": float,
+            "str": str,
+            "bool": bool,
+            "list": list,
+            "dict": dict,
+            "tuple": tuple,
+            "set": set,
+            "abs": abs,
+            "round": round,
+            "min": min,
+            "max": max,
+            "sum": sum,
+            "len": len,
+            "sorted": sorted,
+            "range": range,
+            "enumerate": enumerate,
+            "zip": zip,
+            "any": any,
+            "all": all,
+            "isinstance": isinstance,
+        }
+    )
 
     # Allow isinstance() — simpleeval blocks it by default via
     # DISALLOW_FUNCTIONS.  We remove it from the module-level set so
@@ -188,9 +193,18 @@ def safe_eval(expression: str, context: dict[str, Any] | None = None) -> Any:
 
     try:
         return evaluator.eval(expression)
-    except (FeatureNotAvailable, NameNotDefined, NumberTooHigh,
-            IterableTooLong, TypeError, ValueError,
-            AttributeError, KeyError, IndexError, ZeroDivisionError) as e:
+    except (
+        FeatureNotAvailable,
+        NameNotDefined,
+        NumberTooHigh,
+        IterableTooLong,
+        TypeError,
+        ValueError,
+        AttributeError,
+        KeyError,
+        IndexError,
+        ZeroDivisionError,
+    ) as e:
         raise SafeEvalError(str(e)) from e
     except Exception as e:
         raise SafeEvalError(f"Evaluation failed: {e}") from e
