@@ -304,7 +304,7 @@ def _build_registry(
     reg.register(NodeType.REASONING.value, llm)
     reg.register(NodeType.SUMMARIZE.value, llm)
     reg.register(NodeType.AGENT.value, llm)
-    reg.register(NodeType.VISION.value, llm)
+    reg.register(NodeType.INSTRUCTION_IMAGE_VISION.value, llm)
 
     # Decision nodes
     reg.register(NodeType.DECISION.value, decision)
