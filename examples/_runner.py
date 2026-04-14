@@ -23,7 +23,7 @@ import os
 import sys
 from typing import Any
 
-from quartermaster_engine import FlowRunner, InMemoryStore, NodeStarted, NodeFinished, FlowEvent, TokenGenerated
+from quartermaster_engine import FlowRunner, InMemoryStore, NodeStarted, NodeFinished, FlowEvent, FlowError, TokenGenerated
 from quartermaster_engine.nodes import SimpleNodeRegistry, NodeExecutor, NodeResult
 from quartermaster_engine.context.execution_context import ExecutionContext
 from quartermaster_engine.runner.flow_runner import FlowResult
@@ -73,7 +73,8 @@ def _get_provider_registry(provider_name: str) -> ProviderRegistry:
     import importlib
     module = importlib.import_module(module_path)
     provider_cls = getattr(module, cls_name)
-    registry.register(provider_name, provider_cls)
+    api_key = os.environ.get(f"{provider_name.upper()}_API_KEY", "")
+    registry.register(provider_name, provider_cls, api_key=api_key)
     return registry
 
 
@@ -402,6 +403,8 @@ def run_graph(
             output = event.result[:80] + "..." if len(event.result) > 80 else event.result
             if output:
                 print(f"  {'':15s}   -> {output}", flush=True)
+        elif isinstance(event, FlowError):
+            print(f"  [ERROR] {event.error}", flush=True)
 
     # Run
     runner = FlowRunner(
