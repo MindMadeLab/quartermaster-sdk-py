@@ -2,7 +2,7 @@
 
 
 from quartermaster_graph.enums import NodeType
-from quartermaster_graph.models import AgentGraph
+from quartermaster_graph.models import GraphSpec
 from quartermaster_graph.templates import Templates
 from quartermaster_graph.validation import validate_graph
 
@@ -10,7 +10,7 @@ from quartermaster_graph.validation import validate_graph
 class TestSimpleChat:
     def test_creates_valid_graph(self):
         version = Templates.simple_chat()
-        assert isinstance(version, AgentGraph)
+        assert isinstance(version, GraphSpec)
         errors = validate_graph(version)
         real_errors = [e for e in errors if e.severity == "error"]
         assert len(real_errors) == 0

@@ -30,7 +30,7 @@ graph TD
 
 | Package | Responsibility | Key Types |
 |---------|---------------|-----------|
-| **quartermaster-graph** | Graph schema, builder API, validation | `Graph` (`GraphBuilder`), `GraphNode`, `GraphEdge`, `AgentVersion`, `NodeType` |
+| **quartermaster-graph** | Graph schema, builder API, validation | `Graph` (`GraphBuilder`), `GraphNode`, `GraphEdge`, `GraphSpec`, `NodeType` |
 | **quartermaster-providers** | LLM provider abstraction and registry | `AbstractLLMProvider`, `ProviderRegistry`, `LLMConfig`, `TokenResponse` |
 | **quartermaster-tools** | Tool definition, `@tool` decorator, registry, JSON schema export | `AbstractTool`, `tool`, `ToolRegistry`, `ToolDescriptor`, `ToolParameter` |
 | **quartermaster-nodes** | Node execution protocols and type contracts | `NodeContext`, `LLMProvider`, `ThoughtHandle`, `ExpressionEvaluator` |
@@ -124,7 +124,7 @@ The `validate_graph()` function in `quartermaster-graph` checks for structural c
 
 Packages communicate through well-defined types:
 
-- `quartermaster-graph` defines `GraphNode`, `GraphEdge`, `AgentVersion`, and `NodeType` -- these are the shared schema.
+- `quartermaster-graph` defines `GraphNode`, `GraphEdge`, `GraphSpec`, and `NodeType` -- these are the shared schema. (`AgentGraph` and `AgentVersion` remain as deprecated backward-compat aliases for `GraphSpec`.)
 - `quartermaster-engine` imports graph types to traverse the structure and engine-specific types (`Message`, `MessageRole`) for internal messaging.
 - `quartermaster-nodes` imports `LLMConfig` from `quartermaster-providers` and defines protocols that both `quartermaster-engine` and custom runtimes can satisfy.
 - `quartermaster-tools` optionally bridges to `quartermaster-providers` via `ToolDescriptor.to_tool_definition()`, but works standalone for tool registration and JSON schema export.

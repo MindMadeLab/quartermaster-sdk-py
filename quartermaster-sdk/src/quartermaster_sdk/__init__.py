@@ -21,5 +21,10 @@ Optional extras:
 __version__ = "0.0.1"
 
 # Re-export the most common entry points for convenience
-from quartermaster_graph import AgentGraph, Graph, GraphBuilder  # noqa: F401
+from quartermaster_graph import (  # noqa: F401
+    AgentGraph,  # deprecated alias for GraphSpec — kept for backward compat
+    Graph,
+    GraphBuilder,
+    GraphSpec,
+)
 from quartermaster_graph.enums import NodeType  # noqa: F401

@@ -61,8 +61,16 @@ class GraphEdge(BaseModel):
     points: list[tuple[float, float]] = Field(default_factory=list)
 
 
-class AgentGraph(BaseModel):
-    """An agent's graph definition."""
+class GraphSpec(BaseModel):
+    """The declarative graph definition — nodes, edges, and the entry point.
+
+    Returned by ``GraphBuilder.build()``. This is the serializable data
+    class; the fluent builder (``Graph`` / ``GraphBuilder``) produces one
+    of these and validation / traversal / execution all operate on it.
+
+    Naming follows the Kubernetes ``Pod`` + ``PodSpec`` convention:
+    ``Graph`` is the builder DSL, ``GraphSpec`` is the built definition.
+    """
 
     id: UUID = Field(default_factory=uuid4)
     agent_id: UUID
@@ -113,5 +121,9 @@ class Agent(BaseModel):
     updated_at: datetime = Field(default_factory=_utcnow)
 
 
-# Backward-compat alias
-AgentVersion = AgentGraph
+# Backward-compat aliases. ``AgentGraph`` was the previous name; ``AgentVersion``
+# was the name before that. Both resolve to ``GraphSpec`` so existing downstream
+# code keeps working. Plan is to remove them in a future release once users have
+# had time to migrate.
+AgentGraph = GraphSpec
+AgentVersion = GraphSpec

@@ -7,7 +7,7 @@ Agent workflows in Quartermaster are represented as directed graphs. The `quarte
 A graph consists of:
 - **Nodes** (`GraphNode`) -- Units of work (LLM calls, decisions, user input, etc.)
 - **Edges** (`GraphEdge`) -- Directed connections between nodes, optionally labeled
-- **AgentVersion** -- A versioned snapshot containing all nodes and edges, with a designated start node
+- **GraphSpec** -- The full graph definition: nodes, edges, and the start node. (`AgentGraph` and `AgentVersion` remain as deprecated aliases.)
 
 ## Graph Builder API
 

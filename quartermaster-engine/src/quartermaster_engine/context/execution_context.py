@@ -8,7 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from quartermaster_engine.context.node_execution import NodeStatus
-from quartermaster_engine.types import AgentGraph, GraphNode, Message
+from quartermaster_engine.types import GraphSpec, GraphNode, Message
 
 
 @dataclass
@@ -22,7 +22,7 @@ class ExecutionContext:
 
     flow_id: UUID
     node_id: UUID
-    graph: AgentGraph
+    graph: GraphSpec
     current_node: GraphNode
     messages: list[Message] = field(default_factory=list)
     memory: dict[str, Any] = field(default_factory=dict)

@@ -20,7 +20,7 @@ class ValidationError:
     severity: str = "error"  # "error" or "warning"
 
 
-def validate_graph(version: AgentGraph) -> list[ValidationError]:  # type: ignore[name-defined]  # noqa: F821
+def validate_graph(version: GraphSpec) -> list[ValidationError]:  # type: ignore[name-defined]  # noqa: F821
     """Validate an agent graph version, returning all issues found.
 
     Checks:
@@ -32,9 +32,9 @@ def validate_graph(version: AgentGraph) -> list[ValidationError]:  # type: ignor
     - All edge source/target IDs reference existing nodes
     - Start node ID is valid
     """
-    from quartermaster_graph.models import AgentGraph
+    from quartermaster_graph.models import GraphSpec
 
-    assert isinstance(version, AgentGraph)
+    assert isinstance(version, GraphSpec)
     errors: list[ValidationError] = []
     node_map = {n.id: n for n in version.nodes}
 

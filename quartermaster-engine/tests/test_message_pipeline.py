@@ -20,7 +20,7 @@ from quartermaster_engine.nodes import NodeExecutor, NodeResult, SimpleNodeRegis
 from quartermaster_engine.runner.flow_runner import FlowRunner
 from quartermaster_engine.stores.memory_store import InMemoryStore
 from quartermaster_engine.types import (
-    AgentGraph,
+    GraphSpec,
     GraphEdge,
     GraphNode,
     Message,
@@ -258,8 +258,8 @@ def make_edge(source: GraphNode, target: GraphNode, label: str = "") -> GraphEdg
     return GraphEdge(source_id=source.id, target_id=target.id, label=label)
 
 
-def make_graph(nodes: list[GraphNode], edges: list[GraphEdge], start_node: GraphNode) -> AgentGraph:
-    return AgentGraph(
+def make_graph(nodes: list[GraphNode], edges: list[GraphEdge], start_node: GraphNode) -> GraphSpec:
+    return GraphSpec(
         id=uuid4(),
         agent_id=uuid4(),
         start_node_id=start_node.id,
@@ -299,7 +299,7 @@ def build_registry(**extra_executors: NodeExecutor) -> SimpleNodeRegistry:
 class TestMessageRouterThoughtTypes:
     """Test how ThoughtType affects what messages a node receives."""
 
-    def _make_simple_graph(self, thought_type: ThoughtType) -> tuple[AgentGraph, GraphNode, GraphNode, GraphNode]:
+    def _make_simple_graph(self, thought_type: ThoughtType) -> tuple[GraphSpec, GraphNode, GraphNode, GraphNode]:
         """Build Start -> A -> End with A having the given thought_type."""
         start = make_node(NodeType.START, "Start")
         a = make_node(NodeType.INSTRUCTION, "A", thought_type=thought_type)
@@ -1581,7 +1581,7 @@ class TestConversationCompositionMemory:
 class TestConversationCompositionLoops:
     """Test conversation accumulation across loop iterations."""
 
-    def _build_loop_graph(self, threshold: int = 3) -> tuple[AgentGraph, SimpleNodeRegistry, TrackingLLMExecutor]:
+    def _build_loop_graph(self, threshold: int = 3) -> tuple[GraphSpec, SimpleNodeRegistry, TrackingLLMExecutor]:
         """Build: Start -> Body -> Counter (if < threshold -> Body, else -> End)."""
         start = make_node(NodeType.START, "Start")
         body = make_node(NodeType.INSTRUCTION, "LoopBody", traverse_in=TraverseIn.AWAIT_FIRST)

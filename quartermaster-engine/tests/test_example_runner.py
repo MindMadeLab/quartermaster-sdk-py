@@ -25,7 +25,7 @@ from quartermaster_engine.example_runner import (
 )
 from quartermaster_engine.nodes import NodeResult
 from quartermaster_engine.types import (
-    AgentGraph,
+    GraphSpec,
     GraphEdge,
     GraphNode,
     Message,
@@ -52,10 +52,10 @@ def _make_node(
     )
 
 
-def _make_graph(nodes: list[GraphNode] | None = None) -> AgentGraph:
+def _make_graph(nodes: list[GraphNode] | None = None) -> GraphSpec:
     if not nodes:
         nodes = [_make_node()]
-    return AgentGraph(
+    return GraphSpec(
         id=uuid4(),
         agent_id=uuid4(),
         start_node_id=nodes[0].id,
@@ -71,7 +71,7 @@ def _make_context(
     node_name: str = "TestNode",
     node_type: NodeType = NodeType.INSTRUCTION,
     node_metadata: dict[str, Any] | None = None,
-    graph: AgentGraph | None = None,
+    graph: GraphSpec | None = None,
     current_node: GraphNode | None = None,
 ) -> ExecutionContext:
     if current_node is None:

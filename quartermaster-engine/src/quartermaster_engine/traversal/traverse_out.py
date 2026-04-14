@@ -10,7 +10,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from quartermaster_engine.nodes import NodeResult
-from quartermaster_engine.types import AgentGraph, GraphNode, TraverseOut
+from quartermaster_engine.types import GraphSpec, GraphNode, TraverseOut
 
 
 class TraverseOutGate:
@@ -19,7 +19,7 @@ class TraverseOutGate:
     def get_next_nodes(
         self,
         node_id: UUID,
-        graph: AgentGraph,
+        graph: GraphSpec,
         strategy: TraverseOut,
         result: NodeResult,
     ) -> list[GraphNode]:
@@ -45,7 +45,7 @@ class TraverseOutGate:
         else:
             return self._spawn_all(node_id, graph)
 
-    def _spawn_all(self, node_id: UUID, graph: AgentGraph) -> list[GraphNode]:
+    def _spawn_all(self, node_id: UUID, graph: GraphSpec) -> list[GraphNode]:
         """Trigger ALL successor nodes (parallel execution)."""
         return graph.get_successors(node_id)
 
@@ -54,7 +54,7 @@ class TraverseOutGate:
         return []
 
     def _spawn_picked(
-        self, node_id: UUID, graph: AgentGraph, result: NodeResult
+        self, node_id: UUID, graph: GraphSpec, result: NodeResult
     ) -> list[GraphNode]:
         """Trigger ONE specific successor based on the node's decision.
 
@@ -88,7 +88,7 @@ class TraverseOutGate:
         # Fallback: spawn all (better to continue than silently stop)
         return self._spawn_all(node_id, graph)
 
-    def _spawn_start(self, graph: AgentGraph) -> list[GraphNode]:
+    def _spawn_start(self, graph: GraphSpec) -> list[GraphNode]:
         """Loop back to the start node (for iterative flows)."""
         start = graph.get_start_node()
         if start:

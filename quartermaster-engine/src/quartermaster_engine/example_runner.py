@@ -42,7 +42,7 @@ from quartermaster_engine.nodes import SimpleNodeRegistry, NodeExecutor, NodeRes
 from quartermaster_engine.context.execution_context import ExecutionContext
 from quartermaster_engine.context.node_execution import NodeStatus
 from quartermaster_engine.types import MessageRole
-from quartermaster_graph import AgentGraph
+from quartermaster_graph import GraphSpec
 from quartermaster_graph.enums import NodeType
 from quartermaster_providers import ProviderRegistry, LLMConfig
 
@@ -565,7 +565,7 @@ def _build_registry(
 # ---------------------------------------------------------------------------
 
 def run_graph(
-    graph: AgentGraph,
+    graph: GraphSpec,
     user_input: str | None = None,
     verbose: bool = True,
     interactive: bool | None = None,

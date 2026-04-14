@@ -21,12 +21,12 @@ from quartermaster_graph.enums import (  # noqa: F401
     TraverseOut,
 )
 from quartermaster_graph.models import (  # noqa: F401
-    AgentGraph,
+    AgentGraph,  # backward-compat alias re-exported for older code
     GraphEdge,
     GraphNode,
+    GraphSpec,
     NodePosition,
 )
-
 
 # ── Engine-specific types ───────────────────────────────────────────────────
 

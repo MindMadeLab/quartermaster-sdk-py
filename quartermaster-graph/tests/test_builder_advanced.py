@@ -4,11 +4,11 @@ import pytest
 
 from quartermaster_graph.builder import GraphBuilder, _BranchBuilder
 from quartermaster_graph.enums import NodeType, TraverseIn
-from quartermaster_graph.models import AgentGraph
+from quartermaster_graph.models import GraphSpec
 from quartermaster_graph.validation import validate_graph
 
 
-def _no_errors(version: AgentGraph) -> list:
+def _no_errors(version: GraphSpec) -> list:
     """Return only real errors (not warnings) from validation."""
     return [e for e in validate_graph(version) if e.severity == "error"]
 
@@ -19,7 +19,7 @@ def _no_errors(version: AgentGraph) -> list:
 class TestBasicUserFlow:
     def test_start_user_instruction_end(self):
         graph = GraphBuilder("Agent").start().user().instruction("Respond").end().build()
-        assert isinstance(graph, AgentGraph)
+        assert isinstance(graph, GraphSpec)
         types = [n.type for n in graph.nodes]
         assert NodeType.START in types
         assert NodeType.USER in types
@@ -37,7 +37,7 @@ class TestSubGraphUse:
     def test_inline_subgraph(self):
         sub = GraphBuilder("Sub").start().instruction("Sub step").end().build()
         graph = GraphBuilder("Main").start().use(sub).end().build()
-        assert isinstance(graph, AgentGraph)
+        assert isinstance(graph, GraphSpec)
         # Main: Start + inlined Instruction + End = 3 nodes
         assert len(graph.nodes) == 3
         assert len(graph.edges) == 2
@@ -55,7 +55,7 @@ class TestSubGraphUse:
             .on("no").instruction("Handle no").end()
             .build()
         )
-        assert isinstance(graph, AgentGraph)
+        assert isinstance(graph, GraphSpec)
         assert _no_errors(graph) == []
         # Verify inlined instruction exists
         names = [n.name for n in graph.nodes]
@@ -124,7 +124,7 @@ class TestSubGraphUse:
             .end()
             .build()
         )
-        assert isinstance(graph, AgentGraph)
+        assert isinstance(graph, GraphSpec)
         # The sub-graph decision nodes should be inlined
         decision_nodes = [n for n in graph.nodes if n.type == NodeType.DECISION]
         assert len(decision_nodes) == 1
@@ -174,7 +174,7 @@ class TestMultiDecision:
             .end()
             .build()
         )
-        assert isinstance(graph, AgentGraph)
+        assert isinstance(graph, GraphSpec)
         # Decision picks one path — no merge needed.  Branches converge
         # directly on the next node ("Middle step" / End).
         decision_nodes = [n for n in graph.nodes if n.type == NodeType.DECISION]
@@ -373,7 +373,7 @@ class TestComplexBuild:
             .end()
             .build()
         )
-        assert isinstance(graph, AgentGraph)
+        assert isinstance(graph, GraphSpec)
         assert _no_errors(graph) == []
         # Verify all expected node types present
         types = {n.type for n in graph.nodes}
@@ -475,7 +475,7 @@ class TestGraphWithoutBuild:
     def test_to_graph(self):
         graph = GraphBuilder("V").start().instruction("X").end()
         version = graph.to_graph()
-        assert isinstance(version, AgentGraph)
+        assert isinstance(version, GraphSpec)
 
 
 class TestSwitchNode:

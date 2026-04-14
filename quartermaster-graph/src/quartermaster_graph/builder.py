@@ -13,7 +13,7 @@ from quartermaster_graph.enums import (
     TraverseIn,
     TraverseOut,
 )
-from quartermaster_graph.models import Agent, AgentGraph, GraphEdge, GraphNode, NodePosition
+from quartermaster_graph.models import Agent, GraphSpec, GraphEdge, GraphNode, NodePosition
 from quartermaster_graph.validation import validate_graph
 
 
@@ -70,7 +70,7 @@ def _llm_meta(
 
 
 def _inline_subgraph(
-    sub_graph: AgentGraph | GraphBuilder,
+    sub_graph: GraphSpec | GraphBuilder,
     nodes: list[GraphNode],
     edges: list[GraphEdge],
     connect_from_id: UUID | None,
@@ -82,7 +82,7 @@ def _inline_subgraph(
     "current node" for further chaining), or the original *connect_from_id*
     if the sub-graph was effectively empty.
 
-    Accepts either an ``AgentGraph`` or a ``GraphBuilder`` instance.
+    Accepts either an ``GraphSpec`` or a ``GraphBuilder`` instance.
     """
     if isinstance(sub_graph, GraphBuilder):
         sub_graph._finalize()
@@ -887,13 +887,13 @@ class _BranchBuilder:
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
-    def use(self, sub_graph: AgentGraph | GraphBuilder) -> _BranchBuilder:
+    def use(self, sub_graph: GraphSpec | GraphBuilder) -> _BranchBuilder:
         """Inline a sub-graph into this branch.
 
         Copies all nodes except START/END from the sub-graph, remaps their
         IDs, and connects them into the current branch chain.
 
-        Accepts either an ``AgentGraph`` or a ``GraphBuilder`` instance.
+        Accepts either an ``GraphSpec`` or a ``GraphBuilder`` instance.
         """
         # Detect whether this is the first call after on() — need to label the edge
         is_first = (
@@ -964,7 +964,7 @@ class GraphBuilder:
     The ``GraphBuilder`` itself IS the graph -- you can access ``.nodes``
     and ``.edges`` directly without calling ``.build()``.  The ``.build()``
     method is retained for backward compatibility and returns an
-    ``AgentGraph``.
+    ``GraphSpec``.
 
     Node semantics match the actual quartermaster-nodes implementations:
 
@@ -1821,7 +1821,7 @@ class GraphBuilder:
         self._last_node_id = merge_node.id
         return self
 
-    def use(self, sub_graph: AgentGraph | GraphBuilder) -> GraphBuilder:
+    def use(self, sub_graph: GraphSpec | GraphBuilder) -> GraphBuilder:
         """Inline a sub-graph into the current graph."""
         self._auto_merge_if_needed()
         new_last = _inline_subgraph(
@@ -1884,12 +1884,12 @@ class GraphBuilder:
         self,
         validate: bool = True,
         agent_id: UUID | None = None,
-    ) -> AgentGraph:
-        """Export the graph as an ``AgentGraph``."""
+    ) -> GraphSpec:
+        """Export the graph as an ``GraphSpec``."""
         if self._start_node_id is None:
             raise ValueError("Graph has no start node — call .start() first")
         self._finalize()
-        ver = AgentGraph(
+        ver = GraphSpec(
             id=uuid4(),
             agent_id=agent_id or uuid4(),
             nodes=list(self._nodes),
@@ -1901,8 +1901,8 @@ class GraphBuilder:
             validate_graph(ver)
         return ver
 
-    def build(self, validate: bool = True) -> AgentGraph:
-        """Build and return the ``AgentGraph``.  Alias for ``to_graph()``."""
+    def build(self, validate: bool = True) -> GraphSpec:
+        """Build and return the ``GraphSpec``.  Alias for ``to_graph()``."""
         return self.to_graph(validate=validate)
 
     def to_agent(self, validate: bool = True) -> Agent:

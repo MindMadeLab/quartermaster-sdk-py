@@ -8,7 +8,7 @@ from quartermaster_graph.enums import (
     NodeType,
     TraverseOut,
 )
-from quartermaster_graph.models import Agent, AgentGraph, GraphEdge, GraphNode
+from quartermaster_graph.models import Agent, GraphSpec, GraphEdge, GraphNode
 
 
 @pytest.fixture
@@ -50,11 +50,11 @@ def simple_graph(
     instruction_node: GraphNode,
     end_node: GraphNode,
     agent: Agent,
-) -> AgentGraph:
+) -> GraphSpec:
     """A minimal valid graph: Start -> Instruction -> End."""
     edge1 = GraphEdge(source_id=start_node.id, target_id=instruction_node.id)
     edge2 = GraphEdge(source_id=instruction_node.id, target_id=end_node.id)
-    return AgentGraph(
+    return GraphSpec(
         agent_id=agent.id,
         start_node_id=start_node.id,
         nodes=[start_node, instruction_node, end_node],
@@ -63,7 +63,7 @@ def simple_graph(
 
 
 @pytest.fixture
-def decision_graph(agent: Agent) -> AgentGraph:
+def decision_graph(agent: Agent) -> GraphSpec:
     """A graph with a decision: Start -> Decision -> (Yes->End1, No->End2)."""
     start = GraphNode(type=NodeType.START, name="Start")
     decision = GraphNode(
@@ -84,7 +84,7 @@ def decision_graph(agent: Agent) -> AgentGraph:
         GraphEdge(source_id=no_node.id, target_id=end2.id),
     ]
 
-    return AgentGraph(
+    return GraphSpec(
         agent_id=agent.id,
         start_node_id=start.id,
         nodes=[start, decision, yes_node, no_node, end1, end2],

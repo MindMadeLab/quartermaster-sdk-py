@@ -8,7 +8,7 @@ Framework-agnostic graph schema for defining AI agent workflows as directed grap
 
 ## Features
 
-- **Pydantic-based models**: `Agent`, `AgentGraph`, `GraphNode`, `GraphEdge` with full validation
+- **Pydantic-based models**: `Agent`, `GraphSpec`, `GraphNode`, `GraphEdge` with full validation
 - **GraphBuilder** fluent API for programmatic graph construction (`Graph` convenience alias)
 - **40+ node types** covering LLM, control flow, data, user interaction, memory, and utility
 - **YAML/JSON serialization** with round-trip fidelity
@@ -45,7 +45,7 @@ graph = (
 )
 ```
 
-`Graph` is a convenience alias for `GraphBuilder`. Both `.build()` and `.to_graph()` return an `AgentGraph`:
+`Graph` is a convenience alias for `GraphBuilder`. Both `.build()` and `.to_graph()` return a `GraphSpec`:
 
 ```python
 from quartermaster_graph import GraphBuilder
@@ -53,8 +53,8 @@ from quartermaster_graph import GraphBuilder
 builder = GraphBuilder("My Agent")
 builder.start().instruction("Process", model="gpt-4o").end()
 
-agent_graph = builder.build()       # returns AgentGraph
-agent_graph = builder.to_graph()    # same thing
+spec = builder.build()       # returns GraphSpec
+spec = builder.to_graph()    # same thing
 ```
 
 ### Load a Graph from YAML
@@ -92,7 +92,7 @@ edges:
 from quartermaster_graph import from_yaml
 
 with open("agent.yaml") as f:
-    agent_graph = from_yaml(f.read())
+    spec = from_yaml(f.read())
 ```
 
 ## API Reference
@@ -102,14 +102,14 @@ with open("agent.yaml") as f:
 | Model | Description |
 |-------|-------------|
 | `Agent` | Top-level agent definition (name, description, tags) |
-| `AgentGraph` | Graph definition: nodes, edges, start node, features |
+| `GraphSpec` | Graph definition: nodes, edges, start node, features |
 | `GraphNode` | A node with type, metadata, traversal config, error handling |
 | `GraphEdge` | Directed edge with optional label and routing points |
 | `NodePosition` | Visual position for editor rendering |
 
-> `AgentVersion` exists as a deprecated backward-compatibility alias for `AgentGraph`.
+> `AgentGraph` and `AgentVersion` both exist as deprecated backward-compatibility aliases for `GraphSpec`.
 
-### AgentGraph Methods
+### GraphSpec Methods
 
 | Method | Return Type | Description |
 |--------|-------------|-------------|
@@ -188,7 +188,7 @@ with open("agent.yaml") as f:
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `.sub_agent(name, graph_id)` | `GraphBuilder` | Call another agent graph synchronously |
-| `.use(sub_graph)` | `GraphBuilder` | Inline a sub-graph (accepts `AgentGraph` or `GraphBuilder`) |
+| `.use(sub_graph)` | `GraphBuilder` | Inline a sub-graph (accepts `GraphSpec` or `GraphBuilder`) |
 | `.comment(name, text)` | `GraphBuilder` | Documentation-only node, no runtime logic |
 | `.allowed_agents(*agent_ids)` | `GraphBuilder` | Restrict which sub-agents can be spawned |
 | `.node(node_type, name, metadata, **kwargs)` | `GraphBuilder` | Add any node type generically |
@@ -199,8 +199,8 @@ with open("agent.yaml") as f:
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `.build(validate=True)` | `AgentGraph` | Build the graph, optionally validate |
-| `.to_graph(validate=True, agent_id=None)` | `AgentGraph` | Build with optional explicit agent ID |
+| `.build(validate=True)` | `GraphSpec` | Build the graph, optionally validate |
+| `.to_graph(validate=True, agent_id=None)` | `GraphSpec` | Build with optional explicit agent ID |
 | `.to_agent(validate=True)` | `Agent` | Export as a full `Agent` model |
 
 ### Node Configuration Kwargs
