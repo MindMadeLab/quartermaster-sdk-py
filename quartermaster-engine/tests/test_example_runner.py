@@ -955,9 +955,19 @@ class TestStaticExecutor:
         result = _run(StaticExecutor().execute(ctx))
         assert result.output_text == "line1\nline2\nline3"
 
-    def test_returns_empty_data(self):
+    def test_appends_to_conversation(self):
         ctx = _make_context(
             node_metadata={"static_text": "hello"},
+        )
+        result = _run(StaticExecutor().execute(ctx))
+        assert "__conversation__" in result.data.get("memory_updates", {})
+        conv = result.data["memory_updates"]["__conversation__"]
+        assert len(conv) == 1
+        assert conv[0]["text"] == "hello"
+
+    def test_empty_text_returns_empty_data(self):
+        ctx = _make_context(
+            node_metadata={"static_text": ""},
         )
         result = _run(StaticExecutor().execute(ctx))
         assert result.data == {}

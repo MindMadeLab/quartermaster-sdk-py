@@ -260,7 +260,7 @@ class DecisionExecutor(NodeExecutor):
         except Exception:
             # Fallback: pick first option
             picked = options[0] if options else ""
-            return NodeResult(success=True, data={}, output_text=picked, picked_node=picked)
+            return NodeResult(success=True, data={}, output_text="", picked_node=picked)
 
         # Build prompt from conversation history
         conversation = _get_conversation(context)
@@ -283,10 +283,10 @@ class DecisionExecutor(NodeExecutor):
                 if opt.lower() in picked.lower():
                     picked = opt
                     break
-            return NodeResult(success=True, data={}, output_text=picked, picked_node=picked)
+            return NodeResult(success=True, data={}, output_text="", picked_node=picked)
         except Exception as e:
             picked = options[0] if options else ""
-            return NodeResult(success=True, data={}, output_text=picked, picked_node=picked)
+            return NodeResult(success=True, data={}, output_text="", picked_node=picked)
 
 
 class UserExecutor(NodeExecutor):
@@ -314,10 +314,16 @@ class UserExecutor(NodeExecutor):
 
 
 class StaticExecutor(NodeExecutor):
-    """Returns static text from node metadata."""
+    """Returns static text from node metadata. Appends to conversation for context."""
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
         text = context.get_meta("static_text", "")
+        if text and text.strip():
+            conversation = _get_conversation(context)
+            node_name = context.current_node.name if context.current_node else "Static"
+            round_num = context.memory.get("round_number")
+            _append_to_conversation(conversation, node_name, text, round_num)
+            return NodeResult(success=True, data={"memory_updates": {"__conversation__": conversation}}, output_text=text)
         return NodeResult(success=True, data={}, output_text=text)
 
 
@@ -365,6 +371,21 @@ class IfExecutor(NodeExecutor):
             picked = "false"
 
         return NodeResult(success=True, data={}, output_text=picked, picked_node=picked)
+
+
+class SwitchExecutor(NodeExecutor):
+    """Evaluates case expressions and picks the first matching branch."""
+
+    async def execute(self, context: ExecutionContext) -> NodeResult:
+        expression = context.get_meta("switch_expression", "")
+        if not expression:
+            return NodeResult(success=True, data={}, output_text="", picked_node="")
+        try:
+            from quartermaster_nodes.safe_eval import safe_eval
+            result = safe_eval(expression, dict(context.memory))
+            return NodeResult(success=True, data={}, output_text="", picked_node=str(result))
+        except Exception:
+            return NodeResult(success=True, data={}, output_text="", picked_node="")
 
 
 class TextExecutor(NodeExecutor):
@@ -431,6 +452,23 @@ class PassthroughExecutor(NodeExecutor):
         return NodeResult(success=True, data={}, output_text=text)
 
 
+class StaticMergeExecutor(NodeExecutor):
+    """Collects parallel branch outputs and appends to conversation."""
+
+    async def execute(self, context: ExecutionContext) -> NodeResult:
+        # Collect last message content (merge point)
+        text = ""
+        for msg in reversed(context.messages):
+            if msg.content:
+                text = msg.content
+                break
+        if text and text.strip():
+            conversation = _get_conversation(context)
+            _append_to_conversation(conversation, "Merge", text)
+            return NodeResult(success=True, data={"memory_updates": {"__conversation__": conversation}}, output_text=text)
+        return NodeResult(success=True, data={}, output_text=text)
+
+
 class UserFormExecutor(NodeExecutor):
     """Auto-fills a user form with placeholder data."""
 
@@ -467,13 +505,19 @@ def _build_registry(
     mem_read = MemoryReadExecutor()
     passthrough = PassthroughExecutor()
     user_form = UserFormExecutor()
+    switch_exec = SwitchExecutor()
+    static_merge_exec = StaticMergeExecutor()
 
     # LLM nodes
     reg.register(NodeType.INSTRUCTION.value, llm)
-
     reg.register(NodeType.SUMMARIZE.value, llm)
     reg.register(NodeType.AGENT.value, llm)
     reg.register(NodeType.INSTRUCTION_IMAGE_VISION.value, llm)
+
+    # Tool-calling instruction nodes (use LLM executor — no tool loop but won't crash)
+    reg.register(NodeType.INSTRUCTION_PROGRAM.value, llm)
+    reg.register(NodeType.INSTRUCTION_PROGRAM_PARAMETERS.value, llm)
+    reg.register(NodeType.INSTRUCTION_PARAMETERS.value, llm)
 
     # Decision nodes
     reg.register(NodeType.DECISION.value, decision)
@@ -491,6 +535,10 @@ def _build_registry(
     reg.register(NodeType.VAR.value, var)
     reg.register(NodeType.CODE.value, passthrough)
 
+    # Program runner (passthrough for now)
+    reg.register(NodeType.PROGRAM_RUNNER.value, passthrough)
+    reg.register(NodeType.STATIC_PROGRAM_PARAMETERS.value, passthrough)
+
     # Memory nodes
     reg.register(NodeType.WRITE_MEMORY.value, mem_write)
     reg.register(NodeType.READ_MEMORY.value, mem_read)
@@ -499,7 +547,7 @@ def _build_registry(
     reg.register(NodeType.USER_MEMORY.value, mem_read)
 
     # Merge / control
-    reg.register(NodeType.STATIC_MERGE.value, passthrough)
+    reg.register(NodeType.STATIC_MERGE.value, static_merge_exec)
     reg.register(NodeType.COMMENT.value, passthrough)
     reg.register(NodeType.BLANK.value, passthrough)
     reg.register(NodeType.SUB_ASSISTANT.value, passthrough)
@@ -507,7 +555,7 @@ def _build_registry(
     reg.register(NodeType.TEXT_TO_VARIABLE.value, var)
     if_exec = IfExecutor()
     reg.register(NodeType.IF.value, if_exec)
-    reg.register(NodeType.SWITCH.value, passthrough)
+    reg.register(NodeType.SWITCH.value, switch_exec)
 
     return reg
 
