@@ -64,8 +64,15 @@ uv run examples/run_interactive.py
 | 13 | `13_orchestrator.py` | Agent orchestrator with spawn/collect session tools |
 | 14 | `14_local_providers.py` | Local LLM providers: Ollama, vLLM, mixed cloud+local |
 | 15 | `15_user_forms.py` | User forms, variables, IF conditions, and Jinja2 templates |
-| 16 | `16_courtroom_debate.py` | Multi-round courtroom drama: parallel prep, loop-back debate, judge verdict |
-| -- | `run_interactive.py` | Real LLM demo with Anthropic/OpenAI auto-detection and decision routing |
+| 16 | `16_courtroom_debate.py` | Multi-round courtroom drama: loop-back debate across 3 providers, judge verdict |
+| 17 | `17_tool_agent.py` | Custom tools with `@tool()`, JSON schema export, tool-aware LLM agent |
+| 18 | `18_streaming_events.py` | FlowRunner direct usage with event streaming (no API keys needed) |
+| 19 | `19_data_pipeline.py` | Multi-stage data pipeline with parallel analysis and mixed providers |
+| 20 | `20_compliance_guard.py` | PII detection/redaction, EU AI Act risk classification, audit logging |
+| 21 | `21_mcp_client.py` | MCP protocol client: discover tools, bridge to Quartermaster graphs |
+| 22 | `22_ollama_local.py` | Local Ollama with Gemma model, streaming, no cloud API keys |
+| 23 | `23_vision.py` | Image vision analysis with multimodal LLM pipeline |
+| -- | `run_interactive.py` | Interactive stdin conversation loop with Ctrl+C exit |
 
 ## Patterns Demonstrated
 
