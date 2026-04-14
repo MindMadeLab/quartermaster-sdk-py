@@ -20,8 +20,21 @@ from __future__ import annotations
 
 import asyncio
 import os
+import pathlib
 import sys
 from typing import Any
+
+# Load .env from repo root if it exists (for API keys)
+_env_file = pathlib.Path(__file__).resolve().parent.parent / ".env"
+if _env_file.is_file():
+    for line in _env_file.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip("'\"")
+            if key and not os.environ.get(key):
+                os.environ[key] = value
 
 from quartermaster_engine import FlowRunner, InMemoryStore, NodeStarted, NodeFinished, FlowEvent, FlowError, TokenGenerated
 from quartermaster_engine.nodes import SimpleNodeRegistry, NodeExecutor, NodeResult
@@ -122,12 +135,16 @@ class LLMExecutor(NodeExecutor):
             if msg.content:
                 user_input = msg.content
 
-        # Build the prompt: include recent conversation for context
+        # Build the prompt: include recent conversation for context (truncated)
         if conversation:
-            history = "\n\n".join(
-                f"[{entry['role']}] {entry['text']}"
-                for entry in conversation[-6:]  # last 6 exchanges for context
-            )
+            parts = []
+            for entry in conversation[-6:]:
+                text = entry["text"]
+                # Truncate each entry to ~500 chars to avoid context overflow
+                if len(text) > 500:
+                    text = text[:500] + "..."
+                parts.append(f"[{entry['role']}]: {text}")
+            history = "\n\n".join(parts)
             prompt = f"Previous conversation:\n{history}\n\nUser's original request: {user_input}"
         else:
             prompt = user_input
@@ -153,6 +170,7 @@ class LLMExecutor(NodeExecutor):
                 output_text=text,
             )
         except Exception as e:
+            print(f"  [LLM ERROR] {provider_name}/{model}: {e}", flush=True)
             return NodeResult(success=False, data={}, error=str(e))
 
 

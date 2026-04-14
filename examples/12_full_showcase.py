@@ -128,7 +128,7 @@ agent = (
     .static_merge("Quality review complete")
 
     # --- Synthesis and delivery -----------------------------------------------
-    .reasoning("Synthesise findings")
+    .reasoning("Synthesise findings", model="claude-haiku-4-5-20251001", provider="anthropic")
     .summarize("Executive summary", model="claude-haiku-4-5-20251001", system_instruction="Create a concise executive summary with key takeaways")
 
     # --- Audit trail ----------------------------------------------------------
