@@ -64,7 +64,9 @@ graph_ollama = (
 mixed_registry = ProviderRegistry(auto_configure=False)
 
 # Cloud provider for complex reasoning
-mixed_registry.register("anthropic")
+from quartermaster_providers.providers.anthropic import AnthropicProvider
+import os
+mixed_registry.register("anthropic", AnthropicProvider, api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
 # Local vLLM on a GPU box for fast inference
 mixed_registry.register_local(
@@ -163,10 +165,13 @@ graph_private = (
 # Comment/uncomment as needed for your infrastructure.
 
 if __name__ == "__main__":
-    print("Running Ollama-only graph (requires: ollama serve)")
-    print("Make sure you have llama3.1:70b pulled: ollama pull llama3.1:70b")
+    print("This example demonstrates local provider configuration.")
+    print(f"Graphs built: ollama={len(graph_ollama.nodes)} nodes, mixed={len(graph_mixed.nodes)} nodes, private={len(graph_private.nodes)} nodes")
     print()
-    run_graph(graph_ollama, user_input="Explain the difference between TCP and UDP in simple terms", provider="ollama")
+    print("To run with Ollama:  ollama serve && ollama pull llama3.1:70b")
+    print("Then uncomment the run_graph() call below.")
+    print()
+    # run_graph(graph_ollama, user_input="Explain the difference between TCP and UDP", provider="ollama")
 
     # Uncomment to run the mixed graph (requires ANTHROPIC_API_KEY + vLLM):
     # run_graph(graph_mixed, user_input="Why is the sky blue?")

@@ -92,18 +92,24 @@ class LLMExecutor(NodeExecutor):
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
         system_instruction = context.get_meta("llm_system_instruction", "")
-        model = context.get_meta("llm_model", self._default_model)
-        provider_name = context.get_meta("llm_provider", self._default_provider)
+        # Always use the default provider/model — ignore graph metadata provider
+        # since we only register one provider at a time
+        model = self._default_model
+        provider_name = self._default_provider
 
-        provider = self._registry.get(provider_name)
-        if provider is None:
+        try:
+            provider = self._registry.get(provider_name)
+        except Exception:
             return NodeResult(success=False, data={}, error=f"Provider '{provider_name}' not available")
 
-        # Build conversation from engine messages
-        prompt_parts = []
-        for msg in context.messages:
-            prompt_parts.append(f"{msg.role.value}: {msg.content}")
-        prompt = "\n".join(prompt_parts) if prompt_parts else "Hello"
+        # Extract prompt: last message content, or user input from memory
+        prompt = ""
+        for msg in reversed(context.messages):
+            if msg.content:
+                prompt = msg.content
+                break
+        if not prompt:
+            prompt = str(context.memory.get("__user_input__", "Hello"))
 
         config = LLMConfig(
             model=model,
@@ -132,8 +138,8 @@ class DecisionExecutor(NodeExecutor):
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
         system_instruction = context.get_meta("llm_system_instruction", "")
-        model = context.get_meta("llm_model", self._default_model)
-        provider_name = context.get_meta("llm_provider", self._default_provider)
+        model = self._default_model
+        provider_name = self._default_provider
 
         # Get available options from outgoing edges
         edges = context.graph.get_edges_from(context.node_id)
@@ -143,14 +149,20 @@ class DecisionExecutor(NodeExecutor):
         if options:
             decision_prompt += f"\n\nOptions: {', '.join(options)}\nRespond with EXACTLY one of the options above, nothing else."
 
-        provider = self._registry.get(provider_name)
-        if provider is None:
+        try:
+            provider = self._registry.get(provider_name)
+        except Exception:
             # Fallback: pick first option
             picked = options[0] if options else ""
             return NodeResult(success=True, data={}, output_text=picked, picked_node=picked)
 
-        prompt_parts = [f"{msg.role.value}: {msg.content}" for msg in context.messages]
-        prompt = "\n".join(prompt_parts) if prompt_parts else "Choose"
+        prompt = ""
+        for msg in reversed(context.messages):
+            if msg.content:
+                prompt = msg.content
+                break
+        if not prompt:
+            prompt = str(context.memory.get("__user_input__", "Choose"))
 
         config = LLMConfig(
             model=model,
@@ -331,6 +343,7 @@ def _build_registry(
     reg.register(NodeType.USER_MEMORY.value, mem_read)
 
     # Merge / control
+    reg.register(NodeType.STATIC_MERGE.value, passthrough)
     reg.register(NodeType.COMMENT.value, passthrough)
     reg.register(NodeType.BLANK.value, passthrough)
     reg.register(NodeType.SUB_ASSISTANT.value, passthrough)
