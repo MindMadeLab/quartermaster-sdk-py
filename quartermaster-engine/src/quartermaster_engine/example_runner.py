@@ -535,9 +535,6 @@ def run_graph(
         print(f"Provider: {provider_name} ({model})")
         print(f"Input: {user_input!r}")
         print()
-    elif verbose and interactive:
-        print(f"Provider: {provider_name} ({model})")
-        print()
 
     # Set up provider registry
     provider_registry = _get_provider_registry(provider_name)
@@ -547,6 +544,8 @@ def run_graph(
 
     # Event handler — respects show_output metadata flag
     _silent_types = {NodeType.START.value, NodeType.END.value}
+    if interactive:
+        _silent_types.add(NodeType.USER.value)
     _node_map = {n.id: n for n in agent_graph.nodes}
 
     def _should_show(node_id) -> bool:
@@ -556,7 +555,6 @@ def run_graph(
             return True
         if node.type.value in _silent_types:
             return False
-        # Metadata flag: show_output=False hides the node
         return node.metadata.get("show_output", True)
 
     def on_event(event: FlowEvent) -> None:
@@ -599,8 +597,8 @@ def run_graph(
         try:
             user_text = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\n")
-            break
+            print()
+            return None
 
         if not user_text:
             continue
@@ -614,14 +612,12 @@ def run_graph(
         print()
         result = runner.resume(result.flow_id, user_text)
 
-    if verbose:
+    if verbose and not interactive:
         print()
         if result.success:
             print(f"Final output:\n{result.final_output}")
         else:
             print(f"Flow failed: {result.error}")
         print(f"Duration: {result.duration_seconds:.2f}s")
-
-    return result
 
     return result
