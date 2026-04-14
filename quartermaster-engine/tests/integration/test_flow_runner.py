@@ -515,9 +515,7 @@ class TestLoopFlow:
 
         # Verify we saw NodeStarted events for the Counter node multiple times
         counter_starts = [
-            e
-            for e in events
-            if isinstance(e, NodeStarted) and e.node_name == "Counter"
+            e for e in events if isinstance(e, NodeStarted) and e.node_name == "Counter"
         ]
         assert len(counter_starts) == 3
 

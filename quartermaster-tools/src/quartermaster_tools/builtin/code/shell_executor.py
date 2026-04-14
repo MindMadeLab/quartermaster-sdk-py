@@ -85,7 +85,9 @@ def shell_executor(
         working_dir: Working directory for command execution.
     """
     if not command or not command.strip():
-        return ToolResult(success=False, error="Parameter 'command' is required and must not be empty")
+        return ToolResult(
+            success=False, error="Parameter 'command' is required and must not be empty"
+        )
     if len(command) > MAX_COMMAND_LENGTH:
         return ToolResult(
             success=False,

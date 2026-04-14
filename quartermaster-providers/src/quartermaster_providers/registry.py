@@ -52,7 +52,7 @@ def infer_provider(
     Returns:
         Provider name string, or None if no match found.
     """
-    for pattern, provider in (extra_patterns or []):
+    for pattern, provider in extra_patterns or []:
         if re.match(pattern, model_name):
             return provider
     for pattern, provider in MODEL_PATTERNS:
@@ -220,9 +220,7 @@ class ProviderRegistry:
 
         if engine == "custom":
             if not base_url:
-                raise ProviderError(
-                    "engine='custom' requires a base_url argument."
-                )
+                raise ProviderError("engine='custom' requires a base_url argument.")
             ctor_kwargs: dict[str, Any] = {"base_url": base_url, **kwargs}
             if api_key:
                 ctor_kwargs["api_key"] = api_key
@@ -303,9 +301,7 @@ class ProviderRegistry:
             InvalidModelError: If no provider can be inferred.
             ProviderError: If the inferred provider is not registered.
         """
-        provider_name = infer_provider(
-            model_name, extra_patterns=self._custom_patterns
-        )
+        provider_name = infer_provider(model_name, extra_patterns=self._custom_patterns)
         if provider_name is None:
             # Try default provider
             if self._default_provider and self.is_registered(self._default_provider):

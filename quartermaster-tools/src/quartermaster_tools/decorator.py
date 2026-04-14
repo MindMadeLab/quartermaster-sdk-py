@@ -60,9 +60,18 @@ def _parse_docstring_args(docstring: str | None) -> dict[str, str]:
             continue
 
         # Detect end of Args section (another section header or empty after content)
-        if stripped and not stripped.startswith(" ") and stripped.endswith(":") and stripped != stripped.lstrip():
+        if (
+            stripped
+            and not stripped.startswith(" ")
+            and stripped.endswith(":")
+            and stripped != stripped.lstrip()
+        ):
             pass  # continuation line
-        if re.match(r"^[A-Z]\w*:\s*$", stripped) and stripped not in ("Args:", "Arguments:", "Parameters:"):
+        if re.match(r"^[A-Z]\w*:\s*$", stripped) and stripped not in (
+            "Args:",
+            "Arguments:",
+            "Parameters:",
+        ):
             # New section header like "Returns:", "Raises:", etc.
             if current_param:
                 descriptions[current_param] = " ".join(current_desc).strip()
@@ -163,9 +172,7 @@ class FunctionTool(AbstractTool):
                     import concurrent.futures
 
                     with concurrent.futures.ThreadPoolExecutor() as pool:
-                        result = pool.submit(
-                            asyncio.run, self._func(**kwargs)
-                        ).result()
+                        result = pool.submit(asyncio.run, self._func(**kwargs)).result()
                 else:
                     result = asyncio.run(self._func(**kwargs))
             else:

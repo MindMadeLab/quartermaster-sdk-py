@@ -53,9 +53,7 @@ class TraverseOutGate:
         """Stop execution — no successors triggered (dead end / End node)."""
         return []
 
-    def _spawn_picked(
-        self, node_id: UUID, graph: GraphSpec, result: NodeResult
-    ) -> list[GraphNode]:
+    def _spawn_picked(self, node_id: UUID, graph: GraphSpec, result: NodeResult) -> list[GraphNode]:
         """Trigger ONE specific successor based on the node's decision.
 
         The node's result must include a `picked_node` field containing

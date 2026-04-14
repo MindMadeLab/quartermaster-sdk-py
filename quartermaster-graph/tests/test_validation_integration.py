@@ -198,6 +198,7 @@ class TestCycleDetection:
         error_codes = {e.code for e in errors if e.severity == "error"}
         assert "cycle_detected" in error_codes
 
+
 class TestInvalidEdges:
     """Validation must detect edges referencing nonexistent nodes."""
 

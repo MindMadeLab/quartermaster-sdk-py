@@ -4,7 +4,11 @@ import pytest
 from uuid import uuid4
 
 from tests.conftest import MockNodeContext, MockEdge, MockEdgeQuerySet, MockAssistantNode
-from quartermaster_nodes.enums import NEXT_ASSISTANT_NODE_ID, AvailableTraversingOut, AvailableThoughtTypes
+from quartermaster_nodes.enums import (
+    NEXT_ASSISTANT_NODE_ID,
+    AvailableTraversingOut,
+    AvailableThoughtTypes,
+)
 from quartermaster_nodes.exceptions import ProcessStopException
 
 
@@ -63,10 +67,12 @@ class TestIfNode:
             },
             thought=pytest.importorskip("tests.conftest").MockThought(metadata={"x": 10}),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
-                    MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
+                        MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
+                    ]
+                )
             ),
         )
 
@@ -83,10 +89,12 @@ class TestIfNode:
             node_metadata={"if_expression": "x > 5"},
             thought=pytest.importorskip("tests.conftest").MockThought(metadata={"x": 2}),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
-                    MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
+                        MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
+                    ]
+                )
             ),
         )
 
@@ -130,10 +138,12 @@ class TestSwitchNode:
             },
             thought=MockThought(metadata={"x": 2}),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id=edge1, main_direction=True, direction_text="case 1"),
-                    MockEdge(tail_id=edge2, main_direction=False, direction_text="case 2"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id=edge1, main_direction=True, direction_text="case 1"),
+                        MockEdge(tail_id=edge2, main_direction=False, direction_text="case 2"),
+                    ]
+                )
             ),
         )
 

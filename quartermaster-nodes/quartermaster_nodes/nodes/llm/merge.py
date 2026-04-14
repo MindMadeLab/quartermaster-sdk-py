@@ -117,16 +117,15 @@ class Merge1(AbstractLLMAssistantNode):
 
         content = cls.prepare_message(ctx)
 
-        Chain() \
-            .add_handler(
-                PrepareMessages(
-                    client, llm_config,
-                    additional_message=content,
-                    additional_message_role="assistant",
-                )
-            ) \
-            .add_handler(ContextManager(client, llm_config, context_config)) \
-            .add_handler(TransformToProvider(transformer)) \
-            .add_handler(GenerateStreamResponse(client, llm_config)) \
-            .add_handler(ProcessStreamResponse("to_memory_id")) \
-            .run(initial_data)
+        Chain().add_handler(
+            PrepareMessages(
+                client,
+                llm_config,
+                additional_message=content,
+                additional_message_role="assistant",
+            )
+        ).add_handler(ContextManager(client, llm_config, context_config)).add_handler(
+            TransformToProvider(transformer)
+        ).add_handler(GenerateStreamResponse(client, llm_config)).add_handler(
+            ProcessStreamResponse("to_memory_id")
+        ).run(initial_data)

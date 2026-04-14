@@ -193,14 +193,16 @@ def read_email(
                     payload = msg.get_payload(decode=True)
                     if payload:
                         body_text = payload.decode("utf-8", errors="replace")
-                emails.append({
-                    "id": msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id),
-                    "from": msg.get("From", ""),
-                    "to": msg.get("To", ""),
-                    "subject": msg.get("Subject", ""),
-                    "date": msg.get("Date", ""),
-                    "body": body_text[:2000],
-                })
+                emails.append(
+                    {
+                        "id": msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id),
+                        "from": msg.get("From", ""),
+                        "to": msg.get("To", ""),
+                        "subject": msg.get("Subject", ""),
+                        "date": msg.get("Date", ""),
+                        "body": body_text[:2000],
+                    }
+                )
 
         conn.close()
         conn.logout()
@@ -261,9 +263,9 @@ def search_email(
     criteria_parts: list[str] = []
     criteria_parts.append(f'SUBJECT "{query_val}"')
     if date_from:
-        criteria_parts.append(f'SINCE {date_from}')
+        criteria_parts.append(f"SINCE {date_from}")
     if date_to:
-        criteria_parts.append(f'BEFORE {date_to}')
+        criteria_parts.append(f"BEFORE {date_to}")
     if sender:
         criteria_parts.append(f'FROM "{sender}"')
 
@@ -283,20 +285,27 @@ def search_email(
             if msg_data and msg_data[0] and isinstance(msg_data[0], tuple):
                 raw_header = msg_data[0][1]
                 msg = email_lib.message_from_bytes(raw_header)
-                emails.append({
-                    "id": msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id),
-                    "from": msg.get("From", ""),
-                    "to": msg.get("To", ""),
-                    "subject": msg.get("Subject", ""),
-                    "date": msg.get("Date", ""),
-                })
+                emails.append(
+                    {
+                        "id": msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id),
+                        "from": msg.get("From", ""),
+                        "to": msg.get("To", ""),
+                        "subject": msg.get("Subject", ""),
+                        "date": msg.get("Date", ""),
+                    }
+                )
 
         conn.close()
         conn.logout()
 
         return ToolResult(
             success=True,
-            data={"query": query_val, "folder": folder_val, "emails": emails, "email_count": len(emails)},
+            data={
+                "query": query_val,
+                "folder": folder_val,
+                "emails": emails,
+                "email_count": len(emails),
+            },
         )
     except imaplib.IMAP4.error as e:
         return ToolResult(success=False, error=f"IMAP error: {e}")

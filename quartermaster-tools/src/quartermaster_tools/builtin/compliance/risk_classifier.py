@@ -6,16 +6,18 @@ from __future__ import annotations
 
 from quartermaster_tools.decorator import tool
 
-_HIGH_RISK_DOMAINS = frozenset({
-    "healthcare",
-    "law_enforcement",
-    "education",
-    "employment",
-    "critical_infrastructure",
-    "border_control",
-    "justice",
-    "democratic_process",
-})
+_HIGH_RISK_DOMAINS = frozenset(
+    {
+        "healthcare",
+        "law_enforcement",
+        "education",
+        "employment",
+        "critical_infrastructure",
+        "border_control",
+        "justice",
+        "democratic_process",
+    }
+)
 
 _DOMAIN_CATEGORIES: dict[str, str] = {
     "healthcare": "Annex III, Area 5: Access to essential services -- healthcare",
@@ -135,8 +137,7 @@ def risk_classifier(
         else:
             risk_level = "MINIMAL"
             reasoning = (
-                "System does not fall under any high-risk category and "
-                "has no specific risk flags."
+                "System does not fall under any high-risk category and has no specific risk flags."
             )
 
     category = _DOMAIN_CATEGORIES.get(domain, _DOMAIN_CATEGORIES["other"])

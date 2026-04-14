@@ -275,6 +275,7 @@ class TestWebRequestTool:
         mock_httpx.Client.return_value = mock_client
 
         import sys
+
         sys.modules["httpx"] = mock_httpx
         try:
             result = WebRequestTool.run(url="https://example.com/api")
@@ -297,6 +298,7 @@ class TestWebRequestTool:
         mock_httpx.Client.return_value = mock_client
 
         import sys
+
         sys.modules["httpx"] = mock_httpx
         try:
             result = WebRequestTool.run(
@@ -321,6 +323,7 @@ class TestWebRequestTool:
         mock_httpx.Client.return_value = mock_client
 
         import sys
+
         sys.modules["httpx"] = mock_httpx
         try:
             result = WebRequestTool.run(url="https://example.com/slow")
@@ -341,6 +344,7 @@ class TestWebRequestTool:
         mock_httpx.Client.return_value = mock_client
 
         import sys
+
         sys.modules["httpx"] = mock_httpx
         try:
             result = _web_request_impl("https://example.com", max_response_size=100)

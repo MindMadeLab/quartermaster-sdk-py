@@ -37,7 +37,13 @@ if _env_file.is_file():
 
 from quartermaster_engine.runner.flow_runner import FlowRunner, FlowResult
 from quartermaster_engine.stores.memory_store import InMemoryStore
-from quartermaster_engine.events import NodeStarted, NodeFinished, FlowEvent, FlowError, TokenGenerated
+from quartermaster_engine.events import (
+    NodeStarted,
+    NodeFinished,
+    FlowEvent,
+    FlowError,
+    TokenGenerated,
+)
 from quartermaster_engine.nodes import SimpleNodeRegistry, NodeExecutor, NodeResult
 from quartermaster_engine.context.execution_context import ExecutionContext
 from quartermaster_engine.context.node_execution import NodeStatus
@@ -73,6 +79,7 @@ def _detect_provider() -> tuple[str, str]:
     if "ollama" in _MODEL_MAP:
         try:
             import urllib.request
+
             urllib.request.urlopen("http://localhost:11434/api/tags", timeout=1)
             return "ollama", _MODEL_MAP["ollama"]
         except Exception:
@@ -92,6 +99,7 @@ _PROVIDER_CLASSES = {
 def _get_provider_registry(provider_name: str) -> ProviderRegistry:
     """Create a ProviderRegistry with ALL available providers (based on env keys + local)."""
     import importlib
+
     registry = ProviderRegistry()
     registered = []
 
@@ -125,13 +133,17 @@ def _get_provider_registry(provider_name: str) -> ProviderRegistry:
 # Conversation helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_conversation(context: ExecutionContext) -> list[dict]:
     """Get the conversation history from flow memory."""
     return list(context.memory.get("__conversation__", []))
 
 
 def _append_to_conversation(
-    conversation: list[dict], role: str, text: str, round_num: Any = None,
+    conversation: list[dict],
+    role: str,
+    text: str,
+    round_num: Any = None,
 ) -> list[dict]:
     """Append an entry to conversation history."""
     if not text or not text.strip():
@@ -165,6 +177,7 @@ def _format_conversation(conversation: list[dict], user_input: str) -> str:
 # Node executors
 # ---------------------------------------------------------------------------
 
+
 class LLMExecutor(NodeExecutor):
     """Calls a real LLM for Instruction and Summarize nodes.
 
@@ -190,7 +203,11 @@ class LLMExecutor(NodeExecutor):
         try:
             provider = self._registry.get(provider_name)
         except Exception:
-            return NodeResult(success=False, data={}, error=f"Provider '{provider_name}' not registered. Available: {', '.join(self._registry.list_providers())}")
+            return NodeResult(
+                success=False,
+                data={},
+                error=f"Provider '{provider_name}' not registered. Available: {', '.join(self._registry.list_providers())}",
+            )
 
         # Build prompt from conversation history + original user input
         conversation = _get_conversation(context)
@@ -219,7 +236,8 @@ class LLMExecutor(NodeExecutor):
             round_num = context.memory.get("round_number")
             _append_to_conversation(conversation, node_name, text, round_num)
             return NodeResult(
-                success=True, data={"memory_updates": {"__conversation__": conversation}},
+                success=True,
+                data={"memory_updates": {"__conversation__": conversation}},
                 output_text=text,
             )
         except Exception as e:
@@ -305,8 +323,11 @@ class UserExecutor(NodeExecutor):
             # Pause the flow — run_graph will prompt stdin and call resume()
             prompt = context.current_node.name if context.current_node else "Your input"
             return NodeResult(
-                success=True, data={}, output_text="",
-                wait_for_user=True, user_prompt=prompt,
+                success=True,
+                data={},
+                output_text="",
+                wait_for_user=True,
+                user_prompt=prompt,
             )
         # Non-interactive: pass through the initial user input
         user_text = context.memory.get("__user_input__", "")
@@ -323,7 +344,11 @@ class StaticExecutor(NodeExecutor):
             node_name = context.current_node.name if context.current_node else "Static"
             round_num = context.memory.get("round_number")
             _append_to_conversation(conversation, node_name, text, round_num)
-            return NodeResult(success=True, data={"memory_updates": {"__conversation__": conversation}}, output_text=text)
+            return NodeResult(
+                success=True,
+                data={"memory_updates": {"__conversation__": conversation}},
+                output_text=text,
+            )
         return NodeResult(success=True, data={}, output_text=text)
 
 
@@ -382,6 +407,7 @@ class SwitchExecutor(NodeExecutor):
             return NodeResult(success=True, data={}, output_text="", picked_node="")
         try:
             from quartermaster_nodes.safe_eval import safe_eval
+
             result = safe_eval(expression, dict(context.memory))
             return NodeResult(success=True, data={}, output_text="", picked_node=str(result))
         except Exception:
@@ -395,6 +421,7 @@ class TextExecutor(NodeExecutor):
         template_str = context.get_meta("text", "")
         try:
             from jinja2 import Template
+
             template = Template(template_str)
             result = template.render(**context.memory)
         except Exception:
@@ -465,7 +492,11 @@ class StaticMergeExecutor(NodeExecutor):
         if text and text.strip():
             conversation = _get_conversation(context)
             _append_to_conversation(conversation, "Merge", text)
-            return NodeResult(success=True, data={"memory_updates": {"__conversation__": conversation}}, output_text=text)
+            return NodeResult(
+                success=True,
+                data={"memory_updates": {"__conversation__": conversation}},
+                output_text=text,
+            )
         return NodeResult(success=True, data={}, output_text=text)
 
 
@@ -488,6 +519,7 @@ class UserFormExecutor(NodeExecutor):
 # ---------------------------------------------------------------------------
 # Registry factory
 # ---------------------------------------------------------------------------
+
 
 def _build_registry(
     provider_registry: ProviderRegistry,
@@ -563,6 +595,7 @@ def _build_registry(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def run_graph(
     graph: GraphSpec,
@@ -673,7 +706,6 @@ def run_graph(
         return False
 
     while interactive and _has_waiting_node(result.flow_id):
-
         # Prompt user
         try:
             user_text = input("You: ").strip()

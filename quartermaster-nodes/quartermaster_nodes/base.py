@@ -193,9 +193,7 @@ class AbstractLLMAssistantNode(AbstractAssistantNode):
         thinking_level = meta.get(
             cls.metadata_thinking_level_key, cls.metadata_thinking_level_default_value
         )
-        thinking_enabled, thinking_budget = cls.THINKING_LEVELS.get(
-            thinking_level, (False, None)
-        )
+        thinking_enabled, thinking_budget = cls.THINKING_LEVELS.get(thinking_level, (False, None))
 
         return LLMConfig(
             model=model,

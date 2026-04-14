@@ -125,6 +125,7 @@ def create_memory_tools(
 # Helpers for test isolation
 # ---------------------------------------------------------------------------
 
+
 def get_store() -> dict[str, Any]:
     """Return the default module-level store (for test inspection)."""
     return _default_store

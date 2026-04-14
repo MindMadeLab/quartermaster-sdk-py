@@ -196,8 +196,6 @@ class TestMergeLLMConfig:
         assert "combine" in Merge1.metadata_system_instruction_default_value.lower()
 
     def test_custom_system_instruction(self):
-        ctx = MockNodeContext(node_metadata={
-            "llm_system_instruction": "You are a merger."
-        })
+        ctx = MockNodeContext(node_metadata={"llm_system_instruction": "You are a merger."})
         llm_config = Merge1.llm_config(ctx)
         assert llm_config.system_message == "You are a merger."

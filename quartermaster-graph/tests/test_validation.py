@@ -187,6 +187,7 @@ class TestCycleDetection:
         codes = [e.code for e in errors]
         assert "cycle_detected" in codes
 
+
 class TestDecisionEdgeLabels:
     def test_unlabeled_decision_edges(self, agent):
         start = GraphNode(type=NodeType.START, name="Start")

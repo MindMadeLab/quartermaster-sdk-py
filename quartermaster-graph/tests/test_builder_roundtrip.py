@@ -81,8 +81,12 @@ class TestDecisionBranchRoundtrip:
             .start()
             .instruction("Classify input")
             .decision("Is positive?", options=["Yes", "No"])
-            .on("Yes").instruction("Positive response").end()
-            .on("No").instruction("Negative response").end()
+            .on("Yes")
+            .instruction("Positive response")
+            .end()
+            .on("No")
+            .instruction("Negative response")
+            .end()
             .build()
         )
 
@@ -113,9 +117,15 @@ class TestDecisionBranchRoundtrip:
             GraphBuilder("Router")
             .start()
             .decision("Route?", options=["A", "B", "C"])
-            .on("A").instruction("Path A").end()
-            .on("B").instruction("Path B").end()
-            .on("C").instruction("Path C").end()
+            .on("A")
+            .instruction("Path A")
+            .end()
+            .on("B")
+            .instruction("Path B")
+            .end()
+            .on("C")
+            .instruction("Path C")
+            .end()
             .build()
         )
 
@@ -158,13 +168,7 @@ class TestEdgeAttributeRoundtrip:
 
     def test_edge_is_main_flag(self) -> None:
         """The is_main flag on edges is preserved."""
-        version = (
-            GraphBuilder("Agent")
-            .start()
-            .instruction("Process")
-            .end()
-            .build()
-        )
+        version = GraphBuilder("Agent").start().instruction("Process").end().build()
 
         for edge in version.edges:
             assert edge.is_main is True
@@ -177,13 +181,7 @@ class TestEdgeAttributeRoundtrip:
 
     def test_node_positions_preserved(self) -> None:
         """Node positions assigned by the builder survive round-trip."""
-        version = (
-            GraphBuilder("Agent")
-            .start()
-            .instruction("Do something")
-            .end()
-            .build()
-        )
+        version = GraphBuilder("Agent").start().instruction("Do something").end().build()
 
         # Builder assigns positions
         for node in version.nodes:
@@ -204,13 +202,7 @@ class TestBuildValidateSerializeCycle:
 
     def test_full_cycle_simple(self) -> None:
         """A simple graph passes validation both before and after round-trip."""
-        version = (
-            GraphBuilder("E2E Agent")
-            .start()
-            .instruction("Analyze")
-            .end()
-            .build()
-        )
+        version = GraphBuilder("E2E Agent").start().instruction("Analyze").end().build()
 
         errors_before = validate_graph(version)
         assert not [e for e in errors_before if e.severity == "error"]
@@ -229,12 +221,12 @@ class TestBuildValidateSerializeCycle:
             .instruction("Prepare")
             .decision("Which path?", options=["Alpha", "Beta"])
             .on("Alpha")
-                .instruction("Alpha work")
-                .code("Alpha transform", code="pass")
-                .end()
+            .instruction("Alpha work")
+            .code("Alpha transform", code="pass")
+            .end()
             .on("Beta")
-                .instruction("Beta work")
-                .end()
+            .instruction("Beta work")
+            .end()
             .build()
         )
 

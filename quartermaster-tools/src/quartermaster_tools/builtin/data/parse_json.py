@@ -49,9 +49,7 @@ def _parse_json(source: str, query: str | None = None) -> Any:
 
     if query is not None:
         if _jmespath is None:
-            raise RuntimeError(
-                "jmespath is not installed. Install it with: pip install jmespath"
-            )
+            raise RuntimeError("jmespath is not installed. Install it with: pip install jmespath")
         data = _jmespath.search(query, data)
 
     return data

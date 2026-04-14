@@ -127,4 +127,3 @@ class Templates:
                 .end()
             )
         return b.build(validate=True)
-

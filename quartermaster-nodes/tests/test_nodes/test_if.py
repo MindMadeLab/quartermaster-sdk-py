@@ -93,10 +93,12 @@ def _make_if_context(
         node_metadata=node_metadata,
         thought=MockThought(metadata=metadata or {}),
         assistant_node=MockAssistantNode(
-            predecessor_edges=MockEdgeQuerySet([
-                MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
-                MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
-            ])
+            predecessor_edges=MockEdgeQuerySet(
+                [
+                    MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
+                    MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
+                ]
+            )
         ),
     )
 
@@ -111,10 +113,12 @@ class TestIfNodeThink:
             node_metadata={"if_expression": "x > 5"},
             thought=MockThought(metadata={"x": 10}),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
-                    MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
+                        MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
+                    ]
+                )
             ),
         )
 
@@ -128,10 +132,12 @@ class TestIfNodeThink:
             node_metadata={"if_expression": "x > 5"},
             thought=MockThought(metadata={"x": 2}),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
-                    MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
+                        MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
+                    ]
+                )
             ),
         )
 
@@ -145,10 +151,12 @@ class TestIfNodeThink:
             node_metadata={"if_expression": "status == 'active'"},
             thought=MockThought(metadata={"status": "active"}),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
-                    MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
+                        MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
+                    ]
+                )
             ),
         )
 
@@ -162,10 +170,12 @@ class TestIfNodeThink:
             node_metadata={"if_expression": "flag"},
             thought=MockThought(metadata={"flag": False}),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
-                    MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
+                        MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
+                    ]
+                )
             ),
         )
 
@@ -183,10 +193,12 @@ class TestIfNodeThink:
             },
             thought=MockThought(metadata={}),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
-                    MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
+                        MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
+                    ]
+                )
             ),
         )
 
@@ -204,10 +216,12 @@ class TestIfNodeThink:
             },
             thought=MockThought(metadata={}),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
-                    MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id=true_id, main_direction=True, direction_text="true"),
+                        MockEdge(tail_id=false_id, main_direction=False, direction_text="false"),
+                    ]
+                )
             ),
         )
 
@@ -227,9 +241,7 @@ class TestIfNodeErrors:
         ctx = MockNodeContext(
             node_metadata={"if_expression": "True"},
             thought=MockThought(),
-            assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([])
-            ),
+            assistant_node=MockAssistantNode(predecessor_edges=MockEdgeQuerySet([])),
         )
         with pytest.raises(ValueError, match="must have one edge"):
             IfNode.think(ctx)
@@ -239,9 +251,11 @@ class TestIfNodeErrors:
             node_metadata={"if_expression": "True"},
             thought=MockThought(),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id="t", main_direction=True, direction_text="true"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id="t", main_direction=True, direction_text="true"),
+                    ]
+                )
             ),
         )
         with pytest.raises(ValueError, match="must have one edge"):
@@ -252,9 +266,11 @@ class TestIfNodeErrors:
             node_metadata={"if_expression": "True"},
             thought=MockThought(),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id="f", main_direction=False, direction_text="false"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id="f", main_direction=False, direction_text="false"),
+                    ]
+                )
             ),
         )
         with pytest.raises(ValueError, match="must have one edge"):
@@ -266,10 +282,12 @@ class TestIfNodeErrors:
             thought=MockThought(),
             handle=None,
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id="t", main_direction=True, direction_text="true"),
-                    MockEdge(tail_id="f", main_direction=False, direction_text="false"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id="t", main_direction=True, direction_text="true"),
+                        MockEdge(tail_id="f", main_direction=False, direction_text="false"),
+                    ]
+                )
             ),
         )
         with pytest.raises(AssertionError, match="handle not set"):

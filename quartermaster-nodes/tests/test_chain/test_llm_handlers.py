@@ -33,7 +33,9 @@ class TestValidateMemoryID:
 
 class TestPrepareMessages:
     def test_adds_system_message(self):
-        config = LLMConfig(model="gpt-4o-mini", provider="openai", system_message="You are helpful.")
+        config = LLMConfig(
+            model="gpt-4o-mini", provider="openai", system_message="You are helpful."
+        )
         handler = PrepareMessages(client=None, llm_config=config)
         result = handler.handle({"messages": []})
 
@@ -132,10 +134,7 @@ class TestTransformToProvider:
 
     def test_applies_transformer(self):
         def uppercase_transformer(messages):
-            return [
-                {**m, "content": m["content"].upper()}
-                for m in messages
-            ]
+            return [{**m, "content": m["content"].upper()} for m in messages]
 
         handler = TransformToProvider(transformer=uppercase_transformer)
         result = handler.handle({"messages": [{"role": "user", "content": "hello"}]})

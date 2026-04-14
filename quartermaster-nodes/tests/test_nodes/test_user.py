@@ -92,9 +92,7 @@ class TestUserNodeThink:
         updates = []
         flow_node_id = uuid4()
         ctx = MockNodeContext(
-            node_metadata={
-                "_status_updater": lambda fid, status: updates.append((fid, status))
-            },
+            node_metadata={"_status_updater": lambda fid, status: updates.append((fid, status))},
             flow_node_id=flow_node_id,
         )
 
@@ -109,9 +107,7 @@ class TestUserNodeThink:
         received_ids = []
         fid = uuid4()
         ctx = MockNodeContext(
-            node_metadata={
-                "_status_updater": lambda fid, status: received_ids.append(fid)
-            },
+            node_metadata={"_status_updater": lambda fid, status: received_ids.append(fid)},
             flow_node_id=fid,
         )
 

@@ -76,7 +76,7 @@ __all__ = [
     # Models
     "Agent",
     "GraphSpec",
-    "AgentGraph",    # deprecated alias for GraphSpec
+    "AgentGraph",  # deprecated alias for GraphSpec
     "AgentVersion",  # deprecated alias for GraphSpec
     "GraphEdge",
     "GraphNode",

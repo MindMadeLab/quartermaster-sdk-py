@@ -163,7 +163,9 @@ class TestDeepChain:
 
         assert result.success
         started_names = [
-            e.node_name for e in events if isinstance(e, NodeStarted) and e.node_name.startswith("N")
+            e.node_name
+            for e in events
+            if isinstance(e, NodeStarted) and e.node_name.startswith("N")
         ]
         assert started_names == ["N1", "N2", "N3", "N4", "N5"]
 
@@ -311,9 +313,7 @@ class TestMixedNodeTypes:
         """Start -> Instruction -> Decision -> (Static A, Static B) -> End."""
         start = make_node(NodeType.START, name="Start")
         inst = make_node(NodeType.INSTRUCTION, name="Process")
-        decision = make_node(
-            NodeType.DECISION, name="Route", traverse_out=TraverseOut.SPAWN_PICKED
-        )
+        decision = make_node(NodeType.DECISION, name="Route", traverse_out=TraverseOut.SPAWN_PICKED)
         static_a = make_node(NodeType.STATIC, name="StaticA")
         static_b = make_node(NodeType.STATIC, name="StaticB")
         end = make_node(NodeType.END, name="End", traverse_out=TraverseOut.SPAWN_NONE)
@@ -377,9 +377,7 @@ class TestMixedNodeTypes:
         counter = make_node(
             NodeType.INSTRUCTION, name="Counter", traverse_in=TraverseIn.AWAIT_FIRST
         )
-        if_node = make_node(
-            NodeType.IF, name="Check", traverse_out=TraverseOut.SPAWN_PICKED
-        )
+        if_node = make_node(NodeType.IF, name="Check", traverse_out=TraverseOut.SPAWN_PICKED)
         end = make_node(NodeType.END, name="End", traverse_out=TraverseOut.SPAWN_NONE)
 
         graph = make_graph(

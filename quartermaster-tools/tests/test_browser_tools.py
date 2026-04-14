@@ -30,6 +30,7 @@ from quartermaster_tools.builtin.browser.session import BrowserSessionManager
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _reset_session():
     """Reset session manager state before each test."""
@@ -69,6 +70,7 @@ def browser_unavailable():
 # ---------------------------------------------------------------------------
 # BrowserNavigateTool
 # ---------------------------------------------------------------------------
+
 
 class TestBrowserNavigateTool:
     def test_navigate_success(self, browser_available):
@@ -147,6 +149,7 @@ class TestBrowserNavigateTool:
 # BrowserClickTool
 # ---------------------------------------------------------------------------
 
+
 class TestBrowserClickTool:
     def test_click_success(self, browser_available):
         tool = BrowserClickTool
@@ -185,6 +188,7 @@ class TestBrowserClickTool:
 # BrowserTypeTool
 # ---------------------------------------------------------------------------
 
+
 class TestBrowserTypeTool:
     def test_type_with_clear(self, browser_available):
         tool = BrowserTypeTool
@@ -222,6 +226,7 @@ class TestBrowserTypeTool:
 # ---------------------------------------------------------------------------
 # BrowserExtractTool
 # ---------------------------------------------------------------------------
+
 
 class TestBrowserExtractTool:
     def test_extract_text_whole_page(self, browser_available):
@@ -288,6 +293,7 @@ class TestBrowserExtractTool:
 # BrowserScreenshotTool
 # ---------------------------------------------------------------------------
 
+
 class TestBrowserScreenshotTool:
     def test_screenshot_full_page(self, browser_available, tmp_path):
         # Create a fake screenshot file so os.path.getsize works
@@ -300,9 +306,7 @@ class TestBrowserScreenshotTool:
         assert result.success is True
         assert result.data["saved_to"] == str(out)
         assert result.data["size_bytes"] == 104
-        browser_available.screenshot.assert_called_once_with(
-            path=str(out), full_page=True
-        )
+        browser_available.screenshot.assert_called_once_with(path=str(out), full_page=True)
 
     def test_screenshot_element(self, browser_available, tmp_path):
         out = tmp_path / "elem.png"
@@ -345,6 +349,7 @@ class TestBrowserScreenshotTool:
 # BrowserWaitTool
 # ---------------------------------------------------------------------------
 
+
 class TestBrowserWaitTool:
     def test_wait_element_found(self, browser_available):
         tool = BrowserWaitTool
@@ -359,9 +364,7 @@ class TestBrowserWaitTool:
         )
 
     def test_wait_timeout(self, browser_available):
-        browser_available.wait_for_selector.side_effect = Exception(
-            "Timeout 5000ms exceeded"
-        )
+        browser_available.wait_for_selector.side_effect = Exception("Timeout 5000ms exceeded")
 
         tool = BrowserWaitTool
         result = tool.run(selector=".spinner", timeout=5000)
@@ -388,6 +391,7 @@ class TestBrowserWaitTool:
 # BrowserEvalTool
 # ---------------------------------------------------------------------------
 
+
 class TestBrowserEvalTool:
     def test_eval_returns_value(self, browser_available):
         browser_available.evaluate.return_value = 42
@@ -408,9 +412,7 @@ class TestBrowserEvalTool:
         assert result.data["result"] == "hello"
 
     def test_eval_error(self, browser_available):
-        browser_available.evaluate.side_effect = Exception(
-            "ReferenceError: foo is not defined"
-        )
+        browser_available.evaluate.side_effect = Exception("ReferenceError: foo is not defined")
 
         tool = BrowserEvalTool
         result = tool.run(script="foo.bar")
@@ -436,6 +438,7 @@ class TestBrowserEvalTool:
 # ---------------------------------------------------------------------------
 # Session Manager
 # ---------------------------------------------------------------------------
+
 
 class TestBrowserSessionManager:
     def test_is_available_false_without_playwright(self):

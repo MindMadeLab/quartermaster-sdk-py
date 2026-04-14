@@ -57,7 +57,10 @@ class TestSimpleYamlRoundtrip:
         assert rest_inst.metadata["llm_model"] == orig_inst.metadata["llm_model"]
         assert rest_inst.metadata["llm_provider"] == orig_inst.metadata["llm_provider"]
         assert rest_inst.metadata["llm_temperature"] == orig_inst.metadata["llm_temperature"]
-        assert rest_inst.metadata["llm_system_instruction"] == orig_inst.metadata["llm_system_instruction"]
+        assert (
+            rest_inst.metadata["llm_system_instruction"]
+            == orig_inst.metadata["llm_system_instruction"]
+        )
 
     def test_multi_step_yaml(self) -> None:
         """Multi-step pipeline survives YAML serialization."""
@@ -90,8 +93,12 @@ class TestDecisionYamlRoundtrip:
             GraphBuilder("Decision YAML")
             .start()
             .decision("Route?", options=["Left", "Right"])
-            .on("Left").instruction("Go left").end()
-            .on("Right").instruction("Go right").end()
+            .on("Left")
+            .instruction("Go left")
+            .end()
+            .on("Right")
+            .instruction("Go right")
+            .end()
             .build()
         )
 
@@ -114,9 +121,15 @@ class TestDecisionYamlRoundtrip:
             .start()
             .instruction("Analyze")
             .decision("Category?", options=["Urgent", "Normal", "Low"])
-            .on("Urgent").instruction("Handle urgent").end()
-            .on("Normal").instruction("Handle normal").end()
-            .on("Low").static("Auto-reply", text="We will get back to you.").end()
+            .on("Urgent")
+            .instruction("Handle urgent")
+            .end()
+            .on("Normal")
+            .instruction("Handle normal")
+            .end()
+            .on("Low")
+            .static("Auto-reply", text="We will get back to you.")
+            .end()
             .build()
         )
 
@@ -150,13 +163,7 @@ class TestYamlContainsReadableContent:
 
     def test_yaml_contains_enum_values(self) -> None:
         """YAML output contains enum string values, not Python repr."""
-        version = (
-            GraphBuilder("Enum Agent")
-            .start()
-            .instruction("Work")
-            .end()
-            .build()
-        )
+        version = GraphBuilder("Enum Agent").start().instruction("Work").end().build()
 
         yaml_str = to_yaml(version)
         assert "Start1" in yaml_str  # NodeType.START.value
@@ -169,13 +176,7 @@ class TestYamlValidationAfterRoundtrip:
 
     def test_simple_graph_valid_after_yaml(self) -> None:
         """Simple graph passes validation after YAML round-trip."""
-        version = (
-            GraphBuilder("Valid YAML")
-            .start()
-            .instruction("Do work")
-            .end()
-            .build()
-        )
+        version = GraphBuilder("Valid YAML").start().instruction("Do work").end().build()
 
         errors_before = validate_graph(version)
         assert not [e for e in errors_before if e.severity == "error"]
@@ -185,4 +186,3 @@ class TestYamlValidationAfterRoundtrip:
 
         errors_after = validate_graph(restored)
         assert not [e for e in errors_after if e.severity == "error"]
-

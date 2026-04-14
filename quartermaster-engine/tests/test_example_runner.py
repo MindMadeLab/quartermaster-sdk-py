@@ -75,9 +75,7 @@ def _make_context(
     current_node: GraphNode | None = None,
 ) -> ExecutionContext:
     if current_node is None:
-        current_node = _make_node(
-            name=node_name, node_type=node_type, metadata=node_metadata or {}
-        )
+        current_node = _make_node(name=node_name, node_type=node_type, metadata=node_metadata or {})
     if graph is None:
         graph = _make_graph([current_node])
     return ExecutionContext(
@@ -1283,9 +1281,7 @@ class TestUserFormExecutor:
 
     def test_placeholder_when_no_default(self):
         ctx = _make_context(
-            node_metadata={
-                "parameters": [{"name": "city"}]
-            },
+            node_metadata={"parameters": [{"name": "city"}]},
         )
         result = _run(UserFormExecutor().execute(ctx))
         assert result.data["memory_updates"]["city"] == "<city>"
@@ -1306,9 +1302,7 @@ class TestUserFormExecutor:
 
     def test_missing_name_in_param(self):
         ctx = _make_context(
-            node_metadata={
-                "parameters": [{"default": "val"}]
-            },
+            node_metadata={"parameters": [{"default": "val"}]},
         )
         result = _run(UserFormExecutor().execute(ctx))
         # Falls back to "field" as name
@@ -1316,9 +1310,7 @@ class TestUserFormExecutor:
 
     def test_output_text_is_str_of_form_data(self):
         ctx = _make_context(
-            node_metadata={
-                "parameters": [{"name": "x", "default": "1"}]
-            },
+            node_metadata={"parameters": [{"name": "x", "default": "1"}]},
         )
         result = _run(UserFormExecutor().execute(ctx))
         assert "x" in result.output_text

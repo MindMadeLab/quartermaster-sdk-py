@@ -27,6 +27,7 @@ from quartermaster_tools.builtin.filesystem import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def tmp(tmp_path):
     """Return a tmp_path and create some test files inside it."""
@@ -43,6 +44,7 @@ def tmp(tmp_path):
 # ===================================================================
 # ListDirectoryTool
 # ===================================================================
+
 
 class TestListDirectoryTool:
     def test_basic_listing(self, tmp):
@@ -86,6 +88,7 @@ class TestListDirectoryTool:
     def test_path_outside_allowed_base(self, tmp):
         """Verify that validate_path with an explicit base dir rejects paths outside it."""
         from quartermaster_tools.builtin.filesystem._security import validate_path
+
         error, _ = validate_path(str(tmp), allowed_base_dir=str(tmp / "sub"))
         assert error is not None
         assert "Access denied" in error
@@ -94,6 +97,7 @@ class TestListDirectoryTool:
 # ===================================================================
 # FindFilesTool
 # ===================================================================
+
 
 class TestFindFilesTool:
     def test_glob_star(self, tmp):
@@ -133,6 +137,7 @@ class TestFindFilesTool:
 # ===================================================================
 # GrepTool
 # ===================================================================
+
 
 class TestGrepTool:
     def test_basic_search(self, tmp):
@@ -182,6 +187,7 @@ class TestGrepTool:
 # FileInfoTool
 # ===================================================================
 
+
 class TestFileInfoTool:
     def test_file_info(self, tmp):
         result = FileInfoTool.run(path=str(tmp / "a.txt"))
@@ -220,6 +226,7 @@ class TestFileInfoTool:
 # MoveFileTool
 # ===================================================================
 
+
 class TestMoveFileTool:
     def test_move_file(self, tmp):
         src = str(tmp / "a.txt")
@@ -251,6 +258,7 @@ class TestMoveFileTool:
     def test_path_outside_allowed_base(self, tmp):
         """Verify that validate_path with an explicit base dir rejects paths outside it."""
         from quartermaster_tools.builtin.filesystem._security import validate_path
+
         error, _ = validate_path(str(tmp / "a.txt"), allowed_base_dir=str(tmp / "sub"))
         assert error is not None
         assert "Access denied" in error
@@ -259,6 +267,7 @@ class TestMoveFileTool:
 # ===================================================================
 # DeleteFileTool
 # ===================================================================
+
 
 class TestDeleteFileTool:
     def test_delete_file(self, tmp):
@@ -295,6 +304,7 @@ class TestDeleteFileTool:
 # ===================================================================
 # CopyFileTool
 # ===================================================================
+
 
 class TestCopyFileTool:
     def test_copy_file(self, tmp):
@@ -340,6 +350,7 @@ class TestCopyFileTool:
 # CreateDirectoryTool
 # ===================================================================
 
+
 class TestCreateDirectoryTool:
     def test_create_simple(self, tmp):
         target = str(tmp / "newdir")
@@ -382,6 +393,7 @@ class TestCreateDirectoryTool:
 # Security shared tests
 # ===================================================================
 
+
 class TestSecurityShared:
     """Cross-cutting security tests that apply to all tools."""
 
@@ -411,6 +423,7 @@ class TestSecurityShared:
     def test_allowed_base_dir_validation(self, tmp):
         """Verify that validate_path rejects file paths as base dir."""
         from quartermaster_tools.builtin.filesystem._security import resolve_base_dir
+
         file_path = str(tmp / "a.txt")
         with pytest.raises(ValueError):
             resolve_base_dir(file_path)
@@ -420,13 +433,23 @@ class TestSecurityShared:
 # Tool interface conformance
 # ===================================================================
 
+
 class TestToolInterface:
     """Verify each tool implements the AbstractTool interface correctly."""
 
-    @pytest.mark.parametrize("tool", [
-        ListDirectoryTool, FindFilesTool, GrepTool, FileInfoTool,
-        MoveFileTool, DeleteFileTool, CopyFileTool, CreateDirectoryTool,
-    ])
+    @pytest.mark.parametrize(
+        "tool",
+        [
+            ListDirectoryTool,
+            FindFilesTool,
+            GrepTool,
+            FileInfoTool,
+            MoveFileTool,
+            DeleteFileTool,
+            CopyFileTool,
+            CreateDirectoryTool,
+        ],
+    )
     def test_interface(self, tool):
         assert isinstance(tool.name(), str)
         assert isinstance(tool.version(), str)

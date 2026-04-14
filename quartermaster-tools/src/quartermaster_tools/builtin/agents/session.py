@@ -85,9 +85,7 @@ class SessionManager:
         disallowed agent IDs.
         """
         if agent_id and not self.is_agent_allowed(agent_id):
-            raise ValueError(
-                f"Agent '{agent_id}' is not in the allowed agents list"
-            )
+            raise ValueError(f"Agent '{agent_id}' is not in the allowed agents list")
         meta = metadata or {}
         if agent_id:
             meta["agent_id"] = agent_id
@@ -99,9 +97,7 @@ class SessionManager:
     def get_session(self, session_id: str) -> AgentSession | None:
         return self._sessions.get(session_id)
 
-    def list_sessions(
-        self, status: SessionStatus | None = None
-    ) -> list[AgentSession]:
+    def list_sessions(self, status: SessionStatus | None = None) -> list[AgentSession]:
         sessions = list(self._sessions.values())
         if status:
             sessions = [s for s in sessions if s.status == status]
@@ -118,15 +114,11 @@ class SessionManager:
         session = self._sessions.get(session_id)
         if not session:
             return False
-        session.messages.append(
-            AgentMessage(role=role, content=content, metadata=metadata or {})
-        )
+        session.messages.append(AgentMessage(role=role, content=content, metadata=metadata or {}))
         session.updated_at = time.time()
         return True
 
-    def start_session(
-        self, session_id: str, task_fn: Callable[[AgentSession], Any]
-    ) -> bool:
+    def start_session(self, session_id: str, task_fn: Callable[[AgentSession], Any]) -> bool:
         """Start a session with a task function that runs in a thread."""
         session = self._sessions.get(session_id)
         if not session or session.status == SessionStatus.RUNNING:
@@ -156,9 +148,7 @@ class SessionManager:
         thread.start()
         return True
 
-    def add_finish_hook(
-        self, session_id: str, hook: Callable[[AgentSession], None]
-    ) -> bool:
+    def add_finish_hook(self, session_id: str, hook: Callable[[AgentSession], None]) -> bool:
         """Add a callback that fires when session completes."""
         session = self._sessions.get(session_id)
         if not session:
@@ -183,9 +173,7 @@ class SessionManager:
         session._thread.join(timeout=timeout)
         return session
 
-    def wait_all(
-        self, session_ids: list[str], timeout: float | None = None
-    ) -> list[AgentSession]:
+    def wait_all(self, session_ids: list[str], timeout: float | None = None) -> list[AgentSession]:
         """Wait for multiple sessions to complete."""
         results = []
         for sid in session_ids:

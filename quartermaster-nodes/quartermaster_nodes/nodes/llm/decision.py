@@ -34,8 +34,7 @@ class Decision1(AbstractLLMAssistantNode):
 
     metadata_prefix_message_key = "prefix_message"
     metadata_prefix_message_default_value = (
-        "Based on previous messages pick the best path to take. "
-        "Here are available options:"
+        "Based on previous messages pick the best path to take. Here are available options:"
     )
     metadata_suffix_message_key = "suffix_message"
     metadata_suffix_message_default_value = ""
@@ -107,9 +106,7 @@ class Decision1(AbstractLLMAssistantNode):
         )
 
         edges = ctx.assistant_node.predecessor_edges.all()
-        available_connections = "\n".join(
-            f"- {e.tail_id}: {e.direction_text}" for e in edges
-        )
+        available_connections = "\n".join(f"- {e.tail_id}: {e.direction_text}" for e in edges)
 
         suffix_message = cls.get_metadata_key_value(
             ctx,
@@ -137,11 +134,10 @@ class Decision1(AbstractLLMAssistantNode):
         decision_message = cls.prepare_decision_message(ctx)
         tool = cls.create_decision_tool()
 
-        Chain() \
-            .add_handler(ValidateMemoryID()) \
-            .add_handler(PrepareMessages(client, llm_config, decision_message)) \
-            .add_handler(ContextManager(client, llm_config, context_config)) \
-            .add_handler(TransformToProvider(transformer)) \
-            .add_handler(GenerateToolCall(client, [tool], llm_config)) \
-            .add_handler(ProcessStreamResponse(only_first_tool=True)) \
-            .run(initial_data)
+        Chain().add_handler(ValidateMemoryID()).add_handler(
+            PrepareMessages(client, llm_config, decision_message)
+        ).add_handler(ContextManager(client, llm_config, context_config)).add_handler(
+            TransformToProvider(transformer)
+        ).add_handler(GenerateToolCall(client, [tool], llm_config)).add_handler(
+            ProcessStreamResponse(only_first_tool=True)
+        ).run(initial_data)

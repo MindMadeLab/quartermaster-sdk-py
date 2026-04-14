@@ -200,7 +200,8 @@ class TestEventOrdering:
 
         # Find events for the Streamer node specifically
         streamer_events = [
-            e for e in events
+            e
+            for e in events
             if isinstance(e, (NodeStarted, NodeFinished, TokenGenerated))
             and getattr(e, "node_id", None) == streaming.id
         ]

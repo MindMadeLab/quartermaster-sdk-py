@@ -162,10 +162,12 @@ class TestStaticDecision:
             node_metadata={"expression": "x > 0"},
             thought=MockThought(metadata={"x": 5}),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id=true_id, main_direction=True, direction_text="yes"),
-                    MockEdge(tail_id=false_id, main_direction=False, direction_text="no"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id=true_id, main_direction=True, direction_text="yes"),
+                        MockEdge(tail_id=false_id, main_direction=False, direction_text="no"),
+                    ]
+                )
             ),
         )
         StaticDecision1.think(ctx)

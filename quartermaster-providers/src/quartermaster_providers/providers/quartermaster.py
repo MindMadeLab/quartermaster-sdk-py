@@ -86,9 +86,7 @@ class QuartermasterProvider(OpenAIProvider):
                 "Get your key at https://app.quartermaster.ai/settings/api-keys"
             )
 
-        resolved_url = base_url or os.environ.get(
-            "QUARTERMASTER_API_URL", QUARTERMASTER_API_URL
-        )
+        resolved_url = base_url or os.environ.get("QUARTERMASTER_API_URL", QUARTERMASTER_API_URL)
 
         super().__init__(
             api_key=resolved_key,

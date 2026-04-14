@@ -28,9 +28,7 @@ class TestSimpleFlow:
         StartNodeV1.think(ctx_start)  # Should complete without error
 
         # Static node
-        ctx_static = MockNodeContext(
-            node_metadata={"static_text": "Hello from static!"}
-        )
+        ctx_static = MockNodeContext(node_metadata={"static_text": "Hello from static!"})
         StaticNode1.think(ctx_static)
         assert ctx_static.handle.last_text == "Hello from static!"
 
@@ -54,10 +52,12 @@ class TestDecisionFlow:
             node_metadata={"if_expression": "score > 80"},
             thought=MockThought(metadata={"score": 95}),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id=path_a, main_direction=True, direction_text="pass"),
-                    MockEdge(tail_id=path_b, main_direction=False, direction_text="fail"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id=path_a, main_direction=True, direction_text="pass"),
+                        MockEdge(tail_id=path_b, main_direction=False, direction_text="fail"),
+                    ]
+                )
             ),
         )
         IfNode.think(ctx_if)
@@ -66,9 +66,7 @@ class TestDecisionFlow:
         assert picked == path_a  # Score 95 > 80, should go to path A
 
         # Execute the selected path
-        ctx_static = MockNodeContext(
-            node_metadata={"static_text": "You passed!"}
-        )
+        ctx_static = MockNodeContext(node_metadata={"static_text": "You passed!"})
         StaticNode1.think(ctx_static)
         assert ctx_static.handle.last_text == "You passed!"
 
@@ -104,9 +102,7 @@ class TestVariableFlow:
             thought=MockThought(text="Message: Hello, Alice"),
         )
         TextToVariableNode.think(ctx_ttv)
-        assert ctx_ttv.handle.last_metadata_update == {
-            "final_output": "Message: Hello, Alice"
-        }
+        assert ctx_ttv.handle.last_metadata_update == {"final_output": "Message: Hello, Alice"}
 
 
 class TestUserInteractionFlow:
@@ -117,9 +113,7 @@ class TestUserInteractionFlow:
         from quartermaster_nodes.nodes.user_interaction.user import UserNode1
 
         # Static node runs normally
-        ctx_static = MockNodeContext(
-            node_metadata={"static_text": "Please provide your name:"}
-        )
+        ctx_static = MockNodeContext(node_metadata={"static_text": "Please provide your name:"})
         StaticNode1.think(ctx_static)
         assert ctx_static.handle.last_text == "Please provide your name:"
 
@@ -149,11 +143,13 @@ class TestSwitchFlow:
             node_metadata={"cases": cases},
             thought=MockThought(metadata={"priority": "medium"}),
             assistant_node=MockAssistantNode(
-                predecessor_edges=MockEdgeQuerySet([
-                    MockEdge(tail_id=edge_low, main_direction=False, direction_text="low"),
-                    MockEdge(tail_id=edge_med, main_direction=False, direction_text="medium"),
-                    MockEdge(tail_id=edge_high, main_direction=True, direction_text="high"),
-                ])
+                predecessor_edges=MockEdgeQuerySet(
+                    [
+                        MockEdge(tail_id=edge_low, main_direction=False, direction_text="low"),
+                        MockEdge(tail_id=edge_med, main_direction=False, direction_text="medium"),
+                        MockEdge(tail_id=edge_high, main_direction=True, direction_text="high"),
+                    ]
+                )
             ),
         )
 

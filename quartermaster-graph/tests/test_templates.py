@@ -1,6 +1,5 @@
 """Tests for pre-built graph templates."""
 
-
 from quartermaster_graph.enums import NodeType
 from quartermaster_graph.models import GraphSpec
 from quartermaster_graph.templates import Templates
@@ -116,5 +115,3 @@ class TestMultiAgentSupervisor:
         assert "Researcher" in labels
         assert "Writer" in labels
         assert "Coder" in labels
-
-

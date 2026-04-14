@@ -35,9 +35,7 @@ class BreakNode1(AbstractAssistantNode):
     def info(cls) -> AssistantInfo:
         info = AssistantInfo()
         info.version = cls.version()
-        info.description = (
-            "Message collection boundary that stops LLM context building"
-        )
+        info.description = "Message collection boundary that stops LLM context building"
         info.instructions = (
             "Place at strategic points to limit message history collection. "
             "break_targets: [] = full break, ['tools'] = clear tools, "

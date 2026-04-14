@@ -15,9 +15,16 @@ from quartermaster_tools.decorator import tool
 DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024
 
 # Allowed encodings
-_ALLOWED_ENCODINGS = frozenset({
-    "utf-8", "utf-16", "utf-32", "ascii", "latin-1", "iso-8859-1",
-})
+_ALLOWED_ENCODINGS = frozenset(
+    {
+        "utf-8",
+        "utf-16",
+        "utf-32",
+        "ascii",
+        "latin-1",
+        "iso-8859-1",
+    }
+)
 
 # Paths that are never allowed to be read
 _BLOCKED_PREFIXES = (
@@ -67,7 +74,9 @@ def _read_file_impl(
     if encoding.lower().replace("-", "") not in {
         e.lower().replace("-", "") for e in _ALLOWED_ENCODINGS
     }:
-        return {"error": f"Unsupported encoding: {encoding!r}. Allowed: {sorted(_ALLOWED_ENCODINGS)}"}
+        return {
+            "error": f"Unsupported encoding: {encoding!r}. Allowed: {sorted(_ALLOWED_ENCODINGS)}"
+        }
 
     # Validate path security
     error, real_path = _validate_read_path(path, allowed_base_dir)

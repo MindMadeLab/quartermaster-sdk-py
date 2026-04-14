@@ -15,6 +15,7 @@ from quartermaster_tools.builtin.privacy.redact import RedactPIITool
 # DetectPIITool
 # ---------------------------------------------------------------------------
 
+
 class TestDetectPIITool:
     def setup_method(self) -> None:
         self.tool = DetectPIITool
@@ -92,10 +93,7 @@ class TestDetectPIITool:
         assert result.data["count"] == 1
 
     def test_mixed_text(self) -> None:
-        text = (
-            "Contact john@example.com or call +1-555-123-4567. "
-            "SSN: 123-45-6789. IP: 10.0.0.1"
-        )
+        text = "Contact john@example.com or call +1-555-123-4567. SSN: 123-45-6789. IP: 10.0.0.1"
         result = self.tool.run(text=text)
         assert result.success
         assert result.data["count"] >= 3
@@ -104,7 +102,7 @@ class TestDetectPIITool:
         text = "Email: test@example.com"
         result = self.tool.run(text=text)
         entity = result.data["entities"][0]
-        assert text[entity["start"]:entity["end"]] == entity["value"]
+        assert text[entity["start"] : entity["end"]] == entity["value"]
 
     def test_missing_text(self) -> None:
         result = self.tool.run()
@@ -120,6 +118,7 @@ class TestDetectPIITool:
 # ---------------------------------------------------------------------------
 # RedactPIITool
 # ---------------------------------------------------------------------------
+
 
 class TestRedactPIITool:
     def setup_method(self) -> None:
@@ -196,6 +195,7 @@ class TestRedactPIITool:
 # ---------------------------------------------------------------------------
 # ScanFilePIITool
 # ---------------------------------------------------------------------------
+
 
 class TestScanFilePIITool:
     def setup_method(self) -> None:

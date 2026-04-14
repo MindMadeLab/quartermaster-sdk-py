@@ -25,16 +25,16 @@ DEFAULT_MAX_RESPONSE_SIZE = 5 * 1024 * 1024
 
 # Private/reserved IP networks that must not be accessed (SSRF protection)
 _BLOCKED_NETWORKS = [
-    ipaddress.ip_network("127.0.0.0/8"),       # Loopback
-    ipaddress.ip_network("::1/128"),            # IPv6 loopback
-    ipaddress.ip_network("10.0.0.0/8"),         # RFC-1918
-    ipaddress.ip_network("172.16.0.0/12"),      # RFC-1918
-    ipaddress.ip_network("192.168.0.0/16"),     # RFC-1918
-    ipaddress.ip_network("169.254.0.0/16"),     # Link-local / AWS metadata
-    ipaddress.ip_network("fe80::/10"),          # IPv6 link-local
-    ipaddress.ip_network("fc00::/7"),           # IPv6 unique local
-    ipaddress.ip_network("0.0.0.0/8"),          # "This" network
-    ipaddress.ip_network("::/128"),             # Unspecified
+    ipaddress.ip_network("127.0.0.0/8"),  # Loopback
+    ipaddress.ip_network("::1/128"),  # IPv6 loopback
+    ipaddress.ip_network("10.0.0.0/8"),  # RFC-1918
+    ipaddress.ip_network("172.16.0.0/12"),  # RFC-1918
+    ipaddress.ip_network("192.168.0.0/16"),  # RFC-1918
+    ipaddress.ip_network("169.254.0.0/16"),  # Link-local / AWS metadata
+    ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
+    ipaddress.ip_network("fc00::/7"),  # IPv6 unique local
+    ipaddress.ip_network("0.0.0.0/8"),  # "This" network
+    ipaddress.ip_network("::/128"),  # Unspecified
 ]
 
 
@@ -90,7 +90,9 @@ def _web_request_impl(
 
     method = method.upper()
     if method not in _SUPPORTED_METHODS:
-        return {"error": f"Unsupported HTTP method: {method}. Use one of: {', '.join(_SUPPORTED_METHODS)}."}
+        return {
+            "error": f"Unsupported HTTP method: {method}. Use one of: {', '.join(_SUPPORTED_METHODS)}."
+        }
 
     # Validate URL before making any request
     url_error = _validate_url(url)

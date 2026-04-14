@@ -88,6 +88,7 @@ class TestSlackMessageTool:
     @patch.dict("os.environ", {"SLACK_BOT_TOKEN": "xoxb-test"})
     def test_timeout_error(self, mock_httpx: MagicMock) -> None:
         import httpx
+
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
@@ -206,12 +207,17 @@ class TestWebhookNotifyTool:
         )
         assert result.success is True
         call_kwargs = mock_client.post.call_args
-        headers = call_kwargs[1]["headers"] if "headers" in call_kwargs[1] else call_kwargs.kwargs["headers"]
+        headers = (
+            call_kwargs[1]["headers"]
+            if "headers" in call_kwargs[1]
+            else call_kwargs.kwargs["headers"]
+        )
         assert headers["X-Custom"] == "value"
 
     @patch("quartermaster_tools.builtin.messaging.tools.httpx")
     def test_webhook_http_error(self, mock_httpx: MagicMock) -> None:
         import httpx
+
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_response.text = "Internal Server Error"
@@ -270,6 +276,7 @@ class TestDiscordMessageTool:
     @patch("quartermaster_tools.builtin.messaging.tools.httpx")
     def test_discord_timeout(self, mock_httpx: MagicMock) -> None:
         import httpx
+
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)

@@ -82,11 +82,10 @@ class InstructionProgramParameters1(AbstractLLMAssistantNode):
             "ctx": ctx,
         }
 
-        Chain() \
-            .add_handler(ValidateMemoryID()) \
-            .add_handler(PrepareMessages(client, llm_config)) \
-            .add_handler(ContextManager(client, llm_config, context_config)) \
-            .add_handler(TransformToProvider(transformer)) \
-            .add_handler(GenerateToolCall(client, [], llm_config)) \
-            .add_handler(ProcessStreamResponse()) \
-            .run(initial_data)
+        Chain().add_handler(ValidateMemoryID()).add_handler(
+            PrepareMessages(client, llm_config)
+        ).add_handler(ContextManager(client, llm_config, context_config)).add_handler(
+            TransformToProvider(transformer)
+        ).add_handler(GenerateToolCall(client, [], llm_config)).add_handler(
+            ProcessStreamResponse()
+        ).run(initial_data)

@@ -60,9 +60,7 @@ class TextNode(AbstractAssistantNode):
 
     @classmethod
     def think(cls, ctx) -> None:
-        value = cls.get_metadata_key_value(
-            ctx, cls.metadata_text_key, cls.metadata_text_default
-        )
+        value = cls.get_metadata_key_value(ctx, cls.metadata_text_key, cls.metadata_text_default)
 
         if ctx.thought is None:
             raise ValueError("Memory ID cannot be None")

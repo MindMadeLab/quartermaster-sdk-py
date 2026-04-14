@@ -9,7 +9,10 @@ Provides tools for executing code in subprocess-based sandboxes:
 """
 
 from quartermaster_tools.builtin.code.eval_math import eval_math, EvalMathTool
-from quartermaster_tools.builtin.code.javascript_executor import javascript_executor, JavaScriptExecutorTool
+from quartermaster_tools.builtin.code.javascript_executor import (
+    javascript_executor,
+    JavaScriptExecutorTool,
+)
 from quartermaster_tools.builtin.code.python_executor import python_executor, PythonExecutorTool
 from quartermaster_tools.builtin.code.shell_executor import shell_executor, ShellExecutorTool
 

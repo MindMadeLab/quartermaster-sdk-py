@@ -1,6 +1,5 @@
 """Tests for metadata schemas and validation."""
 
-
 from quartermaster_graph.enums import NodeType
 from quartermaster_graph.metadata import (
     CodeMetadata,
@@ -46,18 +45,24 @@ class TestGetMetadataClass:
 
 class TestValidateMetadata:
     def test_valid_instruction(self):
-        result = validate_metadata(NodeType.INSTRUCTION, {
-            "llm_system_instruction": "Be helpful",
-            "llm_model": "gpt-4o",
-        })
+        result = validate_metadata(
+            NodeType.INSTRUCTION,
+            {
+                "llm_system_instruction": "Be helpful",
+                "llm_model": "gpt-4o",
+            },
+        )
         assert isinstance(result, InstructionMetadata)
         assert result.llm_system_instruction == "Be helpful"
 
     def test_valid_code(self):
-        result = validate_metadata(NodeType.CODE, {
-            "filename": "script.py",
-            "code": "x = 1",
-        })
+        result = validate_metadata(
+            NodeType.CODE,
+            {
+                "filename": "script.py",
+                "code": "x = 1",
+            },
+        )
         assert isinstance(result, CodeMetadata)
         assert result.code == "x = 1"
 
@@ -71,10 +76,13 @@ class TestValidateMetadata:
         assert result.llm_temperature == 0.5
 
     def test_extra_fields_ignored(self):
-        result = validate_metadata(NodeType.STATIC, {
-            "static_text": "hello",
-            "extra_field": "ignored",
-        })
+        result = validate_metadata(
+            NodeType.STATIC,
+            {
+                "static_text": "hello",
+                "extra_field": "ignored",
+            },
+        )
         assert isinstance(result, StaticMetadata)
         assert result.static_text == "hello"
 
@@ -100,7 +108,12 @@ class TestIndividualMetadata:
         assert m.if_expression == "x > 0"
 
     def test_switch_metadata(self):
-        m = SwitchMetadata(cases=[{"expression": "active", "edge_id": "go"}, {"expression": "inactive", "edge_id": "stop"}])
+        m = SwitchMetadata(
+            cases=[
+                {"expression": "active", "edge_id": "go"},
+                {"expression": "inactive", "edge_id": "stop"},
+            ]
+        )
         assert len(m.cases) == 2
 
     def test_code_metadata_defaults(self):

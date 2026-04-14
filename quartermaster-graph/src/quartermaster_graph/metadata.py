@@ -13,6 +13,7 @@ from quartermaster_graph.enums import NodeType
 
 # ── Base LLM configuration ───────────────────────────────────────────
 
+
 class LLMMetadata(BaseModel):
     """Common LLM configuration shared by all nodes that call an LLM.
 
@@ -33,6 +34,7 @@ class LLMMetadata(BaseModel):
 
 
 # ── LLM nodes ────────────────────────────────────────────────────────
+
 
 class InstructionMetadata(LLMMetadata):
     """Metadata for Instruction nodes — pure LLM text generation, no tools.
@@ -95,6 +97,7 @@ class SummarizeMetadata(LLMMetadata):
 
 # ── Control flow nodes ───────────────────────────────────────────────
 
+
 class IfMetadata(BaseModel):
     """Metadata for If nodes — evaluates Python expression, picks true/false branch."""
 
@@ -121,6 +124,7 @@ class BreakMetadata(BaseModel):
 
 
 # ── Data nodes ───────────────────────────────────────────────────────
+
 
 class StaticMetadata(BaseModel):
     """Metadata for Static nodes — outputs fixed text content, no LLM."""
@@ -162,6 +166,7 @@ class CodeMetadata(BaseModel):
 
 # ── Memory nodes ─────────────────────────────────────────────────────
 
+
 class ReadMemoryMetadata(BaseModel):
     """Metadata for ReadMemory nodes."""
 
@@ -202,6 +207,7 @@ class UserMemoryMetadata(BaseModel):
 
 # ── User interaction nodes ───────────────────────────────────────────
 
+
 class UserMetadata(BaseModel):
     """Metadata for User input nodes."""
 
@@ -221,6 +227,7 @@ class UserFormMetadata(BaseModel):
 
 
 # ── Utility nodes ────────────────────────────────────────────────────
+
 
 class CommentMetadata(BaseModel):
     """Metadata for Comment nodes — documentation only."""
@@ -243,7 +250,6 @@ _NODE_TYPE_METADATA: dict[NodeType, type[BaseModel]] = {
     NodeType.MERGE: MergeMetadata,
     NodeType.AGENT: AgentMetadata,
     NodeType.SUMMARIZE: SummarizeMetadata,
-
     NodeType.INSTRUCTION_IMAGE_VISION: InstructionMetadata,
     # Control flow
     NodeType.IF: IfMetadata,

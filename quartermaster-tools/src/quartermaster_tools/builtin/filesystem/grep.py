@@ -31,12 +31,14 @@ def _search_file(
             start = max(0, i - context_lines)
             end = min(len(lines), i + context_lines + 1)
             context = [l.rstrip("\n\r") for l in lines[start:end]]
-            results.append({
-                "file": file_path,
-                "line_number": i + 1,
-                "line": line.rstrip("\n\r"),
-                "context": context if context_lines > 0 else [],
-            })
+            results.append(
+                {
+                    "file": file_path,
+                    "line_number": i + 1,
+                    "line": line.rstrip("\n\r"),
+                    "context": context if context_lines > 0 else [],
+                }
+            )
 
 
 @tool()

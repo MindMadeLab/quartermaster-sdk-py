@@ -10,13 +10,7 @@ from quartermaster_graph.validation import validate_graph
 
 class TestBasicBuilder:
     def test_simple_chain(self):
-        version = (
-            GraphBuilder("Test")
-            .start()
-            .instruction("Process")
-            .end()
-            .build()
-        )
+        version = GraphBuilder("Test").start().instruction("Process").end().build()
         assert isinstance(version, GraphSpec)
         assert len(version.nodes) == 3
         assert len(version.edges) == 2
@@ -42,27 +36,17 @@ class TestBasicBuilder:
         # No end node should produce validation warnings/errors (but build still returns)
         version = GraphBuilder("Test").start().instruction("X").build()
         from quartermaster_graph.validation import validate_graph
+
         errors = validate_graph(version)
         real_errors = [e for e in errors if e.severity == "error"]
         assert len(real_errors) > 0
 
     def test_skip_validation(self):
-        version = (
-            GraphBuilder("Test")
-            .start()
-            .instruction("X")
-            .build(validate=False)
-        )
+        version = GraphBuilder("Test").start().instruction("X").build(validate=False)
         assert len(version.nodes) == 2
 
     def test_to_graph(self):
-        graph = (
-            GraphBuilder("Test")
-            .start()
-            .instruction("X")
-            .end()
-            .to_graph()
-        )
+        graph = GraphBuilder("Test").start().instruction("X").end().to_graph()
         assert isinstance(graph, GraphSpec)
 
 
@@ -72,8 +56,12 @@ class TestDecisionBuilder:
             GraphBuilder("Decision Test")
             .start()
             .decision("Choose?", options=["Yes", "No"])
-            .on("Yes").instruction("Yes handler").end()
-            .on("No").instruction("No handler").end()
+            .on("Yes")
+            .instruction("Yes handler")
+            .end()
+            .on("No")
+            .instruction("No handler")
+            .end()
             .build()
         )
         assert len(version.nodes) >= 5  # start, decision, 2 instructions, 2 ends
@@ -86,9 +74,15 @@ class TestDecisionBuilder:
             GraphBuilder("Three Way")
             .start()
             .decision("Route?", options=["A", "B", "C"])
-            .on("A").instruction("Route A").end()
-            .on("B").instruction("Route B").end()
-            .on("C").instruction("Route C").end()
+            .on("A")
+            .instruction("Route A")
+            .end()
+            .on("B")
+            .instruction("Route B")
+            .end()
+            .on("C")
+            .instruction("Route C")
+            .end()
             .build()
         )
         assert len(version.nodes) >= 8
@@ -100,8 +94,12 @@ class TestIfBuilder:
             GraphBuilder("If Test")
             .start()
             .if_node("Check", expression="x > 0")
-            .on("true").instruction("Positive").end()
-            .on("false").instruction("Negative").end()
+            .on("true")
+            .instruction("Positive")
+            .end()
+            .on("false")
+            .instruction("Negative")
+            .end()
             .build()
         )
         if_nodes = [n for n in version.nodes if n.type == NodeType.IF]
@@ -110,13 +108,7 @@ class TestIfBuilder:
 
 class TestNodeTypes:
     def test_static_node(self):
-        version = (
-            GraphBuilder("Static")
-            .start()
-            .static("Content", text="Hello World")
-            .end()
-            .build()
-        )
+        version = GraphBuilder("Static").start().static("Content", text="Hello World").end().build()
         static_nodes = [n for n in version.nodes if n.type == NodeType.STATIC]
         assert len(static_nodes) == 1
         assert static_nodes[0].metadata["static_text"] == "Hello World"
@@ -134,13 +126,7 @@ class TestNodeTypes:
         assert code_nodes[0].metadata["code"] == "print('hi')"
 
     def test_user_node(self):
-        version = (
-            GraphBuilder("User")
-            .start()
-            .user("Get Input")
-            .end()
-            .build()
-        )
+        version = GraphBuilder("User").start().user("Get Input").end().build()
         user_nodes = [n for n in version.nodes if n.type == NodeType.USER]
         assert len(user_nodes) == 1
 
@@ -155,15 +141,10 @@ class TestNodeTypes:
         sub_nodes = [n for n in version.nodes if n.type == NodeType.SUB_ASSISTANT]
         assert len(sub_nodes) == 1
 
+
 class TestBuilderValidation:
     def test_valid_graph_no_errors(self):
-        version = (
-            GraphBuilder("Valid")
-            .start()
-            .instruction("Process")
-            .end()
-            .build()
-        )
+        version = GraphBuilder("Valid").start().instruction("Process").end().build()
         errors = validate_graph(version)
         real_errors = [e for e in errors if e.severity == "error"]
         assert len(real_errors) == 0

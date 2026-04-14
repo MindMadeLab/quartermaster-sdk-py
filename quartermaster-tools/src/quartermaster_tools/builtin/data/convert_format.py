@@ -65,9 +65,7 @@ def _to_json(data: Any) -> str:
 def _to_yaml(data: Any) -> str:
     """Serialise data to a YAML string."""
     if _yaml is None:
-        raise RuntimeError(
-            "pyyaml is not installed. Install it with: pip install pyyaml"
-        )
+        raise RuntimeError("pyyaml is not installed. Install it with: pip install pyyaml")
     return _yaml.dump(data, default_flow_style=False, allow_unicode=True)
 
 
@@ -90,9 +88,7 @@ def _convert(source: str, from_format: str, to_format: str) -> str:
 
     for fmt in (from_format, to_format):
         if fmt not in _SUPPORTED_FORMATS:
-            raise ValueError(
-                f"Unsupported format: {fmt!r}. Must be one of {_SUPPORTED_FORMATS}"
-            )
+            raise ValueError(f"Unsupported format: {fmt!r}. Must be one of {_SUPPORTED_FORMATS}")
 
     data = _parse_input(source, from_format)
 

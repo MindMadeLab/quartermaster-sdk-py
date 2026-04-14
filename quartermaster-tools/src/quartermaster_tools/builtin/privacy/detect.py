@@ -156,12 +156,14 @@ def detect_pii(
                 if not _luhn_check(value):
                     continue
 
-            results.append({
-                "type": entity_type,
-                "value": value,
-                "start": start,
-                "end": end,
-            })
+            results.append(
+                {
+                    "type": entity_type,
+                    "value": value,
+                    "start": start,
+                    "end": end,
+                }
+            )
             occupied.append((start, end))
 
     # Sort by position

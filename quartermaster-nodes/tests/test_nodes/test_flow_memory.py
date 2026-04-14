@@ -103,10 +103,12 @@ class TestFlowMemoryThink:
         FlowMemoryNode.think(ctx)  # Should not raise
 
     def test_think_with_custom_metadata(self):
-        ctx = MockNodeContext(node_metadata={
-            "memory_name": "custom_mem",
-            "initial_data": [{"key": "val"}],
-        })
+        ctx = MockNodeContext(
+            node_metadata={
+                "memory_name": "custom_mem",
+                "initial_data": [{"key": "val"}],
+            }
+        )
         FlowMemoryNode.think(ctx)  # Should not raise; logic handled by StartNode
 
     def test_think_with_none_thought(self):
@@ -119,31 +121,23 @@ class TestFlowMemoryMetadataAccess:
 
     def test_get_memory_name_default(self):
         ctx = MockNodeContext()
-        val = FlowMemoryNode.get_metadata_key_value(
-            ctx, "memory_name", "default"
-        )
+        val = FlowMemoryNode.get_metadata_key_value(ctx, "memory_name", "default")
         assert val == "default"
 
     def test_get_memory_name_custom(self):
         ctx = MockNodeContext(node_metadata={"memory_name": "my_memory"})
-        val = FlowMemoryNode.get_metadata_key_value(
-            ctx, "memory_name", "default"
-        )
+        val = FlowMemoryNode.get_metadata_key_value(ctx, "memory_name", "default")
         assert val == "my_memory"
 
     def test_get_initial_data_default(self):
         ctx = MockNodeContext()
-        val = FlowMemoryNode.get_metadata_key_value(
-            ctx, "initial_data", []
-        )
+        val = FlowMemoryNode.get_metadata_key_value(ctx, "initial_data", [])
         assert val == []
 
     def test_get_initial_data_custom(self):
         data = [{"name": "counter", "value": 0}]
         ctx = MockNodeContext(node_metadata={"initial_data": data})
-        val = FlowMemoryNode.get_metadata_key_value(
-            ctx, "initial_data", []
-        )
+        val = FlowMemoryNode.get_metadata_key_value(ctx, "initial_data", [])
         assert val == data
 
     def test_store_metadata(self):

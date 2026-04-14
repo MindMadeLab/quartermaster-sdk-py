@@ -28,7 +28,7 @@ def _make_mock_httpx() -> MagicMock:
     mock_httpx.HTTPStatusError = type(
         "HTTPStatusError",
         (Exception,),
-        {"__init__": lambda self, msg, *, response: (setattr(self, "response", response) or None)},
+        {"__init__": lambda self, msg, *, response: setattr(self, "response", response) or None},
     )
     return mock_httpx
 

@@ -78,5 +78,6 @@ class UpdateMemoryNode(AbstractAssistantNode):
                         data[var_name] = result.result
                     elif expression:
                         from quartermaster_nodes.safe_eval import safe_eval
+
                         data[var_name] = safe_eval(expression, ctx.thought.metadata)
             memory_updater(memory_name, memory_type, data, ctx)

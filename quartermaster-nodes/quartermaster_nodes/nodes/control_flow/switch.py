@@ -85,6 +85,7 @@ class SwitchNode1(AbstractAssistantNode):
                     eval_result = result.result
                 else:
                     from quartermaster_nodes.safe_eval import safe_eval
+
                     eval_result = safe_eval(expression, metadata)
 
                 if eval_result:

@@ -31,6 +31,7 @@ from quartermaster_tools.builtin.agents.tools import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _quick_task(session: AgentSession):
     """A simple task function that completes quickly."""
     time.sleep(0.05)
@@ -61,6 +62,7 @@ def _fresh_manager():
 # ---------------------------------------------------------------------------
 # SessionManager unit tests
 # ---------------------------------------------------------------------------
+
 
 class TestSessionManager:
     def test_create_session(self, _fresh_manager):
@@ -193,6 +195,7 @@ class TestSessionManager:
 # ---------------------------------------------------------------------------
 # Tool tests
 # ---------------------------------------------------------------------------
+
 
 class TestCreateSessionTool:
     def test_creates_session(self, _fresh_manager):

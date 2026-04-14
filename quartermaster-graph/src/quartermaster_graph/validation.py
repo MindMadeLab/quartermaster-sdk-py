@@ -41,10 +41,12 @@ def validate_graph(version: GraphSpec) -> list[ValidationError]:  # type: ignore
     # --- Start node ---
     start_nodes = [n for n in version.nodes if n.type == NodeType.START]
     if len(start_nodes) == 0:
-        errors.append(ValidationError(
-            code="no_start",
-            message="Graph must have exactly one Start node",
-        ))
+        errors.append(
+            ValidationError(
+                code="no_start",
+                message="Graph must have exactly one Start node",
+            )
+        )
     elif len(start_nodes) > 1:
         for sn in start_nodes[1:]:
             errors.append(
@@ -58,10 +60,12 @@ def validate_graph(version: GraphSpec) -> list[ValidationError]:  # type: ignore
     # --- End node ---
     end_nodes = [n for n in version.nodes if n.type == NodeType.END]
     if len(end_nodes) == 0:
-        errors.append(ValidationError(
-            code="no_end",
-            message="Graph must have at least one End node",
-        ))
+        errors.append(
+            ValidationError(
+                code="no_end",
+                message="Graph must have at least one End node",
+            )
+        )
 
     # --- Start node ID valid ---
     if version.start_node_id not in node_map:
@@ -69,8 +73,7 @@ def validate_graph(version: GraphSpec) -> list[ValidationError]:  # type: ignore
             ValidationError(
                 code="invalid_start_id",
                 message=(
-                    f"start_node_id {version.start_node_id} "
-                    "does not reference a node in the graph"
+                    f"start_node_id {version.start_node_id} does not reference a node in the graph"
                 ),
             )
         )
@@ -126,8 +129,7 @@ def validate_graph(version: GraphSpec) -> list[ValidationError]:  # type: ignore
                     ValidationError(
                         code="orphan_node",
                         message=(
-                            f"Node '{node.name or node.type.value}' "
-                            "is not reachable from Start"
+                            f"Node '{node.name or node.type.value}' is not reachable from Start"
                         ),
                         node_id=node.id,
                     )
@@ -142,9 +144,7 @@ def validate_graph(version: GraphSpec) -> list[ValidationError]:  # type: ignore
                 adj_cycle[edge.source_id].append(edge.target_id)
                 in_degree[edge.target_id] += 1
 
-        queue_cycle: deque[UUID] = deque(
-            nid for nid, deg in in_degree.items() if deg == 0
-        )
+        queue_cycle: deque[UUID] = deque(nid for nid, deg in in_degree.items() if deg == 0)
         visited_count = 0
         while queue_cycle:
             nid = queue_cycle.popleft()
@@ -186,8 +186,14 @@ def validate_graph(version: GraphSpec) -> list[ValidationError]:  # type: ignore
         elif node.type == NodeType.IF:
             labels = {e.label for e in out_edges}
             bool_labels = {
-                "true", "false", "True", "False",
-                "yes", "no", "Yes", "No",
+                "true",
+                "false",
+                "True",
+                "False",
+                "yes",
+                "no",
+                "Yes",
+                "No",
             }
             if out_edges and not labels.intersection(bool_labels):
                 errors.append(
@@ -204,10 +210,7 @@ def validate_graph(version: GraphSpec) -> list[ValidationError]:  # type: ignore
                 errors.append(
                     ValidationError(
                         code="switch_unlabeled_edges",
-                        message=(
-                            f"Switch node '{node.name}' has "
-                            "unlabeled outgoing edges"
-                        ),
+                        message=(f"Switch node '{node.name}' has unlabeled outgoing edges"),
                         node_id=node.id,
                     )
                 )

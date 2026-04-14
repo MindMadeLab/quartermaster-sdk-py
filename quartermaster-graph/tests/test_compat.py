@@ -40,8 +40,8 @@ def test_instance_check_works_with_both_names() -> None:
 
     spec = GraphSpec(agent_id=uuid4(), start_node_id=uuid4())
     assert isinstance(spec, GraphSpec)
-    assert isinstance(spec, AgentGraph)     # alias
-    assert isinstance(spec, AgentVersion)   # alias
+    assert isinstance(spec, AgentGraph)  # alias
+    assert isinstance(spec, AgentVersion)  # alias
 
 
 def test_roundtrip_serialization_preserved() -> None:

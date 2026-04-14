@@ -241,9 +241,7 @@ def make_edge(source: GraphNode, target: GraphNode, label: str = "") -> GraphEdg
     return GraphEdge(id=uuid4(), source_id=source.id, target_id=target.id, label=label)
 
 
-def make_graph(
-    nodes: list[GraphNode], edges: list[GraphEdge], start_node: GraphNode
-) -> GraphSpec:
+def make_graph(nodes: list[GraphNode], edges: list[GraphEdge], start_node: GraphNode) -> GraphSpec:
     """Create an GraphSpec from nodes and edges."""
     return GraphSpec(
         id=uuid4(),

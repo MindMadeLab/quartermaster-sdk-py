@@ -114,8 +114,7 @@ def _safe_eval_node(node: ast.AST) -> Any:
         func = _SAFE_FUNCTIONS.get(func_name)
         if func is None:
             raise ValueError(
-                f"Unknown function: {func_name!r}. "
-                f"Allowed: {sorted(_SAFE_FUNCTIONS.keys())}"
+                f"Unknown function: {func_name!r}. Allowed: {sorted(_SAFE_FUNCTIONS.keys())}"
             )
         args = [_safe_eval_node(arg) for arg in node.args]
         if node.keywords:
@@ -135,9 +134,7 @@ def _safe_eval_node(node: ast.AST) -> Any:
         }
         if node.id in name_constants:
             return name_constants[node.id]
-        raise ValueError(
-            f"Unknown name: {node.id!r}. Variables are not supported."
-        )
+        raise ValueError(f"Unknown name: {node.id!r}. Variables are not supported.")
 
     if isinstance(node, ast.Expression):
         return _safe_eval_node(node.body)

@@ -33,7 +33,10 @@ from quartermaster_code_runner.images import (
     ensure_prebuilt_image,
     router as images_router,
 )
-from quartermaster_code_runner.schemas import CodeExecutionRequest, CodeExecutionResponse
+from quartermaster_code_runner.schemas import (
+    CodeExecutionRequest,
+    CodeExecutionResponse,
+)
 from quartermaster_code_runner.security import configure_auth, verify_auth
 
 logging.basicConfig(
