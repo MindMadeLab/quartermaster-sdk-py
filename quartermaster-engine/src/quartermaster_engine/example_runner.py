@@ -139,11 +139,8 @@ class LLMExecutor(NodeExecutor):
         # Build the prompt: include recent conversation for context (truncated)
         if conversation:
             parts = []
-            for entry in conversation[-10:]:
+            for entry in conversation:
                 text = entry["text"]
-                # Truncate each entry to ~2000 chars to keep sufficient context
-                if len(text) > 2000:
-                    text = text[:2000] + "..."
                 parts.append(f"[{entry['role']}]: {text}")
             history = "\n\n".join(parts)
             prompt = f"Previous conversation:\n{history}\n\nUser's original request: {user_input}"
