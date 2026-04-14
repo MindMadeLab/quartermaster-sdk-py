@@ -264,24 +264,49 @@ class StaticExecutor(NodeExecutor):
 
 
 class VarExecutor(NodeExecutor):
-    """Sets a variable in flow memory."""
+    """Sets a variable in flow memory, with expression evaluation."""
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
-        variable = context.get_meta("variable", "")
+        # Builder stores var name as "name" in metadata
+        variable = context.get_meta("name", "") or context.get_meta("variable", "")
         expression = context.get_meta("expression", "")
         if variable:
-            # Get value from previous output or expression
-            value = expression or ""
-            for msg in reversed(context.messages):
-                if msg.content:
-                    value = msg.content
-                    break
+            if expression:
+                # Try to evaluate expression against flow memory
+                try:
+                    value = eval(expression, {"__builtins__": {}}, dict(context.memory))
+                except Exception:
+                    value = expression
+            else:
+                # No expression — capture last message content
+                value = ""
+                for msg in reversed(context.messages):
+                    if msg.content:
+                        value = msg.content
+                        break
             return NodeResult(
                 success=True,
                 data={"memory_updates": {variable: value}},
-                output_text=value,
+                output_text=str(value),
             )
         return NodeResult(success=True, data={}, output_text="")
+
+
+class IfExecutor(NodeExecutor):
+    """Evaluates a boolean expression and picks the true/false branch."""
+
+    async def execute(self, context: ExecutionContext) -> NodeResult:
+        expression = context.get_meta("if_expression", "")
+        if not expression:
+            return NodeResult(success=True, data={}, output_text="true", picked_node="true")
+
+        try:
+            result = eval(expression, {"__builtins__": {}}, dict(context.memory))
+            picked = "true" if result else "false"
+        except Exception:
+            picked = "false"
+
+        return NodeResult(success=True, data={}, output_text=picked, picked_node=picked)
 
 
 class TextExecutor(NodeExecutor):
@@ -409,7 +434,8 @@ def _build_registry(
     reg.register(NodeType.SUB_ASSISTANT.value, passthrough)
     reg.register(NodeType.BREAK.value, passthrough)
     reg.register(NodeType.TEXT_TO_VARIABLE.value, var)
-    reg.register(NodeType.IF.value, passthrough)
+    if_exec = IfExecutor()
+    reg.register(NodeType.IF.value, if_exec)
     reg.register(NodeType.SWITCH.value, passthrough)
 
     return reg

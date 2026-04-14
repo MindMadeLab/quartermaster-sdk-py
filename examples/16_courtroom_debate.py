@@ -1,29 +1,28 @@
-"""Courtroom debate -- prosecution vs defense across three rounds, judged by AI.
+"""Courtroom debate -- prosecution vs defense with loop-back for multiple rounds.
 
-Three rounds of structured legal argument between two AI attorneys, each
-using a different LLM provider. A judge (third provider) evaluates each
-round and delivers the final verdict.
+Demonstrates a LOOP in the graph: prosecution argues, defense rebuts, a round
+counter increments, and an IF node checks whether to loop back or break out
+to the verdict. The back-edge is wired manually after the graph is built.
 
-  Round 1: Opening statements (prosecution presents, defense responds)
-  Round 2: Evidence and cross-examination (strongest arguments from both sides)
-  Round 3: Closing arguments (final appeals to the court)
-  Verdict: Judge deliberates and delivers judgment
+  Opening   -> Prosecution argues -> Defense rebuts -> Increment round
+            -> IF round > 5: break to verdict
+            -> ELSE: loop back to "Prosecution argues"
 
 Providers:
-  - Prosecution: xAI Grok (aggressive, confrontational style)
-  - Defense: OpenAI GPT-4o (methodical, precedent-based style)
-  - Judge: Anthropic Claude (balanced, analytical deliberation)
+  - Prosecution: xAI Grok
+  - Defense: OpenAI GPT-4o
+  - Judge: Anthropic Claude
 
 Usage:
-    export ANTHROPIC_API_KEY="..."
-    export OPENAI_API_KEY="..."
-    export XAI_API_KEY="..."
+    # Set API keys in .env at repo root
     uv run examples/16_courtroom_debate.py
 """
 
 from __future__ import annotations
 
 from quartermaster_graph import Graph
+from quartermaster_graph.enums import TraverseIn
+from quartermaster_graph.models import GraphEdge, GraphNode
 from _runner import run_graph
 
 
@@ -36,6 +35,12 @@ DEFENSE_PROVIDER = "openai"
 JUDGE_MODEL = "claude-haiku-4-5-20251001"
 JUDGE_PROVIDER = "anthropic"
 
+MAX_ROUNDS = 5
+
+# =====================================================================
+# Build the graph — the IF node's "true" branch leads to the verdict,
+# while the "false" branch is a dead-end that we wire to the loop target.
+# =====================================================================
 
 trial = (
     Graph("The People v. AI Engineer")
@@ -52,234 +57,133 @@ trial = (
         "Charges: Theft of trade secrets, breach of non-compete\n\n"
         "{{case_description}}\n\n"
         "BAILIFF: All rise. Court is now in session.\n"
-        "JUDGE: We will hear three rounds of argument.\n"
+        f"JUDGE: We will hear up to {MAX_ROUNDS} rounds of argument.\n"
     ))
 
+    # --- Initialize round counter ---
+    .var("Init round", variable="round_number", expression="1")
+
     # =====================================================================
-    # ROUND 1 — Opening Statements
+    # DEBATE LOOP — Round header is the loop target
     # =====================================================================
 
-    .text("Round 1 header", template="\n━━━ ROUND 1: OPENING STATEMENTS ━━━\n")
+    .text("Round header", template="\n━━━ ROUND {{round_number}} ━━━\n")
 
     .instruction(
-        "Prosecution opening",
+        "Prosecution argues",
         model=PROSECUTION_MODEL, provider=PROSECUTION_PROVIDER,
         system_instruction=(
-            "You are the lead prosecutor in a trade secrets theft case. "
-            "This is your OPENING STATEMENT to the court.\n\n"
-            "Present:\n"
-            "- The charges against Dr. Sarah Chen\n"
-            "- Your theory of the case: she copied proprietary data before leaving\n"
-            "- Key evidence you will present (access logs, code similarity, timeline)\n"
-            "- Why the non-compete agreement is valid and was breached\n\n"
-            "Be forceful and persuasive. 3-4 paragraphs. Address the judge directly."
+            "You are the lead prosecutor in a trade secrets case. "
+            "Adapt your argument to the current round:\n"
+            "  Round 1: Opening statement — lay out charges, theory, key evidence.\n"
+            "  Round 2-3: Present evidence — forensic analysis, access logs, expert testimony.\n"
+            "  Round 4: Rebut the defense's challenges, reinforce your strongest points.\n"
+            "  Round 5: Closing argument — powerful summary, ask for guilty verdict.\n"
+            "Be forceful. 2-3 paragraphs. Address the judge."
         ),
     )
 
     .instruction(
-        "Defense opening",
+        "Defense rebuts",
         model=DEFENSE_MODEL, provider=DEFENSE_PROVIDER,
         system_instruction=(
-            "You are the lead defense attorney. You just heard the prosecution's "
-            "opening statement. Now deliver YOUR opening statement.\n\n"
-            "Present:\n"
-            "- Why your client Dr. Chen is innocent\n"
-            "- Challenge the prosecution's narrative point by point\n"
-            "- Your theory: she only used publicly available techniques\n"
-            "- Why the non-compete is overly broad and unenforceable under state law\n"
-            "- Legal precedents supporting your position\n\n"
-            "Be confident and methodical. 3-4 paragraphs. Address the judge directly."
+            "You are the lead defense attorney. You just heard the prosecution. "
+            "Counter their argument directly based on the round:\n"
+            "  Round 1: Opening — challenge narrative, present your theory of innocence.\n"
+            "  Round 2-3: Cross-examine evidence — challenge methodology, expose weaknesses.\n"
+            "  Round 4: Present counter-evidence, show prosecution's case has holes.\n"
+            "  Round 5: Closing — passionate plea for acquittal, invoke reasonable doubt.\n"
+            "Be sharp, find contradictions. 2-3 paragraphs. Address the judge."
         ),
     )
 
-    .instruction(
-        "Judge evaluates Round 1",
-        model=JUDGE_MODEL, provider=JUDGE_PROVIDER,
-        system_instruction=(
-            "You are the presiding judge. You just heard opening statements from "
-            "both prosecution and defense.\n\n"
-            "Provide a brief evaluation (2 paragraphs):\n"
-            "1. Note the key claims from each side\n"
-            "2. Identify what evidence will be critical to resolve\n"
-            "3. Any procedural notes\n\n"
-            "End with: 'The court will now hear evidence. Prosecution, call your first witness.'"
-        ),
-    )
+    # --- Increment round and check loop condition ---
+    .var("Next round", variable="round_number", expression="round_number + 1")
 
-    .update_memory("Log Round 1", memory_name="trial_transcript")
+    .if_node("More rounds?", expression=f"round_number > {MAX_ROUNDS}")
 
-    # =====================================================================
-    # ROUND 2 — Evidence and Cross-Examination
-    # =====================================================================
-
-    .text("Round 2 header", template="\n━━━ ROUND 2: EVIDENCE & CROSS-EXAMINATION ━━━\n")
-
-    .instruction(
-        "Prosecution presents evidence",
-        model=PROSECUTION_MODEL, provider=PROSECUTION_PROVIDER,
-        system_instruction=(
-            "You are the prosecutor. Present your STRONGEST EVIDENCE:\n\n"
-            "1. Forensic evidence: server access logs showing bulk downloads\n"
-            "2. Expert testimony: code similarity analysis (78%% structural match)\n"
-            "3. Timeline: downloads happened 48 hours before resignation\n"
-            "4. Witness: IT security officer testifying about data exfiltration alerts\n\n"
-            "Present this as direct examination of your expert witness. Be specific "
-            "with technical details. 3-4 paragraphs."
-        ),
-    )
-
-    .instruction(
-        "Defense cross-examines",
-        model=DEFENSE_MODEL, provider=DEFENSE_PROVIDER,
-        system_instruction=(
-            "You are the defense attorney conducting CROSS-EXAMINATION of the "
-            "prosecution's expert witness.\n\n"
-            "Attack their evidence:\n"
-            "1. Challenge the code similarity analysis methodology\n"
-            "2. Show that 'bulk downloads' were routine backups she always did\n"
-            "3. Present counter-evidence: the startup's code is based on open-source\n"
-            "4. Question the expert's qualifications and potential bias\n"
-            "5. Introduce your own expert's findings contradicting the prosecution\n\n"
-            "Be sharp and surgical. Find contradictions. 3-4 paragraphs."
-        ),
-    )
-
-    .instruction(
-        "Prosecution redirect",
-        model=PROSECUTION_MODEL, provider=PROSECUTION_PROVIDER,
-        system_instruction=(
-            "You are the prosecutor. The defense just challenged your evidence. "
-            "Conduct a REDIRECT examination to rehabilitate your case:\n\n"
-            "1. Address the defense's challenges to your code similarity analysis\n"
-            "2. Present additional corroborating evidence\n"
-            "3. Highlight inconsistencies in the defense's counter-narrative\n"
-            "4. Reinforce the timeline of suspicious activity\n\n"
-            "Be direct and focused. 2-3 paragraphs."
-        ),
-    )
-
-    .instruction(
-        "Judge evaluates Round 2",
-        model=JUDGE_MODEL, provider=JUDGE_PROVIDER,
-        system_instruction=(
-            "You are the presiding judge evaluating Round 2 evidence.\n\n"
-            "Assess (2 paragraphs):\n"
-            "1. Which evidence was most compelling?\n"
-            "2. Were the defense's challenges to the forensic evidence effective?\n"
-            "3. What remains unresolved?\n\n"
-            "End with: 'We will now hear closing arguments.'"
-        ),
-    )
-
-    .update_memory("Log Round 2", memory_name="trial_transcript")
-
-    # =====================================================================
-    # ROUND 3 — Closing Arguments
-    # =====================================================================
-
-    .text("Round 3 header", template="\n━━━ ROUND 3: CLOSING ARGUMENTS ━━━\n")
-
-    .instruction(
-        "Prosecution closing",
-        model=PROSECUTION_MODEL, provider=PROSECUTION_PROVIDER,
-        system_instruction=(
-            "You are the prosecutor delivering your CLOSING ARGUMENT.\n\n"
-            "This is your last chance to convince the judge. Be powerful:\n"
-            "1. Summarize the evidence that proves guilt beyond reasonable doubt\n"
-            "2. Connect the dots: motive, opportunity, and means\n"
-            "3. Address and dismiss the defense's arguments\n"
-            "4. Appeal to the importance of protecting intellectual property\n"
-            "5. Ask the judge for a guilty verdict\n\n"
-            "Make it memorable and compelling. 3-4 paragraphs."
-        ),
-    )
-
-    .instruction(
-        "Defense closing",
-        model=DEFENSE_MODEL, provider=DEFENSE_PROVIDER,
-        system_instruction=(
-            "You are the defense attorney delivering your CLOSING ARGUMENT.\n\n"
-            "Fight for acquittal with everything you have:\n"
-            "1. Reasonable doubt: the prosecution hasn't proven their case\n"
-            "2. The code similarity can be explained by common patterns\n"
-            "3. The non-compete is unconscionable and unenforceable\n"
-            "4. Your client's new work is original and based on public research\n"
-            "5. The real motive: TechCorp is trying to suppress competition\n\n"
-            "End with a passionate plea for justice. 3-4 paragraphs."
-        ),
-    )
-
-    # =====================================================================
-    # VERDICT — Judge deliberates and decides
-    # =====================================================================
-
-    .text("Deliberation header", template=(
-        "\n━━━ JUDICIAL DELIBERATION ━━━\n"
-        "BAILIFF: The court will now deliberate. Please remain seated.\n"
-    ))
-
-    .instruction("Judge deliberates", model=JUDGE_MODEL, provider=JUDGE_PROVIDER, system_instruction="You are the judge. Deliberate carefully on all evidence and arguments presented. Weigh the prosecution's and defense's cases methodically before reaching your verdict.")
-
-    .instruction(
-        "Final verdict",
-        model=JUDGE_MODEL, provider=JUDGE_PROVIDER,
-        system_instruction=(
-            "You are the presiding judge delivering the FINAL VERDICT after hearing "
-            "three rounds of argument in this trade secrets case.\n\n"
-            "Your verdict must include:\n"
-            "1. Summary of the prosecution's strongest points\n"
-            "2. Summary of the defense's strongest points\n"
-            "3. Your analysis of the key evidence (code similarity, access logs, timeline)\n"
-            "4. Legal standard: was trade secret misappropriation proven?\n"
-            "5. Assessment of the non-compete clause enforceability\n"
-            "6. Your ruling with clear reasoning\n\n"
-            "Deliver the verdict formally. End with exactly one word on its own line: "
-            "guilty, not_guilty, or mistrial."
-        ),
-    )
-
-    .decision("Verdict?", options=["guilty", "not_guilty", "mistrial"])
-
-    .on("guilty")
-        .text("Guilty verdict", template=(
-            "\n══════════════════════════════════\n"
-            "       VERDICT: G U I L T Y\n"
-            "══════════════════════════════════\n"
-            "JUDGE: The defendant is found GUILTY of theft of trade secrets.\n"
-            "Sentencing hearing scheduled for next month.\n"
-            "BAILIFF: Order in the court!"
+    # TRUE branch: debate is over → proceed to verdict
+    .on("true")
+        .text("Debate complete", template=(
+            f"\n━━━ DEBATE CONCLUDED AFTER {MAX_ROUNDS} ROUNDS ━━━\n"
+            "JUDGE: The court has heard sufficient argument. We proceed to deliberation.\n"
         ))
+        .instruction(
+            "Judge deliberates",
+            model=JUDGE_MODEL, provider=JUDGE_PROVIDER,
+            system_instruction=(
+                "You are the presiding judge. You have heard multiple rounds of argument "
+                "in this trade secrets case. Deliver your FINAL VERDICT.\n\n"
+                "Include:\n"
+                "1. Summary of prosecution's strongest points\n"
+                "2. Summary of defense's strongest points\n"
+                "3. Analysis of key evidence (code similarity, access logs, timeline)\n"
+                "4. Whether trade secret misappropriation was proven\n"
+                "5. Whether the non-compete is enforceable\n"
+                "6. Your ruling with clear reasoning\n\n"
+                "End with exactly one word on its own line: guilty, not_guilty, or mistrial."
+            ),
+        )
+        .decision("Verdict?", options=["guilty", "not_guilty", "mistrial"])
+        .on("guilty")
+            .text("Guilty verdict", template=(
+                "\n══════════════════════════════════\n"
+                "       VERDICT: G U I L T Y\n"
+                "══════════════════════════════════\n"
+                "JUDGE: The defendant is found GUILTY of theft of trade secrets.\n"
+                "Sentencing hearing scheduled for next month.\n"
+                "BAILIFF: Order in the court!"
+            ))
+        .end()
+        .on("not_guilty")
+            .text("Not guilty verdict", template=(
+                "\n══════════════════════════════════\n"
+                "    VERDICT: N O T  G U I L T Y\n"
+                "══════════════════════════════════\n"
+                "JUDGE: The defendant is found NOT GUILTY. Charges dismissed.\n"
+                "Dr. Chen, you are free to go."
+            ))
+        .end()
+        .on("mistrial")
+            .text("Mistrial declared", template=(
+                "\n══════════════════════════════════\n"
+                "    VERDICT: M I S T R I A L\n"
+                "══════════════════════════════════\n"
+                "JUDGE: The court declares a MISTRIAL.\n"
+                "The case may be retried."
+            ))
+        .end()
+        .text("Court adjourned", template="\n--- Court is adjourned ---")
     .end()
 
-    .on("not_guilty")
-        .text("Not guilty verdict", template=(
-            "\n══════════════════════════════════\n"
-            "    VERDICT: N O T  G U I L T Y\n"
-            "══════════════════════════════════\n"
-            "JUDGE: The defendant is found NOT GUILTY. Charges dismissed.\n"
-            "Dr. Chen, you are free to go.\n"
-            "DEFENSE: Justice has been served."
-        ))
+    # FALSE branch: loop back (dead-end text — we wire the back-edge manually)
+    .on("false")
+        .text("Continue debate", template="\nJUDGE: The court will hear further argument.")
     .end()
 
-    .on("mistrial")
-        .text("Mistrial declared", template=(
-            "\n══════════════════════════════════\n"
-            "    VERDICT: M I S T R I A L\n"
-            "══════════════════════════════════\n"
-            "JUDGE: The court declares a MISTRIAL due to insufficient evidence.\n"
-            "The case may be retried."
-        ))
-    .end()
-
-    .text("Court adjourned", template=(
-        "\n--- Court is adjourned ---\n"
-        "Three rounds of argument heard. Verdict delivered."
-    ))
     .end()
 )
 
-agent = trial.build()
+# ---------------------------------------------------------------------------
+# Wire the loop back-edge: "Continue debate" -> "Round header"
+# ---------------------------------------------------------------------------
+node_by_name = {n.name: n for n in trial.nodes}
+continue_node = node_by_name["Continue debate"]
+loop_target = node_by_name["Round header"]
+
+# Back-edge: Continue -> Round header (creates the loop)
+trial._edges.append(
+    GraphEdge(source_id=continue_node.id, target_id=loop_target.id, label="next_round")
+)
+
+# Loop target must fire on ANY predecessor (not wait for both Init + Continue)
+loop_target.traverse_in = TraverseIn.AWAIT_FIRST
+
+# Build (skip validation — intentional cycle)
+agent = trial.build(validate=False)
+
+print(f"Graph: {len(agent.nodes)} nodes, {len(agent.edges)} edges (includes back-edge for loop)")
+print()
 
 run_graph(
     agent,
@@ -288,7 +192,7 @@ run_graph(
         "co-found NeuralStart, an AI startup. TechCorp alleges she copied "
         "proprietary training datasets, custom model architectures, and internal "
         "benchmark results before leaving, violating her NDA and 2-year non-compete. "
-        "Forensic analysis shows 78%% code similarity between TechCorp's and "
+        "Forensic analysis shows 78% code similarity between TechCorp's and "
         "NeuralStart's codebases. The defense argues the non-compete is overly "
         "broad, the similar code comes from common open-source frameworks, and "
         "Dr. Chen's new work is based on publicly available research papers."
