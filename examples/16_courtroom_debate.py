@@ -36,7 +36,7 @@ prosecution_prep = (
     .start()
     .instruction(
         "Build prosecution case",
-        model="claude-sonnet-4-20250514",
+        model="claude-haiku-4-5-20251001",
         system_instruction=(
             "You are the lead prosecutor. Prepare your legal strategy:\n"
             "1. Key evidence (access logs, code similarity, timeline)\n"
@@ -57,7 +57,7 @@ defense_prep = (
     .start()
     .instruction(
         "Build defense case",
-        model="claude-sonnet-4-20250514",
+        model="claude-haiku-4-5-20251001",
         system_instruction=(
             "You are the lead defense attorney. Prepare your strategy:\n"
             "1. Evidence supporting the defendant's innocence\n"
@@ -106,7 +106,7 @@ trial = (
     .var("Init round", variable="round_number", expression="1")
 
     # --- LOOP: multi-round debate (up to 3 rounds) --------------------------
-    .instruction("Debate loop", model="claude-sonnet-4-20250514", system_instruction="Manage the debate loop (up to 3 rounds)")
+    .instruction("Debate loop", model="claude-haiku-4-5-20251001", system_instruction="Manage the debate loop (up to 3 rounds)")
 
     .text("Round header", template=(
         "\n--- ROUND {{round_number}} ---\n"
@@ -115,7 +115,7 @@ trial = (
 
     .instruction(
         "Prosecution argues",
-        model="claude-sonnet-4-20250514",
+        model="claude-haiku-4-5-20251001",
         system_instruction=(
             "You are the prosecutor. This is round {{round_number}} of the trial.\n"
             "Round 1: Opening statement and initial evidence.\n"
@@ -127,7 +127,7 @@ trial = (
 
     .instruction(
         "Defense rebuts",
-        model="claude-sonnet-4-20250514",
+        model="claude-haiku-4-5-20251001",
         system_instruction=(
             "You are the defense attorney. This is round {{round_number}}.\n"
             "You just heard the prosecution. Counter their argument directly:\n"
@@ -140,7 +140,7 @@ trial = (
 
     .instruction(
         "Judge evaluates round",
-        model="claude-sonnet-4-20250514",
+        model="claude-haiku-4-5-20251001",
         system_instruction=(
             "You are the presiding judge. You just heard round {{round_number}}.\n"
             "Assess briefly:\n"
@@ -181,7 +181,7 @@ trial = (
 
     .instruction(
         "Final verdict",
-        model="claude-sonnet-4-20250514",
+        model="claude-haiku-4-5-20251001",
         system_instruction=(
             "You are the presiding judge. You have heard the full trial across "
             "multiple rounds. Review the complete transcript.\n\n"

@@ -18,17 +18,17 @@ agent = (
     Graph("Sentiment Analyzer")
     .start()
     .user("Enter text to analyze")
-    .instruction("Analyze sentiment", model="claude-sonnet-4-20250514", system_instruction="Classify as positive or negative")
+    .instruction("Analyze sentiment", model="claude-haiku-4-5-20251001", system_instruction="Classify as positive or negative")
     .decision("Sentiment?", options=["positive", "negative"])
     .on("positive")
-        .instruction("Positive response", model="claude-sonnet-4-20250514", system_instruction="Generate an enthusiastic response")
+        .instruction("Positive response", model="claude-haiku-4-5-20251001", system_instruction="Generate an enthusiastic response")
     .end()
     .on("negative")
-        .instruction("Negative response", model="claude-sonnet-4-20250514", system_instruction="Generate an empathetic response")
+        .instruction("Negative response", model="claude-haiku-4-5-20251001", system_instruction="Generate an empathetic response")
     .end()
     # No merge needed -- decision picks ONE branch, so branches converge
     # directly on the next node.
-    .instruction("Final summary", model="claude-sonnet-4-20250514", system_instruction="Summarize the analysis")
+    .instruction("Final summary", model="claude-haiku-4-5-20251001", system_instruction="Summarize the analysis")
     .end()
 )
 

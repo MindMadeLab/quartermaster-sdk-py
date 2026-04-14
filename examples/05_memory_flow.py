@@ -46,7 +46,7 @@ agent = (
     .read_memory("Recall customer", memory_name="customer_name")
     .instruction(
         "Resolve issue",
-        model="claude-sonnet-4-20250514",
+        model="claude-haiku-4-5-20251001",
         system_instruction=(
             "You are a senior support agent. The customer is {{customer_name}}. "
             "Their issue: {{issue_description}}. Provide a clear, empathetic resolution."

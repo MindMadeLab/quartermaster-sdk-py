@@ -20,16 +20,16 @@ from _runner import run_graph
 research_flow = (
     Graph("Research")
     .start()
-    .instruction("Search web", model="claude-sonnet-4-20250514", system_instruction="Find relevant information")
-    .instruction("Summarize findings", model="claude-sonnet-4-20250514", system_instruction="Create a concise summary")
+    .instruction("Search web", model="claude-haiku-4-5-20251001", system_instruction="Find relevant information")
+    .instruction("Summarize findings", model="claude-haiku-4-5-20251001", system_instruction="Create a concise summary")
     .end()
 )
 
 code_review_flow = (
     Graph("Code Review")
     .start()
-    .instruction("Analyze code", model="claude-sonnet-4-20250514", system_instruction="Review code for bugs and style")
-    .instruction("Generate suggestions", model="claude-sonnet-4-20250514", system_instruction="Suggest improvements")
+    .instruction("Analyze code", model="claude-haiku-4-5-20251001", system_instruction="Review code for bugs and style")
+    .instruction("Generate suggestions", model="claude-haiku-4-5-20251001", system_instruction="Suggest improvements")
     .end()
 )
 
@@ -43,10 +43,10 @@ agent = (
     .on("research").use(research_flow).end()
     .on("code_review").use(code_review_flow).end()
     .on("chat")
-        .instruction("Chat", model="claude-sonnet-4-20250514", system_instruction="Have a helpful conversation")
+        .instruction("Chat", model="claude-haiku-4-5-20251001", system_instruction="Have a helpful conversation")
     .end()
     # No merge -- decision picks ONE branch.
-    .instruction("Deliver answer", model="claude-sonnet-4-20250514", system_instruction="Present the final result clearly")
+    .instruction("Deliver answer", model="claude-haiku-4-5-20251001", system_instruction="Present the final result clearly")
     .end()
 )
 

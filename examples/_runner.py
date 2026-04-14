@@ -9,7 +9,7 @@ Usage in examples:
     print(result.final_output)
 
 Auto-detects API keys from environment:
-    ANTHROPIC_API_KEY  ->  claude-sonnet-4-20250514
+    ANTHROPIC_API_KEY  ->  claude-haiku-4-5-20251001
     OPENAI_API_KEY     ->  gpt-4o
 
 Or force a provider:
@@ -37,7 +37,7 @@ from quartermaster_providers import ProviderRegistry, LLMConfig
 # ---------------------------------------------------------------------------
 
 _MODEL_MAP = {
-    "anthropic": "claude-sonnet-4-20250514",
+    "anthropic": "claude-haiku-4-5-20251001",
     "openai": "gpt-4o",
     "groq": "llama-3.3-70b-versatile",
     "xai": "grok-3-mini-fast",

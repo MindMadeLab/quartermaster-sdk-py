@@ -35,9 +35,9 @@ from _runner import run_graph
 web_research = (
     Graph("Web Research")
     .start()
-    .instruction("Web search", model="claude-sonnet-4-20250514", system_instruction="Search the web for recent information on the topic")
-    .instruction("Extract key facts", model="claude-sonnet-4-20250514", system_instruction="Extract and list the key facts from search results")
-    .instruction("Assess source quality", model="claude-sonnet-4-20250514", system_instruction="Rate the reliability of each source (1-5)")
+    .instruction("Web search", model="claude-haiku-4-5-20251001", system_instruction="Search the web for recent information on the topic")
+    .instruction("Extract key facts", model="claude-haiku-4-5-20251001", system_instruction="Extract and list the key facts from search results")
+    .instruction("Assess source quality", model="claude-haiku-4-5-20251001", system_instruction="Rate the reliability of each source (1-5)")
     .end()
 )
 
@@ -48,9 +48,9 @@ web_research = (
 academic_research = (
     Graph("Academic Research")
     .start()
-    .instruction("Search papers", model="claude-sonnet-4-20250514", system_instruction="Search academic databases for peer-reviewed papers")
-    .instruction("Summarise papers", model="claude-sonnet-4-20250514", system_instruction="Create structured summaries of the top papers")
-    .instruction("Identify consensus", model="claude-sonnet-4-20250514", system_instruction="Identify areas of scientific consensus and debate")
+    .instruction("Search papers", model="claude-haiku-4-5-20251001", system_instruction="Search academic databases for peer-reviewed papers")
+    .instruction("Summarise papers", model="claude-haiku-4-5-20251001", system_instruction="Create structured summaries of the top papers")
+    .instruction("Identify consensus", model="claude-haiku-4-5-20251001", system_instruction="Identify areas of scientific consensus and debate")
     .end()
 )
 
@@ -69,7 +69,7 @@ agent = (
     .text("Acknowledge", template="Researching: {{research_topic}}")
 
     # --- Strategy selection ----------------------------------------------------
-    .instruction("Classify research", model="claude-sonnet-4-20250514", system_instruction="Classify the research type: academic, general, or technical")
+    .instruction("Classify research", model="claude-haiku-4-5-20251001", system_instruction="Classify the research type: academic, general, or technical")
 
     .decision("Research strategy?", options=["academic", "general", "technical"])
 
@@ -82,8 +82,8 @@ agent = (
     .end()
 
     .on("technical")
-        .instruction("Technical deep-dive", model="claude-sonnet-4-20250514", system_instruction="Perform in-depth technical analysis with code examples")
-        .instruction("Benchmark review", model="claude-sonnet-4-20250514", system_instruction="Review benchmarks and performance comparisons")
+        .instruction("Technical deep-dive", model="claude-haiku-4-5-20251001", system_instruction="Perform in-depth technical analysis with code examples")
+        .instruction("Benchmark review", model="claude-haiku-4-5-20251001", system_instruction="Review benchmarks and performance comparisons")
     .end()
 
     # No merge — decision picks ONE research strategy.
@@ -95,13 +95,13 @@ agent = (
 
     # Branch 1: Fact-checking with pass/fail gate
     .branch()
-        .instruction("Fact-check", model="claude-sonnet-4-20250514", system_instruction="Verify all factual claims against sources")
+        .instruction("Fact-check", model="claude-haiku-4-5-20251001", system_instruction="Verify all factual claims against sources")
         .if_node("Facts verified?", expression="verification_score > 0.9")
         .on("true")
             .text("Facts OK", template="All facts verified successfully")
         .end()
         .on("false")
-            .instruction("Fix errors", model="claude-sonnet-4-20250514", system_instruction="Correct any unverified or inaccurate claims")
+            .instruction("Fix errors", model="claude-haiku-4-5-20251001", system_instruction="Correct any unverified or inaccurate claims")
         .end()
         # IF branches converge on a result node
         .static("Fact-check done", text="Fact-check complete")
@@ -109,14 +109,14 @@ agent = (
 
     # Branch 2: Bias assessment (no conditional, straight-through)
     .branch()
-        .instruction("Bias assessment", model="claude-sonnet-4-20250514", system_instruction="Check for confirmation bias, source bias, and framing issues")
+        .instruction("Bias assessment", model="claude-haiku-4-5-20251001", system_instruction="Check for confirmation bias, source bias, and framing issues")
     .end()
 
     # Branch 3: Completeness check with gap detection
     .branch()
         .if_node("Coverage gaps?", expression="has_coverage_gaps")
         .on("true")
-            .instruction("Fill gaps", model="claude-sonnet-4-20250514", system_instruction="Research and fill identified coverage gaps")
+            .instruction("Fill gaps", model="claude-haiku-4-5-20251001", system_instruction="Research and fill identified coverage gaps")
         .end()
         .on("false")
             .text("Coverage complete", template="Research covers all key aspects of {{research_topic}}")
@@ -129,7 +129,7 @@ agent = (
 
     # --- Synthesis and delivery -----------------------------------------------
     .reasoning("Synthesise findings")
-    .summarize("Executive summary", model="claude-sonnet-4-20250514", system_instruction="Create a concise executive summary with key takeaways")
+    .summarize("Executive summary", model="claude-haiku-4-5-20251001", system_instruction="Create a concise executive summary with key takeaways")
 
     # --- Audit trail ----------------------------------------------------------
     .update_memory("Update status", memory_name="research_status")

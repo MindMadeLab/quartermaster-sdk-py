@@ -33,7 +33,7 @@ graph = (
     # 2. Orchestrator -- an Agent node with session-management tools
     .agent(
         "Orchestrator",
-        model="claude-sonnet-4-20250514",
+        model="claude-haiku-4-5-20251001",
         system_instruction=(
             "You are a project manager.  Given the user's request:\n"
             "1. Spawn three agents IN PARALLEL using spawn_agent:\n"
@@ -55,7 +55,7 @@ graph = (
     # 3. Final summariser -- pure Instruction (no tools), just LLM text
     .instruction(
         "Summariser",
-        model="claude-sonnet-4-20250514",
+        model="claude-haiku-4-5-20251001",
         system_instruction=(
             "Using the orchestrator's collected results, produce a polished "
             "final document that integrates the research, the draft, and the "

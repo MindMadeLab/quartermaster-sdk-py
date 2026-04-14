@@ -123,7 +123,7 @@ def main():
 
     # Build the graph with a placeholder model; _runner will override
     # with the detected provider's default model anyway.
-    model = "claude-sonnet-4-20250514"
+    model = "claude-haiku-4-5-20251001"
     agent = build_assistant_graph(model)
 
     run_graph(

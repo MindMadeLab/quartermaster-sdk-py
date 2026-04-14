@@ -21,7 +21,7 @@ agent = (
     Graph("Whiteboard Agent")
     .start()
     .user("Describe your task")
-    .instruction("Analyse input", model="claude-sonnet-4-20250514", system_instruction="Break the task into components for parallel processing")
+    .instruction("Analyse input", model="claude-haiku-4-5-20251001", system_instruction="Break the task into components for parallel processing")
 
     # --- Parallel fan-out: 3 branches with nested control flow ----------------
     .parallel("Fan out")
@@ -29,12 +29,12 @@ agent = (
     # Branch A: deep analysis pipeline
     .branch()
         .text("Prepare context", template="Task context: {{user_input}}")
-        .instruction("Deep analysis", model="claude-sonnet-4-20250514", system_instruction="Perform thorough analysis of the task")
+        .instruction("Deep analysis", model="claude-haiku-4-5-20251001", system_instruction="Perform thorough analysis of the task")
     .end()
 
     # Branch B: independent lightweight check (pass-through)
     .branch()
-        .instruction("Quick check", model="claude-sonnet-4-20250514", system_instruction="Perform a fast independent assessment")
+        .instruction("Quick check", model="claude-haiku-4-5-20251001", system_instruction="Perform a fast independent assessment")
     .end()
 
     # Branch C: conditional quality gate (IF picks one path — no merge needed)
@@ -53,7 +53,7 @@ agent = (
     .static_merge("Combine all branches")
 
     # --- Final synthesis -------------------------------------------------------
-    .summarize("Final synthesis", model="claude-sonnet-4-20250514", system_instruction="Combine all branch results into a coherent response")
+    .summarize("Final synthesis", model="claude-haiku-4-5-20251001", system_instruction="Combine all branch results into a coherent response")
     .end()
 )
 

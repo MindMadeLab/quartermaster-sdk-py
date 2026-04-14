@@ -18,7 +18,7 @@ agent = (
     Graph("Hello Agent")
     .start()
     .user("Ask me anything")
-    .instruction("Respond", model="claude-sonnet-4-20250514", system_instruction="You are a helpful assistant. Be concise.")
+    .instruction("Respond", model="claude-haiku-4-5-20251001", system_instruction="You are a helpful assistant. Be concise.")
     .end()
 )
 

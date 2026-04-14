@@ -138,7 +138,7 @@ feedback = (
             "We'll work on improving."
         ))
         .instruction("Suggest improvements",
-                     model="claude-sonnet-4-20250514",
+                     model="claude-haiku-4-5-20251001",
                      system_instruction=(
                          "The user rated us {{rating}}/5 and said: '{{comments}}'. "
                          "Suggest 2-3 specific improvements we could make."
