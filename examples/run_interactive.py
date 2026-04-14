@@ -121,16 +121,27 @@ def main():
     )
     args = parser.parse_args()
 
-    # Build the graph with a placeholder model; _runner will override
-    # with the detected provider's default model anyway.
+    # Build the graph
     model = "claude-haiku-4-5-20251001"
     agent = build_assistant_graph(model)
 
-    run_graph(
-        agent,
-        user_input="What are the trade-offs between microservices and monolithic architectures for a startup?",
-        provider=args.provider,
-    )
+    print("Interactive Assistant (type your question, or 'quit' to exit)")
+    print()
+
+    while True:
+        try:
+            user_input = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye!")
+            break
+
+        if not user_input or user_input.lower() in ("quit", "exit", "q"):
+            print("Goodbye!")
+            break
+
+        print()
+        run_graph(agent, user_input=user_input, provider=args.provider)
+        print()
 
 
 if __name__ == "__main__":
