@@ -193,6 +193,7 @@ with open("agent.yaml") as f:
 | `.allowed_agents(*agent_ids)` | `GraphBuilder` | Restrict which sub-agents can be spawned |
 | `.node(node_type, name, metadata, **kwargs)` | `GraphBuilder` | Add any node type generically |
 | `.edge(source_id, target_id, label, is_main)` | `GraphBuilder` | Manually add an edge |
+| `.connect(from_name, to_name, label)` | `GraphBuilder` | Create an edge between two nodes by name |
 
 **Build / Export**
 
@@ -201,6 +202,41 @@ with open("agent.yaml") as f:
 | `.build(validate=True)` | `AgentGraph` | Build the graph, optionally validate |
 | `.to_graph(validate=True, agent_id=None)` | `AgentGraph` | Build with optional explicit agent ID |
 | `.to_agent(validate=True)` | `Agent` | Export as a full `Agent` model |
+
+### Node Configuration Kwargs
+
+All builder methods accept optional keyword arguments:
+
+| Kwarg | Type | Description |
+|-------|------|-------------|
+| `traverse_in` | `TraverseIn` | When to execute: `AWAIT_FIRST` or `AWAIT_ALL` |
+| `traverse_out` | `TraverseOut` | Which successors to trigger |
+| `thought_type` | `ThoughtType` | How to build conversation context |
+| `message_type` | `MessageType` | What message role to use |
+| `show_output` | `bool` | Whether to display this node's output (default `True`) |
+| `error_handling` | `ErrorStrategy` | What to do on failure |
+
+### Loops and Cycles
+
+Use `connect()` to create back-edges for iterative flows:
+
+```python
+agent = (
+    Graph("Refiner")
+    .start()
+    .user("Input")
+    .var("Init", variable="round", expression="1")
+    .text("Header", template="Round {{round}}", traverse_in=TraverseIn.AWAIT_FIRST)
+    .instruction("Process", system_instruction="Improve the text")
+    .var("Increment", variable="round", expression="round + 1")
+    .if_node("Done?", expression="round > 3")
+    .on("true").text("Done", template="Complete").end()
+    .on("false").text("Continue", template="", show_output=False).end()
+    .end()
+)
+agent.connect("Continue", "Header", label="loop")
+graph = agent.build(validate=False)  # skip validation for intentional cycles
+```
 
 ### Validation
 

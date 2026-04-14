@@ -129,6 +129,32 @@ schemas = registry.to_json_schema()
 
 See [`examples/`](./examples/) for runnable examples covering every pattern.
 
+## Running Your Graph
+
+```python
+from quartermaster_engine import run_graph
+
+# Run with auto-detected provider (reads API keys from .env)
+run_graph(agent, user_input="What is quantum computing?")
+
+# Interactive mode — pauses at User nodes and prompts stdin
+run_graph(agent)  # no user_input = interactive
+
+# Force a specific provider
+run_graph(agent, user_input="Hello", provider="openai")
+```
+
+Set up your API keys in a `.env` file at the project root:
+```
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+GROQ_API_KEY=gsk_...
+XAI_API_KEY=xai-...
+```
+
+Output streams token-by-token in real time. Use `show_output=False` on nodes
+to hide internal steps (variables, conditions) from the output.
+
 ## Packages
 
 | Package | Description |
@@ -162,7 +188,7 @@ quartermaster-code-runner   Standalone Docker code execution
 
 ## Key Concepts
 
-- **Graph** -- A directed acyclic graph of nodes and edges. Built with the fluent `Graph("name").start().user("Input")...end()` API.
+- **Graph** -- A directed graph (supports cycles via `connect()` for loops) of nodes and edges. Built with the fluent `Graph("name").start().user("Input")...end()` API.
 - **AgentGraph** -- The serializable graph model (`AgentGraph` in quartermaster-graph). Produced by `Graph.build()`.
 - **User Node** -- Every graph starts with `.user()` after `.start()` to collect user input.
 - **Nodes** -- Units of work: LLM calls, decisions, user input, memory, tools, templates.
@@ -171,6 +197,9 @@ quartermaster-code-runner   Standalone Docker code execution
 - **Memory** -- Flow-scoped persistent storage accessible from any node via `write_memory`/`read_memory`.
 - **Providers** -- Pluggable LLM backends. Model name auto-resolves to the right provider.
 - **Tools** -- `@tool()` decorator for custom tools, built-in tools, JSON Schema export via `tool.info().to_input_schema()`.
+- **Loops** -- `connect("Continue", "Start")` creates back-edges for iterative flows.
+- **Streaming** -- Token-by-token output from LLM nodes in real time.
+- **Multi-provider** -- Different LLM providers for different nodes in the same graph.
 
 ### Branching Rules
 
@@ -180,6 +209,7 @@ quartermaster-code-runner   Standalone Docker code execution
 | `if_node()` | Boolean expression picks ONE branch | No |
 | `switch()` | Expression picks ONE branch | No |
 | `parallel()` | ALL branches run concurrently | Yes -- use `static_merge()` |
+| `connect()` | Manual edge by node name | Creates loops/cycles |
 
 ## Documentation
 

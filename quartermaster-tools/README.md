@@ -266,32 +266,89 @@ Central registry with version-aware lookup and plugin discovery.
 
 All built-in tools are `FunctionTool` instances created with `@tool()`. The `*Tool` names (e.g., `ReadFileTool`) are backward-compatible aliases pointing to the same `FunctionTool` instance.
 
-| Alias | Function | Tool Name | Description |
-|-------|----------|-----------|-------------|
-| `ReadFileTool` | `read_file` | `read_file` | Read file content with path validation and size limits |
-| `WriteFileTool` | `write_file` | `write_file` | Write/append to files with blocked paths and size enforcement |
-| `WebRequestTool` | `web_request` | `web_request` | HTTP GET/POST with SSRF protection |
-| `EvalMathTool` | `eval_math` | `eval_math` | Safe mathematical expression evaluation via AST parsing |
-| `PythonExecutorTool` | `python_executor` | `python_executor` | Execute Python code |
-| `JavaScriptExecutorTool` | `javascript_executor` | `javascript_executor` | Execute JavaScript code |
-| `ShellExecutorTool` | `shell_executor` | `shell_executor` | Execute shell commands |
-| `ParseJSONTool` | `parse_json` | `parse_json` | Parse JSON strings |
-| `ParseXMLTool` | `parse_xml` | `parse_xml` | Parse XML strings |
-| `ParseCSVTool` | `parse_csv` | `parse_csv` | Parse CSV strings |
-| `ParseYAMLTool` | `parse_yaml` | `parse_yaml` | Parse YAML strings |
-| `ConvertFormatTool` | `convert_format` | `convert_format` | Convert between data formats |
-| `DataFilterTool` | `data_filter` | `data_filter` | Filter data with expressions |
-| `GrepTool` | `grep` | `grep` | Search file contents |
-| `FindFilesTool` | `find_files` | `find_files` | Find files by pattern |
-| `ListDirectoryTool` | `list_directory` | `list_directory` | List directory contents |
-| `CopyFileTool` | `copy_file` | `copy_file` | Copy files |
-| `MoveFileTool` | `move_file` | `move_file` | Move/rename files |
-| `DeleteFileTool` | `delete_file` | `delete_file` | Delete files |
-| `CreateDirectoryTool` | `create_directory` | `create_directory` | Create directories |
-| `FileInfoTool` | `file_info` | `file_info` | Get file metadata |
-| `DuckDuckGoSearchTool` | `duckduckgo_search` | `duckduckgo_search` | Web search via DuckDuckGo |
-| `WebScraperTool` | `web_scraper` | `web_scraper` | Scrape web pages |
-| `JsonApiTool` | `json_api` | `json_api` | Call JSON APIs |
+79 tools across 15 categories:
+
+| Category | Tool | Description |
+|----------|------|-------------|
+| **File I/O** | `read_file` | Read content from a file with path validation and size limits |
+| **File I/O** | `write_file` | Write or append content to a file with blocked-path and size enforcement |
+| **Filesystem** | `list_directory` | List directory entries with type, size, and modification time |
+| **Filesystem** | `find_files` | Find files using glob patterns and optional regex name filtering |
+| **Filesystem** | `grep` | Search file contents for a regex pattern with context lines |
+| **Filesystem** | `copy_file` | Copy a file or directory |
+| **Filesystem** | `move_file` | Move or rename a file or directory |
+| **Filesystem** | `delete_file` | Delete a file or directory (requires confirmation) |
+| **Filesystem** | `create_directory` | Create a directory with optional parent creation |
+| **Filesystem** | `file_info` | Get file metadata (size, type, permissions, MIME type) |
+| **Code** | `python_executor` | Execute Python code in a subprocess with timeout enforcement |
+| **Code** | `javascript_executor` | Execute JavaScript code via Node.js subprocess |
+| **Code** | `shell_executor` | Execute shell commands with blocked-command safety list |
+| **Code** | `eval_math` | Safely evaluate math expressions via AST parsing (no eval/exec) |
+| **Data** | `parse_json` | Parse JSON from a file or string with optional JMESPath queries |
+| **Data** | `parse_csv` | Parse CSV from a file or string with custom delimiters and headers |
+| **Data** | `parse_yaml` | Parse YAML from a file or string (requires pyyaml) |
+| **Data** | `parse_xml` | Parse XML from a file or string with optional XPath queries |
+| **Data** | `convert_format` | Convert data between CSV, JSON, and YAML formats |
+| **Data** | `data_filter` | Filter, sort, and limit structured data with safe expressions |
+| **Database** | `sqlite_query` | Execute read-only SQL queries on a SQLite database |
+| **Database** | `sqlite_write` | Execute write SQL statements on SQLite (requires confirm=True) |
+| **Database** | `sqlite_schema` | Introspect SQLite database schema (tables and columns) |
+| **Web** | `web_request` | HTTP requests (GET/POST/PUT/DELETE/PATCH) with SSRF protection |
+| **Web Search** | `duckduckgo_search` | Search the web via DuckDuckGo HTML (no API key needed) |
+| **Web Search** | `brave_search` | Search the web via Brave Search API (requires BRAVE_API_KEY) |
+| **Web Search** | `google_search` | Search the web via Google Custom Search API |
+| **Web Search** | `web_scraper` | Fetch a web page and return content as text, markdown, or HTML |
+| **Web Search** | `json_api` | Call a JSON API with optional JMESPath response filtering |
+| **Vector/RAG** | `embed_text` | Generate text embeddings (built-in hash-based or sentence-transformers) |
+| **Vector/RAG** | `vector_store` | Store text with vector embeddings in memory or JSON files |
+| **Vector/RAG** | `vector_search` | Cosine-similarity search over a vector collection |
+| **Vector/RAG** | `hybrid_search` | Combined semantic + keyword search with configurable weighting |
+| **Vector/RAG** | `document_index` | Chunk and index a document for vector search |
+| **Browser** | `browser_navigate` | Navigate browser to a URL and wait for page load |
+| **Browser** | `browser_wait` | Wait for an element to reach a desired state (visible/hidden/attached) |
+| **Browser** | `browser_click` | Click an element on the page by CSS selector |
+| **Browser** | `browser_type` | Type text into an input field by CSS selector |
+| **Browser** | `browser_eval` | Execute JavaScript in the browser page context |
+| **Browser** | `browser_extract` | Extract text or HTML content from the page or an element |
+| **Browser** | `browser_screenshot` | Capture a PNG screenshot of the page or an element |
+| **Email** | `send_email` | Send email via SMTP with TLS (rate limited to 10/min) |
+| **Email** | `read_email` | Read emails from an IMAP mailbox with unread filtering |
+| **Email** | `search_email` | Search emails via IMAP by text, date range, and sender |
+| **Messaging** | `slack_message` | Send a message to a Slack channel via Web API |
+| **Messaging** | `slack_read` | Read recent messages from a Slack channel |
+| **Messaging** | `webhook_notify` | Send a JSON POST to any webhook URL |
+| **Messaging** | `discord_message` | Send a message to Discord via webhook |
+| **A2A** | `a2a_discover` | Discover a remote A2A agent's capabilities via Agent Card |
+| **A2A** | `a2a_send_task` | Send a task to a remote A2A agent via JSON-RPC 2.0 |
+| **A2A** | `a2a_check_status` | Check the status of a remote A2A task |
+| **A2A** | `a2a_collect_result` | Collect results from a completed A2A task |
+| **A2A** | `a2a_register` | Generate an A2A Agent Card for local agent registration |
+| **Agents** | `spawn_agent` | Create and start a parallel agent session in one step |
+| **Agents** | `create_agent_session` | Create a new parallel agent session for later start |
+| **Agents** | `start_agent_session` | Start a previously created agent session with a task |
+| **Agents** | `inject_agent_message` | Inject a message into a running agent session |
+| **Agents** | `get_agent_session_status` | Get detailed status of an agent session |
+| **Agents** | `list_agent_sessions` | List all agent sessions with optional status filtering |
+| **Agents** | `wait_agent_session` | Block until an agent session completes or times out |
+| **Agents** | `collect_agent_results` | Collect results from multiple agent sessions |
+| **Agents** | `cancel_agent_session` | Cancel a running agent session |
+| **Agents** | `add_agent_finish_hook` | Register a log or notify callback for session completion |
+| **Agents** | `notify_parent` | Send a status update from a sub-agent to its parent |
+| **Memory** | `set_variable` | Store a key-value pair in shared in-memory storage |
+| **Memory** | `get_variable` | Retrieve a stored variable from in-memory storage |
+| **Memory** | `list_variables` | List stored variable names with optional prefix filter |
+| **Privacy** | `detect_pii` | Detect PII entities in text (email, phone, SSN, credit card, etc.) |
+| **Privacy** | `redact_pii` | Redact PII from text using redact, mask, or hash strategies |
+| **Privacy** | `scan_file_pii` | Scan a file for PII entities with line-number reporting |
+| **Compliance** | `risk_classifier` | Classify AI system risk level per EU AI Act Annex III |
+| **Compliance** | `audit_log` | Append to a tamper-evident (SHA-256 chained) audit trail |
+| **Compliance** | `read_audit_log` | Query and verify audit trail integrity |
+| **Compliance** | `compliance_checklist` | Generate EU AI Act compliance checklists by risk level |
+| **Observability** | `trace` | Create a trace span for distributed observability |
+| **Observability** | `performance_profile` | Record tool execution timing with summary statistics |
+| **Observability** | `log` | Write structured JSON log entries (in-memory + optional file) |
+| **Observability** | `metric` | Record custom metrics (counter, gauge, or histogram) |
+| **Observability** | `cost_tracker` | Track LLM API call costs with built-in pricing tables |
 
 ### Decorator Registration
 

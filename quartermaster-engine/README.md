@@ -34,7 +34,7 @@ pip install quartermaster-engine[sqlite]
 from uuid import uuid4
 from quartermaster_engine import FlowRunner, InMemoryStore
 from quartermaster_engine.nodes import SimpleNodeRegistry, NodeResult
-from quartermaster_engine.types import AgentGraph, GraphNode, GraphEdge, NodeType
+from quartermaster_graph import AgentGraph, GraphNode, GraphEdge, NodeType
 
 # 1. Define the graph
 start_id, process_id, end_id = uuid4(), uuid4(), uuid4()
@@ -127,6 +127,26 @@ async def run_flow():
 
 asyncio.run(run_flow())
 ```
+
+### Quick Execution with `run_graph()`
+
+For rapid prototyping, use the convenience function:
+
+```python
+from quartermaster_engine import run_graph
+
+# Non-interactive (provide input)
+run_graph(agent, user_input="Explain quantum computing")
+
+# Interactive (prompts stdin at User nodes)
+run_graph(agent)
+
+# Force provider
+run_graph(agent, user_input="Hello", provider="openai")
+```
+
+`run_graph()` handles provider detection, node registration, streaming output,
+and the pause/resume cycle for interactive User nodes.
 
 ## API Reference
 
@@ -286,6 +306,9 @@ Real-time events emitted during flow execution:
 | `FlowFinished` | `flow_id`, `final_output`, `output_data` | Entire flow completed |
 | `UserInputRequired` | `flow_id`, `node_id`, `prompt`, `options` | Flow paused for user input |
 | `FlowError` | `flow_id`, `node_id`, `error`, `recoverable` | Node failed |
+
+`run_graph()` uses streaming by default -- `TokenGenerated` events are printed
+as they arrive, giving real-time output from LLM nodes without extra setup.
 
 ### ExecutionContext
 

@@ -23,6 +23,16 @@ uv run examples/01_hello_agent.py
 All examples (except `run_interactive.py`) build and validate graphs offline
 -- no API keys or LLM calls needed.
 
+### API Keys
+
+Create a `.env` file at the repo root (see `.env.example`):
+```
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+```
+
+Or export them directly: `export ANTHROPIC_API_KEY=...`
+
 ### Running the interactive demo
 
 ```bash
@@ -72,3 +82,9 @@ uv run examples/run_interactive.py
 - **Summarize**: `summarize()` for condensing conversation history
 - **Tools**: `@tool()` and `@registry.tool()` decorator with automatic type and docstring extraction
 - **Local LLMs**: `register_local("ollama")` for self-hosted inference
+- **Loop-back edges**: `connect()` for iterative/cyclic flows (examples 08, 16)
+- **Output control**: `show_output=False` hides internal nodes from display
+- **Streaming**: Token-by-token real-time output from all LLM nodes
+- **Interactive mode**: `run_graph()` without `user_input` prompts stdin at User nodes
+- **Multi-provider**: Different LLMs for different nodes (Anthropic + OpenAI + Groq + xAI)
+- **`run_graph()`**: One-line execution with auto-detected provider and streaming
