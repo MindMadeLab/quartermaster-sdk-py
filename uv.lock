@@ -3360,6 +3360,8 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "anthropic" },
+    { name = "groq" },
+    { name = "openai" },
     { name = "quartermaster-sdk" },
 ]
 
@@ -3374,6 +3376,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.30" },
+    { name = "groq", specifier = ">=0.5" },
+    { name = "openai", specifier = ">=1.0" },
     { name = "quartermaster-sdk", editable = "quartermaster-sdk" },
 ]
 

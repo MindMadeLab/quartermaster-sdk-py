@@ -64,17 +64,24 @@ _PROVIDER_CLASSES = {
 
 
 def _get_provider_registry(provider_name: str) -> ProviderRegistry:
-    """Create a ProviderRegistry with the detected provider."""
-    registry = ProviderRegistry()
-    cls_path = _PROVIDER_CLASSES.get(provider_name)
-    if not cls_path:
-        raise ValueError(f"Unknown provider: {provider_name}")
-    module_path, cls_name = cls_path.rsplit(":", 1)
+    """Create a ProviderRegistry with ALL available providers (based on env keys)."""
     import importlib
-    module = importlib.import_module(module_path)
-    provider_cls = getattr(module, cls_name)
-    api_key = os.environ.get(f"{provider_name.upper()}_API_KEY", "")
-    registry.register(provider_name, provider_cls, api_key=api_key)
+    registry = ProviderRegistry()
+    registered = []
+    for name, cls_path in _PROVIDER_CLASSES.items():
+        api_key = os.environ.get(f"{name.upper()}_API_KEY", "")
+        if not api_key:
+            continue
+        module_path, cls_name = cls_path.rsplit(":", 1)
+        try:
+            module = importlib.import_module(module_path)
+            provider_cls = getattr(module, cls_name)
+            registry.register(name, provider_cls, api_key=api_key)
+            registered.append(name)
+        except ImportError:
+            pass  # SDK not installed for this provider
+    if not registered:
+        raise ValueError("No provider SDKs installed. pip install anthropic / openai / etc.")
     return registry
 
 
@@ -92,15 +99,19 @@ class LLMExecutor(NodeExecutor):
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
         system_instruction = context.get_meta("llm_system_instruction", "")
-        # Always use the default provider/model — ignore graph metadata provider
-        # since we only register one provider at a time
-        model = self._default_model
-        provider_name = self._default_provider
+        model = context.get_meta("llm_model", self._default_model)
+        provider_name = context.get_meta("llm_provider", self._default_provider)
 
+        # Fall back to default if requested provider isn't registered
         try:
             provider = self._registry.get(provider_name)
         except Exception:
-            return NodeResult(success=False, data={}, error=f"Provider '{provider_name}' not available")
+            provider_name = self._default_provider
+            model = self._default_model
+            try:
+                provider = self._registry.get(provider_name)
+            except Exception:
+                return NodeResult(success=False, data={}, error=f"Provider '{provider_name}' not available")
 
         # Extract prompt: last message content, or user input from memory
         prompt = ""
@@ -138,8 +149,8 @@ class DecisionExecutor(NodeExecutor):
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
         system_instruction = context.get_meta("llm_system_instruction", "")
-        model = self._default_model
-        provider_name = self._default_provider
+        model = context.get_meta("llm_model", self._default_model)
+        provider_name = context.get_meta("llm_provider", self._default_provider)
 
         # Get available options from outgoing edges
         edges = context.graph.get_edges_from(context.node_id)
@@ -149,12 +160,18 @@ class DecisionExecutor(NodeExecutor):
         if options:
             decision_prompt += f"\n\nOptions: {', '.join(options)}\nRespond with EXACTLY one of the options above, nothing else."
 
+        # Fall back to default if requested provider isn't registered
         try:
             provider = self._registry.get(provider_name)
         except Exception:
-            # Fallback: pick first option
-            picked = options[0] if options else ""
-            return NodeResult(success=True, data={}, output_text=picked, picked_node=picked)
+            provider_name = self._default_provider
+            model = self._default_model
+            try:
+                provider = self._registry.get(provider_name)
+            except Exception:
+                # Fallback: pick first option
+                picked = options[0] if options else ""
+                return NodeResult(success=True, data={}, output_text=picked, picked_node=picked)
 
         prompt = ""
         for msg in reversed(context.messages):
@@ -406,14 +423,23 @@ def run_graph(
     # Set up node registry
     node_registry = _build_registry(provider_registry, model, provider_name)
 
-    # Event handler
+    # Event handler — skip Start/End nodes to avoid duplicate echo
+    _skip_types = {NodeType.START.value, NodeType.END.value}
+
     def on_event(event: FlowEvent) -> None:
         if not verbose:
             return
         if isinstance(event, NodeStarted):
-            print(f"  [{event.node_type.value:15s}] {event.node_name}...", flush=True)
+            if event.node_type.value in _skip_types:
+                return
+            print(f"  [{event.node_type.value:15s}] {event.node_name}", flush=True)
         elif isinstance(event, NodeFinished):
-            output = event.result[:80] + "..." if len(event.result) > 80 else event.result
+            if event.node_id and any(
+                n.id == event.node_id and n.type.value in _skip_types
+                for n in agent_graph.nodes
+            ):
+                return
+            output = event.result[:120] + "..." if len(event.result) > 120 else event.result
             if output:
                 print(f"  {'':15s}   -> {output}", flush=True)
         elif isinstance(event, FlowError):

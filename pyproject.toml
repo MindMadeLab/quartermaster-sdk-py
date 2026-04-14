@@ -6,6 +6,8 @@ requires-python = ">=3.11"
 dependencies = [
     "quartermaster-sdk",
     "anthropic>=0.30",
+    "openai>=1.0",
+    "groq>=0.5",
 ]
 
 [dependency-groups]
