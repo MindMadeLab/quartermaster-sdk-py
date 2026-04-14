@@ -3359,6 +3359,7 @@ name = "quartermaster-workspace"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "anthropic" },
     { name = "quartermaster-sdk" },
 ]
 
@@ -3371,7 +3372,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "quartermaster-sdk", editable = "quartermaster-sdk" }]
+requires-dist = [
+    { name = "anthropic", specifier = ">=0.30" },
+    { name = "quartermaster-sdk", editable = "quartermaster-sdk" },
+]
 
 [package.metadata.requires-dev]
 dev = [

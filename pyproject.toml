@@ -5,6 +5,7 @@ description = "Quartermaster monorepo workspace"
 requires-python = ">=3.11"
 dependencies = [
     "quartermaster-sdk",
+    "anthropic>=0.30",
 ]
 
 [dependency-groups]
