@@ -41,6 +41,7 @@ from quartermaster_engine.stores.memory_store import InMemoryStore
 from quartermaster_engine.events import NodeStarted, NodeFinished, FlowEvent, FlowError, TokenGenerated
 from quartermaster_engine.nodes import SimpleNodeRegistry, NodeExecutor, NodeResult
 from quartermaster_engine.context.execution_context import ExecutionContext
+from quartermaster_engine.context.node_execution import NodeStatus
 from quartermaster_graph import AgentGraph
 from quartermaster_graph.enums import NodeType
 from quartermaster_providers import ProviderRegistry, LLMConfig
@@ -260,10 +261,20 @@ class DecisionExecutor(NodeExecutor):
 
 
 class UserExecutor(NodeExecutor):
-    """Auto-provides user input (from the flow's initial input)."""
+    """Pauses the flow and waits for user input via stdin."""
+
+    def __init__(self, interactive: bool = True):
+        self._interactive = interactive
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
-        # In automated mode, pass through the user's input
+        if self._interactive:
+            # Pause the flow — run_graph will prompt stdin and call resume()
+            prompt = context.current_node.name if context.current_node else "Your input"
+            return NodeResult(
+                success=True, data={}, output_text="",
+                wait_for_user=True, user_prompt=prompt,
+            )
+        # Non-interactive: pass through the initial user input
         user_text = context.memory.get("__user_input__", "")
         return NodeResult(success=True, data={}, output_text=str(user_text))
 
@@ -408,12 +419,13 @@ class UserFormExecutor(NodeExecutor):
 
 def _build_registry(
     provider_registry: ProviderRegistry, model: str, provider_name: str,
+    interactive: bool = False,
 ) -> SimpleNodeRegistry:
     """Create a node registry with executors for all common node types."""
     reg = SimpleNodeRegistry()
     llm = LLMExecutor(provider_registry, model, provider_name)
     decision = DecisionExecutor(provider_registry, model, provider_name)
-    user = UserExecutor()
+    user = UserExecutor(interactive=interactive)
     static = StaticExecutor()
     var = VarExecutor()
     text = TextExecutor()
@@ -472,17 +484,20 @@ def _build_registry(
 
 def run_graph(
     graph: AgentGraph,
-    user_input: str = "Hello",
+    user_input: str | None = None,
     provider: str | None = None,
     verbose: bool = True,
+    interactive: bool | None = None,
 ) -> FlowResult:
     """Build and execute a graph with real LLM calls.
 
     Args:
         graph: The built graph (from Graph.build() or the Graph itself).
-        user_input: The initial user message.
+        user_input: The initial user message. If None, interactive mode prompts stdin.
         provider: Force a provider ("anthropic", "openai", etc.). Auto-detects if None.
         verbose: Print events as they happen.
+        interactive: If True, User nodes prompt stdin. If None, auto-detect
+            (interactive when user_input is None).
 
     Returns:
         FlowResult with the final output.
@@ -492,6 +507,10 @@ def run_graph(
         agent_graph = graph.build()
     else:
         agent_graph = graph
+
+    # Auto-detect interactive mode
+    if interactive is None:
+        interactive = user_input is None
 
     # Detect provider
     if provider:
@@ -506,16 +525,19 @@ def run_graph(
             print(f"  export {p.upper()}_API_KEY='...'")
         sys.exit(1)
 
-    if verbose:
+    if verbose and not interactive:
         print(f"Provider: {provider_name} ({model})")
         print(f"Input: {user_input!r}")
+        print()
+    elif verbose and interactive:
+        print(f"Provider: {provider_name} ({model})")
         print()
 
     # Set up provider registry
     provider_registry = _get_provider_registry(provider_name)
 
     # Set up node registry
-    node_registry = _build_registry(provider_registry, model, provider_name)
+    node_registry = _build_registry(provider_registry, model, provider_name, interactive=interactive)
 
     # Event handler — respects show_output metadata flag
     _silent_types = {NodeType.START.value, NodeType.END.value}
@@ -547,14 +569,48 @@ def run_graph(
             print(f"  [ERROR] {event.error}", flush=True)
 
     # Run
+    store = InMemoryStore()
     runner = FlowRunner(
         graph=agent_graph,
         node_registry=node_registry,
-        store=InMemoryStore(),
+        store=store,
         on_event=on_event,
     )
 
-    result = runner.run(user_input)
+    # Start the flow — use empty string as initial input for interactive mode
+    result = runner.run(user_input or "")
+
+    # Handle pause/resume loop for interactive User nodes
+    while interactive and not result.success and not result.error:
+        # Flow is paused waiting for user input — check for waiting nodes
+        executions = store.get_all_node_executions(result.flow_id)
+        waiting = False
+        for nid, exe in executions.items():
+            if exe.status == NodeStatus.WAITING_USER:
+                waiting = True
+                break
+
+        if not waiting:
+            break
+
+        # Prompt user
+        try:
+            user_text = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n")
+            break
+
+        if not user_text:
+            continue
+
+        # Append to conversation so LLM nodes see it
+        conversation = list(store.get_all_memory(result.flow_id).get("__conversation__", []))
+        _append_to_conversation(conversation, "User", user_text)
+        store.save_memory(result.flow_id, "__conversation__", conversation)
+        store.save_memory(result.flow_id, "__user_input__", user_text)
+
+        print()
+        result = runner.resume(result.flow_id, user_text)
 
     if verbose:
         print()
@@ -563,5 +619,7 @@ def run_graph(
         else:
             print(f"Flow failed: {result.error}")
         print(f"Duration: {result.duration_seconds:.2f}s")
+
+    return result
 
     return result

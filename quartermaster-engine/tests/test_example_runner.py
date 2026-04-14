@@ -1167,34 +1167,34 @@ class TestUserExecutor:
         ctx = _make_context(
             memory={"__user_input__": "Hello from user"},
         )
-        result = _run(UserExecutor().execute(ctx))
+        result = _run(UserExecutor(interactive=False).execute(ctx))
         assert result.success
         assert result.output_text == "Hello from user"
 
     def test_missing_key_returns_empty(self):
         ctx = _make_context(memory={})
-        result = _run(UserExecutor().execute(ctx))
+        result = _run(UserExecutor(interactive=False).execute(ctx))
         assert result.output_text == ""
 
     def test_integer_input_converted_to_string(self):
         ctx = _make_context(
             memory={"__user_input__": 42},
         )
-        result = _run(UserExecutor().execute(ctx))
+        result = _run(UserExecutor(interactive=False).execute(ctx))
         assert result.output_text == "42"
 
     def test_data_is_empty(self):
         ctx = _make_context(
             memory={"__user_input__": "text"},
         )
-        result = _run(UserExecutor().execute(ctx))
+        result = _run(UserExecutor(interactive=False).execute(ctx))
         assert result.data == {}
 
     def test_unicode_input(self):
         ctx = _make_context(
             memory={"__user_input__": "日本語テスト"},
         )
-        result = _run(UserExecutor().execute(ctx))
+        result = _run(UserExecutor(interactive=False).execute(ctx))
         assert result.output_text == "日本語テスト"
 
 
