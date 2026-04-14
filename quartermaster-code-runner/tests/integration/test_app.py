@@ -2,6 +2,14 @@
 
 These tests require Docker to be running and runtime images to be built.
 Build them with: make build-runtimes
+
+The whole module is marked ``integration`` so it's automatically excluded
+by CI's ``pytest -m "not integration"`` (Docker is too slow / heavy for
+the per-PR test gate). Run them locally with::
+
+    pytest -m integration         # only integration
+    pytest                        # everything
+    pytest -m "not integration"   # CI default
 """
 
 from __future__ import annotations
@@ -17,6 +25,10 @@ from filelock import FileLock
 
 from quartermaster_code_runner.images import build_runtime_images, configure_images
 from quartermaster_code_runner.execution import get_docker_client
+
+# Module-level marker — applies the ``integration`` mark to every test in
+# this file. The marker is registered in pyproject.toml.
+pytestmark = pytest.mark.integration
 
 
 TEST_API_KEYS = "test-secret-key-1,test-secret-key-2"

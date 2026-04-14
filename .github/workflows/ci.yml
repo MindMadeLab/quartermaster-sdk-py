@@ -63,9 +63,13 @@ jobs:
         working-directory: ${{ matrix.package }}
         run: uv run --no-sync mypy src/ || true
 
+      # Skip the `integration` marker globally — currently only used by
+      # quartermaster-code-runner for tests that build/run Docker images.
+      # Those are slow (10+ min) and don't belong in the per-PR test gate.
+      # Run them locally / nightly with `pytest -m integration`.
       - name: Run tests
         working-directory: ${{ matrix.package }}
-        run: uv run --no-sync pytest -v --tb=short
+        run: uv run --no-sync pytest -v --tb=short -m "not integration"
 
   # -----------------------------------------------------------------------
   # Verify the SDK meta-package installs cleanly
