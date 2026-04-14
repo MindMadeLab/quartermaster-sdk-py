@@ -36,7 +36,7 @@ class GraphNode(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     type: NodeType
     name: str = ""
-    traverse_in: TraverseIn = TraverseIn.AWAIT_ALL
+    traverse_in: TraverseIn = TraverseIn.AWAIT_FIRST
     traverse_out: TraverseOut = TraverseOut.SPAWN_ALL
     thought_type: ThoughtType = ThoughtType.NEW
     message_type: MessageType = MessageType.AUTOMATIC

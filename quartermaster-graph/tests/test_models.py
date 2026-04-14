@@ -46,7 +46,7 @@ class TestGraphNode:
         assert isinstance(node.id, UUID)
         assert node.type == NodeType.INSTRUCTION
         assert node.name == ""
-        assert node.traverse_in == TraverseIn.AWAIT_ALL
+        assert node.traverse_in == TraverseIn.AWAIT_FIRST
         assert node.traverse_out == TraverseOut.SPAWN_ALL
         assert node.thought_type == ThoughtType.NEW
         assert node.message_type == MessageType.AUTOMATIC

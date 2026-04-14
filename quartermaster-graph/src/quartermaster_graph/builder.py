@@ -7,7 +7,9 @@ from typing import Any, Callable, Union
 from uuid import UUID, uuid4
 
 from quartermaster_graph.enums import (
+    MessageType,
     NodeType,
+    ThoughtType,
     TraverseIn,
     TraverseOut,
 )
@@ -228,7 +230,8 @@ class _BranchBuilder:
             model=model, provider=provider, temperature=temperature,
             system_instruction=system_instruction, **kwargs,
         )
-        node = GraphNode(type=NodeType.INSTRUCTION, name=name, metadata=meta)
+        node = GraphNode(type=NodeType.INSTRUCTION, name=name, metadata=meta,
+                         message_type=MessageType.ASSISTANT)
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
@@ -247,7 +250,8 @@ class _BranchBuilder:
             model=model, provider=provider, temperature=temperature,
             system_instruction=system_instruction, **kwargs,
         )
-        node = GraphNode(type=NodeType.SUMMARIZE, name=name, metadata=meta)
+        node = GraphNode(type=NodeType.SUMMARIZE, name=name, metadata=meta,
+                         message_type=MessageType.ASSISTANT)
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
@@ -277,7 +281,8 @@ class _BranchBuilder:
         )
         meta["program_version_ids"] = tools or []
         meta["max_iterations"] = max_iterations
-        node = GraphNode(type=NodeType.AGENT, name=name, metadata=meta)
+        node = GraphNode(type=NodeType.AGENT, name=name, metadata=meta,
+                         message_type=MessageType.ASSISTANT)
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
@@ -295,7 +300,8 @@ class _BranchBuilder:
             model=model, provider=provider,
             system_instruction=system_instruction, vision=True, **kwargs,
         )
-        node = GraphNode(type=NodeType.INSTRUCTION_IMAGE_VISION, name=name, metadata=meta)
+        node = GraphNode(type=NodeType.INSTRUCTION_IMAGE_VISION, name=name, metadata=meta,
+                         message_type=MessageType.ASSISTANT)
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
@@ -313,7 +319,8 @@ class _BranchBuilder:
         meta: dict[str, Any] = {}
         if prompts:
             meta["text_snippets"] = prompts
-        node = GraphNode(type=NodeType.USER, name=name, metadata=meta)
+        node = GraphNode(type=NodeType.USER, name=name, metadata=meta,
+                         message_type=MessageType.USER)
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
@@ -329,6 +336,7 @@ class _BranchBuilder:
         node = GraphNode(
             type=NodeType.USER_FORM, name=name,
             metadata={"parameters": parameters or []},
+            message_type=MessageType.USER,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -368,6 +376,8 @@ class _BranchBuilder:
         node = GraphNode(
             type=NodeType.VAR, name=name,
             metadata={"name": variable, "expression": expression},
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -378,6 +388,8 @@ class _BranchBuilder:
         node = GraphNode(
             type=NodeType.CODE, name=name,
             metadata={"code": code, "filename": filename},
+            thought_type=ThoughtType.SKIP,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -388,6 +400,8 @@ class _BranchBuilder:
         node = GraphNode(
             type=NodeType.TEXT_TO_VARIABLE, name=name,
             metadata={"variable": variable, "source": source},
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -398,6 +412,7 @@ class _BranchBuilder:
         node = GraphNode(
             type=NodeType.PROGRAM_RUNNER, name=name,
             metadata={"program": program, **kwargs},
+            message_type=MessageType.TOOL,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -419,6 +434,8 @@ class _BranchBuilder:
         node = GraphNode(
             type=NodeType.IF, name=name,
             traverse_out=TraverseOut.SPAWN_PICKED,
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
             metadata={"if_expression": expression},
         )
         _apply_flow_config(node, flow_cfg)
@@ -456,6 +473,8 @@ class _BranchBuilder:
         node = GraphNode(
             type=NodeType.DECISION, name=name,
             traverse_out=TraverseOut.SPAWN_PICKED,
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
             metadata=meta,
         )
         _apply_flow_config(node, flow_cfg)
@@ -478,6 +497,8 @@ class _BranchBuilder:
         node = GraphNode(
             type=NodeType.STATIC_DECISION, name=name,
             traverse_out=TraverseOut.SPAWN_PICKED,
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
             metadata={"expression": expression},
         )
         _apply_flow_config(node, flow_cfg)
@@ -500,6 +521,8 @@ class _BranchBuilder:
             type=NodeType.USER_DECISION, name=name,
             traverse_in=TraverseIn.AWAIT_ALL,
             traverse_out=TraverseOut.SPAWN_PICKED,
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         self._add_node(node)
@@ -559,6 +582,8 @@ class _BranchBuilder:
         node = GraphNode(
             type=NodeType.SWITCH, name=name,
             traverse_out=TraverseOut.SPAWN_PICKED,
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
             metadata=meta,
         )
         _apply_flow_config(node, flow_cfg)
@@ -577,6 +602,8 @@ class _BranchBuilder:
         node = GraphNode(
             type=NodeType.BREAK, name=name,
             metadata={"break_targets": targets or []},
+            thought_type=ThoughtType.SKIP,
+            message_type=MessageType.SYSTEM,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -632,6 +659,7 @@ class _BranchBuilder:
         merge_node = GraphNode(
             type=NodeType.MERGE, name=name,
             traverse_in=TraverseIn.AWAIT_ALL,
+            message_type=MessageType.ASSISTANT,
             position=self._graph._advance_position(),
             metadata=meta,
         )
@@ -698,6 +726,8 @@ class _BranchBuilder:
                 "memory_type": memory_type,
                 "variable_names": variable_names or [],
             },
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -724,6 +754,8 @@ class _BranchBuilder:
                 "memory_type": memory_type,
                 "variables": variables or [],
             },
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -744,6 +776,8 @@ class _BranchBuilder:
                 "memory_type": memory_type,
                 "variables": variables or [],
             },
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -766,6 +800,8 @@ class _BranchBuilder:
                 "memory_name": memory_name,
                 "initial_data": initial_data or [],
             },
+            thought_type=ThoughtType.SKIP,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -784,6 +820,8 @@ class _BranchBuilder:
                 "memory_name": memory_name,
                 "initial_data": initial_data or [],
             },
+            thought_type=ThoughtType.SKIP,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -798,6 +836,8 @@ class _BranchBuilder:
         node = GraphNode(
             type=NodeType.COMMENT, name=name,
             metadata={"comment": text},
+            thought_type=ThoughtType.SKIP,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -816,6 +856,7 @@ class _BranchBuilder:
         node = GraphNode(
             type=NodeType.SUB_ASSISTANT, name=name,
             metadata={"sub_assistant_id": graph_id},
+            message_type=MessageType.ASSISTANT,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1008,7 +1049,11 @@ class GraphBuilder:
         if self._branch_endpoints:
             for ep in self._branch_endpoints:
                 end_node = GraphNode(
-                    type=NodeType.END, name="End", position=self._advance_position()
+                    type=NodeType.END, name="End",
+                    traverse_out=TraverseOut.SPAWN_NONE,
+                    thought_type=ThoughtType.SKIP,
+                    message_type=MessageType.VARIABLE,
+                    position=self._advance_position(),
                 )
                 self._nodes.append(end_node)
                 self._edges.append(GraphEdge(source_id=ep, target_id=end_node.id))
@@ -1077,7 +1122,9 @@ class GraphBuilder:
 
     def start(self) -> GraphBuilder:
         """Add a Start node."""
-        node = GraphNode(type=NodeType.START, name="Start")
+        node = GraphNode(type=NodeType.START, name="Start",
+                         thought_type=ThoughtType.SKIP,
+                         message_type=MessageType.VARIABLE)
         self._start_node_id = node.id
         return self._add_node(node)
 
@@ -1087,7 +1134,10 @@ class GraphBuilder:
         If there are pending branch endpoints, auto-merges them first so
         the End node is reachable from all branches.
         """
-        node = GraphNode(type=NodeType.END, name="End")
+        node = GraphNode(type=NodeType.END, name="End",
+                         traverse_out=TraverseOut.SPAWN_NONE,
+                         thought_type=ThoughtType.SKIP,
+                         message_type=MessageType.VARIABLE)
         return self._add_node(node)
 
     # ------------------------------------------------------------------
@@ -1112,7 +1162,8 @@ class GraphBuilder:
             model=model, provider=provider, temperature=temperature,
             system_instruction=system_instruction, **kwargs,
         )
-        node = GraphNode(type=NodeType.INSTRUCTION, name=name, metadata=meta)
+        node = GraphNode(type=NodeType.INSTRUCTION, name=name, metadata=meta,
+                         message_type=MessageType.ASSISTANT)
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
@@ -1131,7 +1182,8 @@ class GraphBuilder:
             model=model, provider=provider, temperature=temperature,
             system_instruction=system_instruction, **kwargs,
         )
-        node = GraphNode(type=NodeType.SUMMARIZE, name=name, metadata=meta)
+        node = GraphNode(type=NodeType.SUMMARIZE, name=name, metadata=meta,
+                         message_type=MessageType.ASSISTANT)
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
@@ -1161,7 +1213,8 @@ class GraphBuilder:
         )
         meta["program_version_ids"] = tools or []
         meta["max_iterations"] = max_iterations
-        node = GraphNode(type=NodeType.AGENT, name=name, metadata=meta)
+        node = GraphNode(type=NodeType.AGENT, name=name, metadata=meta,
+                         message_type=MessageType.ASSISTANT)
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
@@ -1179,7 +1232,8 @@ class GraphBuilder:
             model=model, provider=provider,
             system_instruction=system_instruction, vision=True, **kwargs,
         )
-        node = GraphNode(type=NodeType.INSTRUCTION_IMAGE_VISION, name=name, metadata=meta)
+        node = GraphNode(type=NodeType.INSTRUCTION_IMAGE_VISION, name=name, metadata=meta,
+                         message_type=MessageType.ASSISTANT)
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
@@ -1216,6 +1270,8 @@ class GraphBuilder:
         node = GraphNode(
             type=NodeType.DECISION, name=name,
             traverse_out=TraverseOut.SPAWN_PICKED,
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
             metadata=meta,
         )
         _apply_flow_config(node, flow_cfg)
@@ -1245,6 +1301,8 @@ class GraphBuilder:
         node = GraphNode(
             type=NodeType.STATIC_DECISION, name=name,
             traverse_out=TraverseOut.SPAWN_PICKED,
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
             metadata={"expression": expression},
         )
         _apply_flow_config(node, flow_cfg)
@@ -1278,6 +1336,8 @@ class GraphBuilder:
         node = GraphNode(
             type=NodeType.SWITCH, name=name,
             traverse_out=TraverseOut.SPAWN_PICKED,
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
             metadata=meta,
         )
         _apply_flow_config(node, flow_cfg)
@@ -1340,6 +1400,8 @@ class GraphBuilder:
         node = GraphNode(
             type=NodeType.IF, name=name,
             traverse_out=TraverseOut.SPAWN_PICKED,
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
             metadata={"if_expression": expression},
         )
         _apply_flow_config(node, flow_cfg)
@@ -1362,6 +1424,8 @@ class GraphBuilder:
         node = GraphNode(
             type=NodeType.BREAK, name=name,
             metadata={"break_targets": targets or []},
+            thought_type=ThoughtType.SKIP,
+            message_type=MessageType.SYSTEM,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1386,6 +1450,8 @@ class GraphBuilder:
         node = GraphNode(
             type=NodeType.CODE, name=name,
             metadata={"code": code, "filename": filename},
+            thought_type=ThoughtType.SKIP,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1401,6 +1467,8 @@ class GraphBuilder:
         node = GraphNode(
             type=NodeType.VAR, name=name,
             metadata={"name": variable, "expression": expression},
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1421,6 +1489,8 @@ class GraphBuilder:
         node = GraphNode(
             type=NodeType.TEXT_TO_VARIABLE, name=name,
             metadata={"variable": variable, "source": source},
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1431,6 +1501,7 @@ class GraphBuilder:
         node = GraphNode(
             type=NodeType.PROGRAM_RUNNER, name=name,
             metadata={"program": program, **kwargs},
+            message_type=MessageType.TOOL,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1455,6 +1526,8 @@ class GraphBuilder:
                 "memory_type": memory_type,
                 "variable_names": variable_names or [],
             },
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1475,6 +1548,8 @@ class GraphBuilder:
                 "memory_type": memory_type,
                 "variables": variables or [],
             },
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1495,6 +1570,8 @@ class GraphBuilder:
                 "memory_type": memory_type,
                 "variables": variables or [],
             },
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1513,6 +1590,8 @@ class GraphBuilder:
                 "memory_name": memory_name,
                 "initial_data": initial_data or [],
             },
+            thought_type=ThoughtType.SKIP,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1531,6 +1610,8 @@ class GraphBuilder:
                 "memory_name": memory_name,
                 "initial_data": initial_data or [],
             },
+            thought_type=ThoughtType.SKIP,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1549,7 +1630,8 @@ class GraphBuilder:
         meta: dict[str, Any] = {}
         if prompts:
             meta["text_snippets"] = prompts
-        node = GraphNode(type=NodeType.USER, name=name, metadata=meta)
+        node = GraphNode(type=NodeType.USER, name=name, metadata=meta,
+                         message_type=MessageType.USER)
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
@@ -1567,6 +1649,8 @@ class GraphBuilder:
             type=NodeType.USER_DECISION, name=name,
             traverse_in=TraverseIn.AWAIT_ALL,
             traverse_out=TraverseOut.SPAWN_PICKED,
+            thought_type=ThoughtType.USE_PREVIOUS,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         node.position = self._advance_position()
@@ -1590,6 +1674,7 @@ class GraphBuilder:
         node = GraphNode(
             type=NodeType.USER_FORM, name=name,
             metadata={"parameters": parameters or []},
+            message_type=MessageType.USER,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1604,6 +1689,8 @@ class GraphBuilder:
         node = GraphNode(
             type=NodeType.COMMENT, name=name,
             metadata={"comment": text},
+            thought_type=ThoughtType.SKIP,
+            message_type=MessageType.VARIABLE,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1626,6 +1713,7 @@ class GraphBuilder:
         node = GraphNode(
             type=NodeType.SUB_ASSISTANT, name=name,
             metadata={"sub_assistant_id": graph_id},
+            message_type=MessageType.ASSISTANT,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1683,6 +1771,7 @@ class GraphBuilder:
         merge_node = GraphNode(
             type=NodeType.MERGE, name=name,
             traverse_in=TraverseIn.AWAIT_ALL,
+            message_type=MessageType.ASSISTANT,
             position=self._advance_position(),
             metadata=meta,
         )
