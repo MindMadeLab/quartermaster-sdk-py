@@ -101,7 +101,7 @@ run_graph(
         "reflect golden and purple light. Warm amber glow from the cabin windows. "
         "Pink and orange clouds layered across a deep blue sky."
     ),
-    provider=PROVIDER,
+
 )
 
 
@@ -131,7 +131,7 @@ tool_agent = (
 run_graph(
     tool_agent,
     user_input="What's the weather in Ljubljana and what do you know about Slovenia?",
-    provider=PROVIDER,
+
 )
 
 
@@ -164,7 +164,7 @@ pipeline = (
 run_graph(
     pipeline,
     user_input="The history of artificial intelligence",
-    provider=PROVIDER,
+
 )
 
 

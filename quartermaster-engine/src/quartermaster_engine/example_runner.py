@@ -166,28 +166,31 @@ def _format_conversation(conversation: list[dict], user_input: str) -> str:
 # ---------------------------------------------------------------------------
 
 class LLMExecutor(NodeExecutor):
-    """Calls a real LLM for Instruction and Summarize nodes."""
+    """Calls a real LLM for Instruction and Summarize nodes.
 
-    def __init__(self, provider_registry: ProviderRegistry, default_model: str, default_provider: str):
+    Each node specifies its own model and provider in metadata.
+    The executor just looks them up in the registry.
+    """
+
+    def __init__(self, provider_registry: ProviderRegistry):
         self._registry = provider_registry
-        self._default_model = default_model
-        self._default_provider = default_provider
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
         system_instruction = context.get_meta("llm_system_instruction", "")
-        model = context.get_meta("llm_model", "") or self._default_model
-        provider_name = context.get_meta("llm_provider", "") or self._default_provider
+        model = context.get_meta("llm_model", "")
+        provider_name = context.get_meta("llm_provider", "")
 
-        # Fall back to default if requested provider isn't registered
+        if not provider_name or not model:
+            # Node didn't specify provider/model — try first available
+            for name in self._registry.list_providers():
+                provider_name = name
+                model = _MODEL_MAP.get(name, model)
+                break
+
         try:
             provider = self._registry.get(provider_name)
         except Exception:
-            provider_name = self._default_provider
-            model = self._default_model
-            try:
-                provider = self._registry.get(provider_name)
-            except Exception:
-                return NodeResult(success=False, data={}, error=f"Provider '{provider_name}' not available")
+            return NodeResult(success=False, data={}, error=f"Provider '{provider_name}' not registered. Available: {', '.join(self._registry.list_providers())}")
 
         # Build prompt from conversation history + original user input
         conversation = _get_conversation(context)
@@ -225,17 +228,18 @@ class LLMExecutor(NodeExecutor):
 
 
 class DecisionExecutor(NodeExecutor):
-    """Calls LLM to pick one branch for Decision nodes."""
+    """Calls LLM to pick one branch for Decision nodes.
 
-    def __init__(self, provider_registry: ProviderRegistry, default_model: str, default_provider: str):
+    Each node specifies its own model and provider in metadata.
+    """
+
+    def __init__(self, provider_registry: ProviderRegistry):
         self._registry = provider_registry
-        self._default_model = default_model
-        self._default_provider = default_provider
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
         system_instruction = context.get_meta("llm_system_instruction", "")
-        model = context.get_meta("llm_model", "") or self._default_model
-        provider_name = context.get_meta("llm_provider", "") or self._default_provider
+        model = context.get_meta("llm_model", "")
+        provider_name = context.get_meta("llm_provider", "")
 
         # Get available options from outgoing edges
         edges = context.graph.get_edges_from(context.node_id)
@@ -245,18 +249,18 @@ class DecisionExecutor(NodeExecutor):
         if options:
             decision_prompt += f"\n\nOptions: {', '.join(options)}\nRespond with EXACTLY one of the options above, nothing else."
 
-        # Fall back to default if requested provider isn't registered
+        if not provider_name or not model:
+            for name in self._registry.list_providers():
+                provider_name = name
+                model = _MODEL_MAP.get(name, model)
+                break
+
         try:
             provider = self._registry.get(provider_name)
         except Exception:
-            provider_name = self._default_provider
-            model = self._default_model
-            try:
-                provider = self._registry.get(provider_name)
-            except Exception:
-                # Fallback: pick first option
-                picked = options[0] if options else ""
-                return NodeResult(success=True, data={}, output_text=picked, picked_node=picked)
+            # Fallback: pick first option
+            picked = options[0] if options else ""
+            return NodeResult(success=True, data={}, output_text=picked, picked_node=picked)
 
         # Build prompt from conversation history
         conversation = _get_conversation(context)
@@ -448,13 +452,13 @@ class UserFormExecutor(NodeExecutor):
 # ---------------------------------------------------------------------------
 
 def _build_registry(
-    provider_registry: ProviderRegistry, model: str, provider_name: str,
+    provider_registry: ProviderRegistry,
     interactive: bool = False,
 ) -> SimpleNodeRegistry:
     """Create a node registry with executors for all common node types."""
     reg = SimpleNodeRegistry()
-    llm = LLMExecutor(provider_registry, model, provider_name)
-    decision = DecisionExecutor(provider_registry, model, provider_name)
+    llm = LLMExecutor(provider_registry)
+    decision = DecisionExecutor(provider_registry)
     user = UserExecutor(interactive=interactive)
     static = StaticExecutor()
     var = VarExecutor()
@@ -515,16 +519,18 @@ def _build_registry(
 def run_graph(
     graph: AgentGraph,
     user_input: str | None = None,
-    provider: str | None = None,
     verbose: bool = True,
     interactive: bool | None = None,
 ) -> FlowResult:
     """Build and execute a graph with real LLM calls.
 
+    Each node in the graph specifies its own model and provider via metadata.
+    The runner registers all available providers (from .env / environment)
+    and lets each node use whichever one it needs.
+
     Args:
         graph: The built graph (from Graph.build() or the Graph itself).
         user_input: The initial user message. If None, interactive mode prompts stdin.
-        provider: Force a provider ("anthropic", "openai", etc.). Auto-detects if None.
         verbose: Print events as they happen.
         interactive: If True, User nodes prompt stdin. If None, auto-detect
             (interactive when user_input is None).
@@ -542,29 +548,21 @@ def run_graph(
     if interactive is None:
         interactive = user_input is None
 
-    # Detect provider
-    if provider:
-        provider_name = provider
-        model = _MODEL_MAP.get(provider, "gpt-4o")
-    else:
-        provider_name, model = _detect_provider()
+    # Register all available providers
+    provider_registry = _get_provider_registry("")
+    available = provider_registry.list_providers()
 
-    if not provider_name:
-        print("No API key found. Set one of:")
-        for p in _MODEL_MAP:
-            print(f"  export {p.upper()}_API_KEY='...'")
+    if not available:
+        print("No providers available. Set API keys in .env or run ollama serve.")
         sys.exit(1)
 
     if verbose and not interactive:
-        print(f"Provider: {provider_name} ({model})")
+        print(f"Providers: {', '.join(available)}")
         print(f"Input: {user_input!r}")
         print()
 
-    # Set up provider registry
-    provider_registry = _get_provider_registry(provider_name)
-
     # Set up node registry
-    node_registry = _build_registry(provider_registry, model, provider_name, interactive=interactive)
+    node_registry = _build_registry(provider_registry, interactive=interactive)
 
     # Event handler — respects show_output metadata flag
     _silent_types = {NodeType.START.value, NodeType.END.value}

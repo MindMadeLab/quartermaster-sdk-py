@@ -134,14 +134,18 @@ See [`examples/`](./examples/) for runnable examples covering every pattern.
 ```python
 from quartermaster_engine import run_graph
 
-# Run with auto-detected provider (reads API keys from .env)
+# Run — each node uses the provider/model it declares
 run_graph(agent, user_input="What is quantum computing?")
 
 # Interactive mode — pauses at User nodes and prompts stdin
 run_graph(agent)  # no user_input = interactive
+```
 
-# Force a specific provider
-run_graph(agent, user_input="Hello", provider="openai")
+Nodes declare their own provider and model:
+```python
+.instruction("Respond", model="claude-haiku-4-5-20251001", provider="anthropic", ...)
+.instruction("Fast reply", model="llama-3.3-70b-versatile", provider="groq", ...)
+.instruction("Local", model="gemma4:26b", provider="ollama", ...)
 ```
 
 Set up your API keys in a `.env` file at the project root:
