@@ -514,9 +514,8 @@ def run_graph(
         elif isinstance(event, NodeFinished):
             if not _should_show(event.node_id):
                 return
-            output = event.result[:200] + "..." if len(event.result) > 200 else event.result
-            if output:
-                print(f"  {'':15s}   -> {output}", flush=True)
+            if event.result:
+                print(f"\n{event.result}\n", flush=True)
         elif isinstance(event, FlowError):
             print(f"  [ERROR] {event.error}", flush=True)
 
