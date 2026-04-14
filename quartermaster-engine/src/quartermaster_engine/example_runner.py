@@ -57,15 +57,26 @@ _MODEL_MAP = {
     "groq": "llama-3.3-70b-versatile",
     "xai": "grok-3-mini-fast",
     "google": "gemini-2.0-flash",
+    "ollama": "gemma4:26b",
 }
 
 
 def _detect_provider() -> tuple[str, str]:
-    """Auto-detect provider from environment variables."""
+    """Auto-detect provider from environment variables or local Ollama."""
     for provider, model in _MODEL_MAP.items():
+        if provider == "ollama":
+            continue  # check cloud providers first
         env_key = f"{provider.upper()}_API_KEY"
         if os.environ.get(env_key):
             return provider, model
+    # Fall back to Ollama if no cloud keys
+    if "ollama" in _MODEL_MAP:
+        try:
+            import urllib.request
+            urllib.request.urlopen("http://localhost:11434/api/tags", timeout=1)
+            return "ollama", _MODEL_MAP["ollama"]
+        except Exception:
+            pass
     return "", ""
 
 
@@ -79,10 +90,12 @@ _PROVIDER_CLASSES = {
 
 
 def _get_provider_registry(provider_name: str) -> ProviderRegistry:
-    """Create a ProviderRegistry with ALL available providers (based on env keys)."""
+    """Create a ProviderRegistry with ALL available providers (based on env keys + local)."""
     import importlib
     registry = ProviderRegistry()
     registered = []
+
+    # Register cloud providers (need API keys)
     for name, cls_path in _PROVIDER_CLASSES.items():
         api_key = os.environ.get(f"{name.upper()}_API_KEY", "")
         if not api_key:
@@ -95,8 +108,16 @@ def _get_provider_registry(provider_name: str) -> ProviderRegistry:
             registered.append(name)
         except ImportError:
             pass  # SDK not installed for this provider
+
+    # Register Ollama (local, no API key needed)
+    try:
+        registry.register_local("ollama")
+        registered.append("ollama")
+    except Exception:
+        pass  # Ollama provider not available
+
     if not registered:
-        raise ValueError("No provider SDKs installed. pip install anthropic / openai / etc.")
+        raise ValueError("No providers available. Set API keys in .env or run ollama serve.")
     return registry
 
 
