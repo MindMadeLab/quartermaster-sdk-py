@@ -1,10 +1,11 @@
 name: Publish to PyPI
 
+# Publishing is manual-only: click "Run workflow" in the Actions tab when you
+# want to cut a release. Auto-publish on every push to master was intentionally
+# removed so routine commits (docs, README tweaks, refactors) do not burn through
+# version numbers.
 on:
-  push:
-    branches: [master, main]   # Auto-publish on every merge to master
-
-  workflow_dispatch:            # Manual trigger with version bump control
+  workflow_dispatch:
     inputs:
       bump:
         description: "Version bump type"
@@ -88,23 +89,7 @@ jobs:
 
       - name: Determine version bump type
         id: bump_type
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "bump=${{ github.event.inputs.bump }}" >> "$GITHUB_OUTPUT"
-          else
-            # Auto-detect from commit messages on push to master
-            # Use "minor" if any commit contains [minor]
-            # Use "major" if any commit contains [major]
-            # Default to "patch"
-            COMMITS=$(git log --format=%s $(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~10")..HEAD 2>/dev/null || echo "")
-            if echo "$COMMITS" | grep -qiE '\[major\]'; then
-              echo "bump=major" >> "$GITHUB_OUTPUT"
-            elif echo "$COMMITS" | grep -qiE '\[minor\]'; then
-              echo "bump=minor" >> "$GITHUB_OUTPUT"
-            else
-              echo "bump=patch" >> "$GITHUB_OUTPUT"
-            fi
-          fi
+        run: echo "bump=${{ github.event.inputs.bump }}" >> "$GITHUB_OUTPUT"
 
       - name: Bump version across all packages
         id: bump
