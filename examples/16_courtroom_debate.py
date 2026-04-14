@@ -22,8 +22,7 @@ from __future__ import annotations
 
 from quartermaster_graph import Graph
 from quartermaster_graph.enums import TraverseIn
-from quartermaster_graph.models import GraphEdge, GraphNode
-from _runner import run_graph
+from quartermaster_engine import run_graph
 
 
 PROSECUTION_MODEL = "grok-3-mini-fast"
@@ -67,7 +66,7 @@ trial = (
     # DEBATE LOOP — Round header is the loop target
     # =====================================================================
 
-    .text("Round header", template="\n━━━ ROUND {{round_number}} ━━━\n")
+    .text("Round header", template="\n━━━ ROUND {{round_number}} ━━━\n", traverse_in=TraverseIn.AWAIT_FIRST)
 
     .instruction(
         "Prosecution argues",
@@ -167,17 +166,7 @@ trial = (
 # ---------------------------------------------------------------------------
 # Wire the loop back-edge: "Continue debate" -> "Round header"
 # ---------------------------------------------------------------------------
-node_by_name = {n.name: n for n in trial.nodes}
-continue_node = node_by_name["Continue debate"]
-loop_target = node_by_name["Round header"]
-
-# Back-edge: Continue -> Round header (creates the loop)
-trial._edges.append(
-    GraphEdge(source_id=continue_node.id, target_id=loop_target.id, label="next_round")
-)
-
-# Loop target must fire on ANY predecessor (not wait for both Init + Continue)
-loop_target.traverse_in = TraverseIn.AWAIT_FIRST
+trial.connect("Continue debate", "Round header", label="next_round")
 
 # Build (skip validation — intentional cycle)
 agent = trial.build(validate=False)

@@ -17,6 +17,7 @@ from quartermaster_engine.messaging.context_manager import ContextManager
 from quartermaster_engine.messaging.message_router import MessageRouter
 from quartermaster_engine.runner.flow_runner import FlowRunner
 from quartermaster_engine.stores.base import ExecutionStore
+from quartermaster_engine.example_runner import run_graph
 from quartermaster_engine.stores.memory_store import InMemoryStore
 from quartermaster_engine.types import (
     ErrorStrategy,
@@ -67,6 +68,8 @@ __all__ = [
     # Messaging
     "MessageRouter",
     "ContextManager",
+    # Example runner
+    "run_graph",
 ]
 
 __version__ = "0.1.0"

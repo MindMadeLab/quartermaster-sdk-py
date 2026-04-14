@@ -21,7 +21,7 @@ Usage:
 """
 
 from quartermaster_graph import Graph
-from _runner import run_graph
+from quartermaster_engine import run_graph
 
 # -- Build the graph ----------------------------------------------------------
 graph = (

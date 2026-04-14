@@ -1,14 +1,14 @@
-"""Shared helper that bridges Graph -> FlowRunner -> LLM providers.
+"""Example runner — bridges Graph -> FlowRunner -> LLM providers.
 
-Usage in examples:
+Usage::
 
-    from _runner import run_graph
+    from quartermaster_engine import run_graph
 
     agent = Graph("My Agent").start().user("Hi").instruction("Reply", ...).end()
     result = run_graph(agent, user_input="Tell me about AI")
     print(result.final_output)
 
-Auto-detects API keys from environment:
+Auto-detects API keys from environment (or .env file at CWD):
     ANTHROPIC_API_KEY  ->  claude-haiku-4-5-20251001
     OPENAI_API_KEY     ->  gpt-4o
 
@@ -24,22 +24,23 @@ import pathlib
 import sys
 from typing import Any
 
-# Load .env from repo root if it exists (for API keys)
-_env_file = pathlib.Path(__file__).resolve().parent.parent / ".env"
+# Load .env from current working directory if it exists
+_env_file = pathlib.Path.cwd() / ".env"
 if _env_file.is_file():
-    for line in _env_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, _, value = line.partition("=")
-            key = key.strip()
-            value = value.strip().strip("'\"")
-            if key:
-                os.environ[key] = value
+    for _line in _env_file.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _key, _, _val = _line.partition("=")
+            _key = _key.strip()
+            _val = _val.strip().strip("'\"")
+            if _key:
+                os.environ[_key] = _val
 
-from quartermaster_engine import FlowRunner, InMemoryStore, NodeStarted, NodeFinished, FlowEvent, FlowError, TokenGenerated
+from quartermaster_engine.runner.flow_runner import FlowRunner, FlowResult
+from quartermaster_engine.stores.memory_store import InMemoryStore
+from quartermaster_engine.events import NodeStarted, NodeFinished, FlowEvent, FlowError, TokenGenerated
 from quartermaster_engine.nodes import SimpleNodeRegistry, NodeExecutor, NodeResult
 from quartermaster_engine.context.execution_context import ExecutionContext
-from quartermaster_engine.runner.flow_runner import FlowResult
 from quartermaster_graph import AgentGraph
 from quartermaster_graph.enums import NodeType
 from quartermaster_providers import ProviderRegistry, LLMConfig
@@ -112,8 +113,8 @@ class LLMExecutor(NodeExecutor):
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
         system_instruction = context.get_meta("llm_system_instruction", "")
-        model = context.get_meta("llm_model", self._default_model)
-        provider_name = context.get_meta("llm_provider", self._default_provider)
+        model = context.get_meta("llm_model", "") or self._default_model
+        provider_name = context.get_meta("llm_provider", "") or self._default_provider
 
         # Fall back to default if requested provider isn't registered
         try:
@@ -184,8 +185,8 @@ class DecisionExecutor(NodeExecutor):
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
         system_instruction = context.get_meta("llm_system_instruction", "")
-        model = context.get_meta("llm_model", self._default_model)
-        provider_name = context.get_meta("llm_provider", self._default_provider)
+        model = context.get_meta("llm_model", "") or self._default_model
+        provider_name = context.get_meta("llm_provider", "") or self._default_provider
 
         # Get available options from outgoing edges
         edges = context.graph.get_edges_from(context.node_id)

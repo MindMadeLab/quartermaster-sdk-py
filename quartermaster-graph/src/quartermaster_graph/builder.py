@@ -30,8 +30,8 @@ def _apply_flow_config(node: GraphNode, kwargs: dict[str, Any]) -> None:
 # ── Helpers ──────────────────────────────────────────────────────────
 
 def _llm_meta(
-    model: str = "gpt-4o",
-    provider: str = "openai",
+    model: str = "",
+    provider: str = "",
     temperature: float = 0.5,
     system_instruction: str = "",
     stream: bool = True,
@@ -213,8 +213,8 @@ class _BranchBuilder:
     def instruction(
         self,
         name: str,
-        model: str = "gpt-4o",
-        provider: str = "openai",
+        model: str = "",
+        provider: str = "",
         temperature: float = 0.5,
         system_instruction: str = "",
         **kwargs: Any,
@@ -235,8 +235,8 @@ class _BranchBuilder:
     def summarize(
         self,
         name: str,
-        model: str = "gpt-4o",
-        provider: str = "openai",
+        model: str = "",
+        provider: str = "",
         temperature: float = 0.5,
         system_instruction: str = "Summarize the given conversation concisely.",
         **kwargs: Any,
@@ -254,8 +254,8 @@ class _BranchBuilder:
     def agent(
         self,
         name: str,
-        model: str = "gpt-4o",
-        provider: str = "openai",
+        model: str = "",
+        provider: str = "",
         system_instruction: str = "",
         tools: list[str] | None = None,
         max_iterations: int = 25,
@@ -284,8 +284,8 @@ class _BranchBuilder:
     def vision(
         self,
         name: str,
-        model: str = "gpt-4o",
-        provider: str = "openai",
+        model: str = "",
+        provider: str = "",
         system_instruction: str = "",
         **kwargs: Any,
     ) -> _BranchBuilder:
@@ -430,8 +430,8 @@ class _BranchBuilder:
     def decision(
         self,
         name: str,
-        model: str = "gpt-4o",
-        provider: str = "openai",
+        model: str = "",
+        provider: str = "",
         temperature: float = 0.5,
         prefix_message: str = "",
         suffix_message: str = "",
@@ -607,8 +607,8 @@ class _BranchBuilder:
 
     def merge(
         self, name: str = "Merge",
-        model: str = "gpt-4o",
-        provider: str = "openai",
+        model: str = "",
+        provider: str = "",
         temperature: float = 0.5,
         system_instruction: str = "",
         prefix_message: str = "Compress following conversations into one",
@@ -1097,8 +1097,8 @@ class GraphBuilder:
     def instruction(
         self,
         name: str,
-        model: str = "gpt-4o",
-        provider: str = "openai",
+        model: str = "",
+        provider: str = "",
         temperature: float = 0.5,
         system_instruction: str = "",
         **kwargs: Any,
@@ -1119,8 +1119,8 @@ class GraphBuilder:
     def summarize(
         self,
         name: str,
-        model: str = "gpt-4o",
-        provider: str = "openai",
+        model: str = "",
+        provider: str = "",
         temperature: float = 0.5,
         system_instruction: str = "Summarize the given conversation concisely.",
         **kwargs: Any,
@@ -1138,8 +1138,8 @@ class GraphBuilder:
     def agent(
         self,
         name: str,
-        model: str = "gpt-4o",
-        provider: str = "openai",
+        model: str = "",
+        provider: str = "",
         system_instruction: str = "",
         tools: list[str] | None = None,
         max_iterations: int = 25,
@@ -1168,8 +1168,8 @@ class GraphBuilder:
     def vision(
         self,
         name: str,
-        model: str = "gpt-4o",
-        provider: str = "openai",
+        model: str = "",
+        provider: str = "",
         system_instruction: str = "",
         **kwargs: Any,
     ) -> GraphBuilder:
@@ -1190,8 +1190,8 @@ class GraphBuilder:
     def decision(
         self,
         name: str,
-        model: str = "gpt-4o",
-        provider: str = "openai",
+        model: str = "",
+        provider: str = "",
         temperature: float = 0.5,
         prefix_message: str = "",
         suffix_message: str = "",
@@ -1658,8 +1658,8 @@ class GraphBuilder:
 
     def merge(
         self, name: str = "Merge",
-        model: str = "gpt-4o",
-        provider: str = "openai",
+        model: str = "",
+        provider: str = "",
         temperature: float = 0.5,
         system_instruction: str = "",
         prefix_message: str = "Compress following conversations into one",

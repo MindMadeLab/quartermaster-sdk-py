@@ -18,7 +18,7 @@ from __future__ import annotations
 import argparse
 
 from quartermaster_graph import Graph
-from _runner import run_graph
+from quartermaster_engine import run_graph
 
 
 def build_assistant_graph(model: str) -> Graph:

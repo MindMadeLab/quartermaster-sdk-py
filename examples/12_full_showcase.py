@@ -26,7 +26,7 @@ Usage:
 from __future__ import annotations
 
 from quartermaster_graph import Graph
-from _runner import run_graph
+from quartermaster_engine import run_graph
 
 # ---------------------------------------------------------------------------
 # Sub-graph: Web research pipeline

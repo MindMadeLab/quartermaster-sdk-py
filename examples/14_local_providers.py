@@ -20,7 +20,7 @@ Usage:
 
 from quartermaster_graph import Graph
 from quartermaster_providers import ProviderRegistry
-from _runner import run_graph
+from quartermaster_engine import run_graph
 
 # =====================================================================
 # Setup 1: Ollama only  (one line!)
