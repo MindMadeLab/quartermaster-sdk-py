@@ -31,53 +31,14 @@ permissions:
 
 jobs:
   # -----------------------------------------------------------------------
-  # Step 1: Run full test suite before publishing
-  # -----------------------------------------------------------------------
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: true
-      matrix:
-        python-version: ["3.11", "3.12"]
-        package:
-          - quartermaster-providers
-          - quartermaster-graph
-          - quartermaster-tools
-          - quartermaster-nodes
-          - quartermaster-engine
-          - quartermaster-mcp-client
-          - quartermaster-code-runner
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          enable-cache: true
-
-      # Sync the whole uv workspace so cross-package deps like
-      # "quartermaster-graph>=0.1.0" resolve to the local editable install
-      # instead of being fetched from PyPI (where they don't exist yet on
-      # the first release).
-      - name: Sync workspace
-        run: uv sync --all-packages
-
-      # Install the matrix package's own [dev] extras (pytest, respx,
-      # httpx, etc. — these are per-package, not in the root dev group).
-      - name: Install package dev extras
-        run: uv pip install -e "./${{ matrix.package }}[dev]"
-
-      - name: Run tests
-        working-directory: ${{ matrix.package }}
-        run: uv run --no-sync pytest -v --tb=short
-
-  # -----------------------------------------------------------------------
-  # Step 2: Bump version in all packages, commit, and tag
+  # Step 1: Bump version in all packages, commit, and tag
+  #
+  # Tests are intentionally NOT re-run here. ci.yml already tests every
+  # package on Python 3.11/3.12/3.13 for every push and PR to master, so
+  # by the time you click "Run workflow" master is already green. Skip
+  # the redundant ~4 min test matrix and go straight to versioning.
   # -----------------------------------------------------------------------
   version:
-    needs: test
     runs-on: ubuntu-latest
     outputs:
       new_version: ${{ steps.bump.outputs.new_version }}
@@ -175,7 +136,7 @@ jobs:
           git push origin HEAD --follow-tags
 
   # -----------------------------------------------------------------------
-  # Step 3: Build all packages with the new version
+  # Step 2: Build all packages with the new version
   # -----------------------------------------------------------------------
   build:
     needs: version
@@ -218,7 +179,7 @@ jobs:
           path: ${{ matrix.package }}/dist/
 
   # -----------------------------------------------------------------------
-  # Step 4: Publish all packages to PyPI in dependency order
+  # Step 3: Publish all packages to PyPI in dependency order
   # -----------------------------------------------------------------------
   publish:
     needs: [version, build]
