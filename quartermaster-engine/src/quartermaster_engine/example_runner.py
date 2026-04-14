@@ -42,6 +42,7 @@ from quartermaster_engine.events import NodeStarted, NodeFinished, FlowEvent, Fl
 from quartermaster_engine.nodes import SimpleNodeRegistry, NodeExecutor, NodeResult
 from quartermaster_engine.context.execution_context import ExecutionContext
 from quartermaster_engine.context.node_execution import NodeStatus
+from quartermaster_engine.types import MessageRole
 from quartermaster_graph import AgentGraph
 from quartermaster_graph.enums import NodeType
 from quartermaster_providers import ProviderRegistry, LLMConfig
@@ -267,6 +268,11 @@ class UserExecutor(NodeExecutor):
         self._interactive = interactive
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
+        # Check if user input was provided via resume() — a USER message in context
+        for msg in reversed(context.messages):
+            if msg.role == MessageRole.USER and msg.content:
+                return NodeResult(success=True, data={}, output_text=msg.content)
+
         if self._interactive:
             # Pause the flow — run_graph will prompt stdin and call resume()
             prompt = context.current_node.name if context.current_node else "Your input"
@@ -581,17 +587,13 @@ def run_graph(
     result = runner.run(user_input or "")
 
     # Handle pause/resume loop for interactive User nodes
-    while interactive and not result.success and not result.error:
-        # Flow is paused waiting for user input — check for waiting nodes
-        executions = store.get_all_node_executions(result.flow_id)
-        waiting = False
-        for nid, exe in executions.items():
+    def _has_waiting_node(flow_id):
+        for _, exe in store.get_all_node_executions(flow_id).items():
             if exe.status == NodeStatus.WAITING_USER:
-                waiting = True
-                break
+                return True
+        return False
 
-        if not waiting:
-            break
+    while interactive and _has_waiting_node(result.flow_id):
 
         # Prompt user
         try:
