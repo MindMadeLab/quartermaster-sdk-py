@@ -18,7 +18,6 @@ Or force a provider:
 
 from __future__ import annotations
 
-import asyncio
 import os
 import pathlib
 import sys

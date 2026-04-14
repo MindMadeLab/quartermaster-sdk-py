@@ -23,7 +23,6 @@ Usage::
 from __future__ import annotations
 
 import os
-from typing import Any
 
 from quartermaster_providers.providers.openai import OpenAIProvider
 

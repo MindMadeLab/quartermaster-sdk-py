@@ -46,7 +46,7 @@ class CodeExecutionRequest(BaseModel):
     mem_limit: Optional[str] = None
     cpu_shares: Optional[int] = None
     disk_limit: Optional[str] = None
-    allow_network: bool = True
+    allow_network: bool = False
     environment: Optional[dict[str, str]] = None
     prebuild_spec: Optional[PrebuildSpec] = None
 

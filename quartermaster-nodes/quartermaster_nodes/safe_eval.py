@@ -18,7 +18,7 @@ Supports
 * Whitelisted function calls: ``len``, ``str``, ``int``, ``float``,
   ``bool``, ``abs``, ``round``, ``min``, ``max``, ``sorted``,
   ``list``, ``dict``, ``tuple``, ``set``, ``enumerate``, ``zip``,
-  ``range``, ``isinstance``, ``hasattr``, ``any``, ``all``, ``sum``,
+  ``range``, ``isinstance``, ``any``, ``all``, ``sum``,
   ``map``, ``filter``
 * Ternary: ``x if cond else y``
 * Comprehensions: ``[x for x in items]``, ``{k: v for k, v in ...}``
@@ -115,7 +115,6 @@ _SAFE_FUNCTIONS: dict[str, Any] = {
     "any": any,
     "all": all,
     "isinstance": isinstance,
-    "hasattr": hasattr,
     # constants
     "True": True,
     "False": False,
@@ -128,7 +127,7 @@ _SAFE_METHODS: frozenset[str] = frozenset({
     "upper", "lower", "strip", "lstrip", "rstrip", "title", "capitalize",
     "startswith", "endswith", "replace", "split", "rsplit", "join",
     "find", "rfind", "index", "rindex", "count", "isdigit", "isalpha",
-    "isalnum", "isspace", "isupper", "islower", "format", "encode",
+    "isalnum", "isspace", "isupper", "islower", "encode",
     "zfill", "center", "ljust", "rjust", "removeprefix", "removesuffix",
     # list / tuple
     "append", "extend", "insert", "pop", "remove", "clear", "copy",

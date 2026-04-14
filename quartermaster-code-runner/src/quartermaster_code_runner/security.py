@@ -10,6 +10,7 @@ all requests are allowed through.
 
 from __future__ import annotations
 
+import hmac
 from typing import Optional
 
 from fastapi import HTTPException, Request, Security
@@ -59,14 +60,14 @@ async def verify_auth(
         return None
 
     # Check X-API-Key header
-    if api_key and api_key in _api_keys:
+    if api_key and any(hmac.compare_digest(api_key, k) for k in _api_keys):
         return api_key
 
     # Check Authorization Bearer token
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer ") and _auth_token:
         token = auth_header[7:]
-        if token == _auth_token:
+        if hmac.compare_digest(token, _auth_token):
             return token
 
     # If we have an API key but it's invalid

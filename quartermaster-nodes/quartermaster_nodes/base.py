@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Optional
-from uuid import UUID
+from typing import Any
 
 from quartermaster_nodes.config import AssistantInfo, FlowNodeConf
 from quartermaster_nodes.protocols import (

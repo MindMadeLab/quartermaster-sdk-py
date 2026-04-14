@@ -8,7 +8,6 @@ Requires ``httpx``.
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
 from quartermaster_tools.builtin.a2a.discover import _validate_agent_url
 from quartermaster_tools.decorator import tool

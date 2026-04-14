@@ -7,13 +7,11 @@ Uses only stdlib modules (smtplib, imaplib, email).
 from __future__ import annotations
 
 import email as email_lib
-import email.utils
 import imaplib
 import os
 import smtplib
 import time
 from email.mime.text import MIMEText
-from typing import Any
 
 from quartermaster_tools.decorator import tool
 from quartermaster_tools.types import ToolResult

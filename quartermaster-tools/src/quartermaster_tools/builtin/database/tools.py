@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from typing import Any
 
 from quartermaster_tools.decorator import tool
 from quartermaster_tools.types import ToolResult

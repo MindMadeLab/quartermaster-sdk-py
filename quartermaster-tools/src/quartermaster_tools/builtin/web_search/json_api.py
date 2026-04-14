@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from quartermaster_tools.builtin.web_request import _validate_url
 from quartermaster_tools.decorator import tool
 from quartermaster_tools.types import ToolResult
 
@@ -67,6 +68,11 @@ def json_api(
 
     if not url:
         raise ValueError("Parameter 'url' is required")
+
+    # SSRF protection: block private/internal network access
+    url_error = _validate_url(url)
+    if url_error:
+        raise ValueError(url_error)
 
     if method not in _SUPPORTED_METHODS:
         raise ValueError(

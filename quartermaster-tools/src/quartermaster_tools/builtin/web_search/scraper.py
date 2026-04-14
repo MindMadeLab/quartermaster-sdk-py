@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 
+from quartermaster_tools.builtin.web_request import _validate_url
 from quartermaster_tools.decorator import tool
 
 _DEFAULT_TIMEOUT = 30
@@ -129,6 +130,11 @@ def web_scraper(url: str, output_format: str = "text", timeout: int = _DEFAULT_T
 
     if not url:
         raise ValueError("Parameter 'url' is required")
+
+    # SSRF protection: block private/internal network access
+    url_error = _validate_url(url)
+    if url_error:
+        raise ValueError(url_error)
 
     if output_format not in ("text", "markdown", "html"):
         raise ValueError(
