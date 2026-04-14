@@ -46,7 +46,7 @@ uv run examples/run_interactive.py
 | 05 | `05_memory_flow.py` | Customer service with var, text templates, write/read/update memory |
 | 06 | `06_tool_decorator.py` | `@tool()` decorator for creating tools from plain functions |
 | 07 | `07_switch_router.py` | Multi-way switch (5 branches) for language routing |
-
+| 08 | `08_iterative_refinement.py` | Writer-critic loop: 3 rounds of draft, review, and improve |
 | 09 | `09_parallel_agents.py` | Parallel agent sessions with `SessionManager` |
 | 10 | `10_enterprise_agent.py` | Enterprise agent: department sub-graphs, decisions, IF gates, parallel, memory |
 | 11 | `11_nested_control_flow.py` | Parallel fan-out with IF decisions nested inside branches |
