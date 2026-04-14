@@ -1,0 +1,38 @@
+[project]
+name = "quartermaster-workspace"
+version = "0.1.0"
+description = "Quartermaster monorepo workspace"
+requires-python = ">=3.11"
+dependencies = [
+    "quartermaster-sdk",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+[tool.uv.workspace]
+members = [
+    "quartermaster-graph",
+    "quartermaster-providers",
+    "quartermaster-tools",
+    "quartermaster-nodes",
+    "quartermaster-engine",
+    "quartermaster-mcp-client",
+    "quartermaster-code-runner",
+    "quartermaster-sdk",
+]
+
+[tool.uv.sources]
+quartermaster-graph = { workspace = true }
+quartermaster-providers = { workspace = true }
+quartermaster-tools = { workspace = true }
+quartermaster-nodes = { workspace = true }
+quartermaster-engine = { workspace = true }
+quartermaster-mcp-client = { workspace = true }
+quartermaster-code-runner = { workspace = true }
+quartermaster-sdk = { workspace = true }

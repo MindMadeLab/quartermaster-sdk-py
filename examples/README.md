@@ -3,15 +3,36 @@
 Progressive examples demonstrating the Quartermaster AI agent framework,
 from the simplest agent to a full enterprise-grade multi-department assistant.
 
-## Prerequisites
+## Setup
 
 ```bash
-# With uv (recommended)
-uv pip install -e quartermaster-graph -e quartermaster-tools \
-  -e quartermaster-providers -e quartermaster-nodes -e quartermaster-engine
+# Clone the repo
+git clone git@github.com:MindMadeLab/quartermaster-sdk-py.git
+cd quartermaster-sdk-py
 
-# Or install the SDK
-pip install -e quartermaster-sdk
+# Install uv (if you don't have it)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create a virtual environment and install all packages
+uv sync
+
+# Run any example
+uv run examples/01_hello_agent.py
+```
+
+All examples (except `run_interactive.py`) build and validate graphs offline
+-- no API keys or LLM calls needed.
+
+### Running the interactive demo
+
+```bash
+# Set your API key
+export ANTHROPIC_API_KEY="sk-ant-..."
+# or
+export OPENAI_API_KEY="sk-..."
+
+# Run
+uv run examples/run_interactive.py
 ```
 
 ## Examples
@@ -36,26 +57,13 @@ pip install -e quartermaster-sdk
 | 16 | `16_courtroom_debate.py` | Multi-round courtroom drama: parallel prep, loop-back debate, judge verdict |
 | -- | `run_interactive.py` | Real LLM demo with Anthropic/OpenAI auto-detection and decision routing |
 
-## Running
-
-```bash
-# Run any example (no API keys needed -- these build graphs offline)
-python examples/01_hello_agent.py
-
-# Or with uv
-uv run examples/01_hello_agent.py
-```
-
-All examples build and validate graphs without calling any LLM API.
-They print graph structure, node counts, and edge lists to verify correctness.
-
 ## Patterns Demonstrated
 
-- **Fluent builder**: `Graph("name").start().user("Input")...end()` -- chainable API, no `.build()` needed
-- **User input**: Every graph starts with `.user()` after `.start()` to collect input
-- **Decision routing**: `decision()` picks ONE branch via LLM -- no merge needed
-- **If/else**: `if_node()` with safe AST-evaluated boolean expressions -- no merge needed
-- **Switch**: `switch()` for multi-way expression branching -- no merge needed
+- **Fluent builder**: `Graph("name").start().user("Input")...end()` -- chainable API
+- **User input**: `.user()` pauses flow and waits for human input
+- **Decision routing**: `decision()` picks ONE branch via LLM
+- **If/else**: `if_node()` with safe AST-evaluated boolean expressions
+- **Switch**: `switch()` for multi-way expression branching
 - **Parallel fan-out**: `parallel()` + `branch()` for concurrent paths, joined with `static_merge()`
 - **Sub-graphs**: `.use(sub_graph)` inlines a reusable sub-graph
 - **Memory**: `var()`, `write_memory()`, `read_memory()`, `update_memory()` for state
