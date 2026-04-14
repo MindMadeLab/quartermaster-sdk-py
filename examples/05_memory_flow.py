@@ -9,30 +9,17 @@ memory-related node type the builder provides:
   - read_memory()   -- retrieve previously stored data
   - update_memory() -- modify an existing memory entry
 
-Scenario
---------
-1. Greet the customer and collect their name.
-2. Store the name in a variable and write it to memory.
-3. Ask for the issue; store it as a ticket.
-4. Read back the customer name to personalise the response.
-5. Resolve the issue and update the ticket status to "resolved".
-6. Log the completed interaction to memory for audit.
+Executed with a real LLM via the runner.
 
-Graph (simplified)::
-
-    START -> User(name) -> VAR(name) -> WRITE(name)
-          -> Text(greeting) -> User(issue) -> VAR(issue)
-          -> WRITE(ticket) -> READ(name) -> Instruction(resolve)
-          -> UPDATE(ticket) -> WRITE(interaction_log) -> Text(farewell)
-          -> END
+Usage:
+    export ANTHROPIC_API_KEY="sk-ant-..."   # or OPENAI_API_KEY
+    uv run examples/05_memory_flow.py
 """
 
 from __future__ import annotations
 
-try:
-    from quartermaster_graph import Graph
-except ImportError:
-    raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
+from quartermaster_graph import Graph
+from _runner import run_graph
 
 agent = (
     Graph("Customer Service Agent")
@@ -59,6 +46,7 @@ agent = (
     .read_memory("Recall customer", memory_name="customer_name")
     .instruction(
         "Resolve issue",
+        model="claude-sonnet-4-20250514",
         system_instruction=(
             "You are a senior support agent. The customer is {{customer_name}}. "
             "Their issue: {{issue_description}}. Provide a clear, empathetic resolution."
@@ -81,23 +69,4 @@ agent = (
     .end()
 )
 
-# ---------------------------------------------------------------------------
-# Print graph details
-# ---------------------------------------------------------------------------
-
-print(f"Customer Service Agent: {len(agent.nodes)} nodes, {len(agent.edges)} edges")
-
-print("\nGraph structure:")
-for node in agent.nodes:
-    print(f"  [{node.type.value:15s}] {node.name}")
-    if node.metadata:
-        for k, v in node.metadata.items():
-            val = str(v)[:60] + "..." if len(str(v)) > 60 else str(v)
-            print(f"      {k}: {val}")
-
-print("\nMemory operations:")
-for node in agent.nodes:
-    ntype = node.type.value.upper()
-    if "MEMORY" in ntype or ntype == "VAR":
-        key = node.metadata.get("memory_name", node.metadata.get("variable", ""))
-        print(f"  {node.type.value:15s}  {node.name:25s}  key={key}")
+run_graph(agent, user_input="Alice")

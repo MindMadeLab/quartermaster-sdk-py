@@ -1,31 +1,26 @@
 """The simplest possible agent: user asks, LLM responds.
 
 Demonstrates the minimal Graph API -- three nodes chained together
-with the fluent builder.
+with the fluent builder, then executed with a real LLM.
+
+Usage:
+    export ANTHROPIC_API_KEY="sk-ant-..."   # or OPENAI_API_KEY
+    uv run examples/01_hello_agent.py
 """
 
 from __future__ import annotations
 
-try:
-    from quartermaster_graph import Graph
-except ImportError:
-    raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
+from quartermaster_graph import Graph
+from _runner import run_graph
 
 # The simplest agent: ask user -> LLM responds
 agent = (
     Graph("Hello Agent")
     .start()
     .user("Ask me anything")
-    .instruction("Respond", model="gpt-4o", system_instruction="You are a helpful assistant.")
+    .instruction("Respond", model="claude-sonnet-4-20250514", system_instruction="You are a helpful assistant. Be concise.")
     .end()
 )
 
-print(f"Nodes: {len(agent.nodes)}")
-print(f"Edges: {len(agent.edges)}")
-
-# Walk the graph
-print("\nGraph structure:")
-for node in agent.nodes:
-    print(f"  [{node.type.value:15s}] {node.name}")
-for edge in agent.edges:
-    print(f"  Edge: {edge.source_id} -> {edge.target_id}")
+# Execute with a real LLM
+run_graph(agent, user_input="What is the capital of Slovenia?")

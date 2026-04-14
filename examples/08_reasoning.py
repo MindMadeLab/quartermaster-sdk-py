@@ -2,29 +2,28 @@
 
 Demonstrates using reasoning and summarize fluent methods for deep
 analytical workflows. These node types trigger chain-of-thought
-prompting and condensation steps respectively.
+prompting and condensation steps respectively. Executed with a real
+LLM via the runner.
+
+Usage:
+    export ANTHROPIC_API_KEY="sk-ant-..."   # or OPENAI_API_KEY
+    uv run examples/08_reasoning.py
 """
 
 from __future__ import annotations
 
-try:
-    from quartermaster_graph import Graph
-except ImportError:
-    raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
+from quartermaster_graph import Graph
+from _runner import run_graph
 
 agent = (
     Graph("Research Analyst")
     .start()
     .user("What topic should I research?")
-    .reasoning("Deep analysis", model="o1-mini")
-    .instruction("Gather evidence", system_instruction="List key facts and sources")
-    .reasoning("Evaluate evidence")
-    .summarize("Executive summary", system_instruction="Create a concise executive summary")
+    .reasoning("Deep analysis", model="claude-sonnet-4-20250514")
+    .instruction("Gather evidence", model="claude-sonnet-4-20250514", system_instruction="List key facts and sources")
+    .reasoning("Evaluate evidence", model="claude-sonnet-4-20250514")
+    .summarize("Executive summary", model="claude-sonnet-4-20250514", system_instruction="Create a concise executive summary")
     .end()
 )
 
-print(f"Research Analyst: {len(agent.nodes)} nodes, {len(agent.edges)} edges")
-print("\nPipeline:")
-for i, node in enumerate(agent.nodes):
-    arrow = "  ->" if i > 0 else "   "
-    print(f"{arrow} [{node.type.value:15s}] {node.name}")
+run_graph(agent, user_input="The impact of large language models on software engineering productivity")

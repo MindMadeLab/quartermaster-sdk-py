@@ -3,22 +3,23 @@
 Demonstrates the SessionManager for running multiple agent tasks
 concurrently. Each session runs in its own thread and results are
 collected when all complete.
+
+This example uses SessionManager directly (not a Graph), so it does
+not require an LLM API key.
+
+Usage:
+    uv run examples/09_parallel_agents.py
 """
 
 from __future__ import annotations
 
 import time
 
-try:
-    from quartermaster_tools.builtin.agents.session import (
-        AgentMessage,
-        SessionManager,
-        SessionStatus,
-    )
-except ImportError:
-    raise SystemExit(
-        "Install quartermaster-tools first:  pip install -e quartermaster-tools"
-    )
+from quartermaster_tools.builtin.agents.session import (
+    AgentMessage,
+    SessionManager,
+    SessionStatus,
+)
 
 manager = SessionManager()
 

@@ -13,47 +13,15 @@ Patterns shown
   - text() with Jinja2 templates displaying form data
   - write_memory() to persist form submissions
 
-Scenario: Event Registration
------------------------------
-1. Greet the user with a text node.
-2. User fills in a registration form (name, email, ticket type, quantity).
-3. Compute derived values (price) -- form variables are already available.
-4. IF ticket type is "vip", show VIP perks; otherwise show standard info.
-5. Display a confirmation summary using Jinja2 templating.
-6. Store the registration in memory.
-
-Architecture::
-
-    START
-      |
-    Text("Welcome")
-      |
-    UserForm(registration)
-      |
-    VAR(total_price)
-      |
-    IF(ticket_type == 'vip')
-      |            |
-    [true]       [false]
-    Text(VIP)    Text(Standard)
-      |            |
-      +-----+------+
-            |
-    Text(confirmation summary)
-      |
-    WRITE_MEMORY(registration)
-      |
-    Text(thank you)
-      |
-    END
+Usage:
+    export ANTHROPIC_API_KEY="sk-ant-..."   # or OPENAI_API_KEY
+    uv run examples/15_user_forms.py
 """
 
 from __future__ import annotations
 
-try:
-    from quartermaster_graph import Graph
-except ImportError:
-    raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
+from quartermaster_graph import Graph
+from _runner import run_graph
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +138,7 @@ feedback = (
             "We'll work on improving."
         ))
         .instruction("Suggest improvements",
+                     model="claude-sonnet-4-20250514",
                      system_instruction=(
                          "The user rated us {{rating}}/5 and said: '{{comments}}'. "
                          "Suggest 2-3 specific improvements we could make."
@@ -185,25 +154,7 @@ feedback = (
 )
 
 
-# ---------------------------------------------------------------------------
-# Print both graphs
-# ---------------------------------------------------------------------------
-
-for name, graph in [("Event Registration", agent), ("Feedback Collector", feedback)]:
-    print("=" * 60)
-    print(f"{name}: {len(graph.nodes)} nodes, {len(graph.edges)} edges")
-    print("=" * 60)
-
-    print("\nNode list:")
-    for node in graph.nodes:
-        meta_keys = [k for k in node.metadata if node.metadata[k]]
-        meta = ", ".join(f"{k}={str(node.metadata[k])[:40]}" for k in meta_keys[:3])
-        suffix = f"  ({meta})" if meta else ""
-        print(f"  [{node.type.value:15s}] {node.name}{suffix}")
-
-    print("\nEdge list:")
-    name_map = {n.id: n.name for n in graph.nodes}
-    for edge in graph.edges:
-        label = f"  [{edge.label}]" if edge.label else ""
-        print(f"  {name_map[edge.source_id]} -> {name_map[edge.target_id]}{label}")
-    print()
+# Execute both graphs
+run_graph(agent, user_input="Register me for the conference")
+print("\n" + "=" * 60 + "\n")
+run_graph(feedback, user_input="I want to leave feedback")

@@ -1,38 +1,35 @@
 """Decision flow with two branches that merge.
 
 Demonstrates decision nodes that route to different branches based on
-labelled options, then merge back into a single flow.
+labelled options, then merge back into a single flow. Executed with a
+real LLM via the runner.
+
+Usage:
+    export ANTHROPIC_API_KEY="sk-ant-..."   # or OPENAI_API_KEY
+    uv run examples/02_decision_flow.py
 """
 
 from __future__ import annotations
 
-try:
-    from quartermaster_graph import Graph
-except ImportError:
-    raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
+from quartermaster_graph import Graph
+from _runner import run_graph
 
 agent = (
     Graph("Sentiment Analyzer")
     .start()
     .user("Enter text to analyze")
-    .instruction("Analyze sentiment", system_instruction="Classify as positive or negative")
+    .instruction("Analyze sentiment", model="claude-sonnet-4-20250514", system_instruction="Classify as positive or negative")
     .decision("Sentiment?", options=["positive", "negative"])
     .on("positive")
-        .instruction("Positive response", system_instruction="Generate an enthusiastic response")
+        .instruction("Positive response", model="claude-sonnet-4-20250514", system_instruction="Generate an enthusiastic response")
     .end()
     .on("negative")
-        .instruction("Negative response", system_instruction="Generate an empathetic response")
+        .instruction("Negative response", model="claude-sonnet-4-20250514", system_instruction="Generate an empathetic response")
     .end()
-    # No merge needed — decision picks ONE branch, so branches converge
+    # No merge needed -- decision picks ONE branch, so branches converge
     # directly on the next node.
-    .instruction("Final summary", system_instruction="Summarize the analysis")
+    .instruction("Final summary", model="claude-sonnet-4-20250514", system_instruction="Summarize the analysis")
     .end()
 )
 
-print(f"Nodes: {len(agent.nodes)}   Edges: {len(agent.edges)}")
-print("\nGraph structure:")
-for node in agent.nodes:
-    print(f"  [{node.type.value:15s}] {node.name}")
-for edge in agent.edges:
-    label = f" [{edge.label}]" if edge.label else ""
-    print(f"  Edge: {edge.source_id} -> {edge.target_id}{label}")
+run_graph(agent, user_input="I absolutely love this product, it changed my life!")

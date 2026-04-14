@@ -3,14 +3,21 @@
 Demonstrates the FastMCP-style decorator pattern for creating tools
 from plain functions. The decorator extracts metadata from type hints
 and Google-style docstrings automatically.
+
+This example does NOT execute a graph -- it shows standalone tool
+registration and schema export. Tools are used within graphs via
+``ToolRegistry`` when wiring tool-enabled agents.
+
+Usage:
+    uv run examples/06_tool_decorator.py
 """
 
 from __future__ import annotations
 
-try:
-    from quartermaster_tools import ToolRegistry
-except ImportError:
-    raise SystemExit("Install quartermaster-tools first:  pip install -e quartermaster-tools")
+from quartermaster_tools import ToolRegistry
+
+# NOTE: Tools are used within graphs via ToolRegistry. This example
+# demonstrates standalone registration and schema export only.
 
 registry = ToolRegistry()
 

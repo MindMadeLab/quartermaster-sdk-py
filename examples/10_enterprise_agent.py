@@ -10,29 +10,15 @@ enterprise support agent:
   - Notifications     -- alerts for escalations
   - Parallel sections -- concurrent processing within a branch
 
-Architecture::
-
-    START -> User -> Classify
-          -> DECISION(department)
-             |-- hr:      [HR sub-graph: analyse -> IF(approval?) -> ...]
-             |-- it:      [IT sub-graph: diagnose -> parallel(security + performance) -> fix]
-             |-- finance: [Finance sub-graph: analyse -> IF(large amount?) -> ...]
-             |-- general: [general assistance]
-          -> MERGE
-          -> Quality check (IF score > 0.8)
-             |-- true:  deliver
-             |-- false: improve -> re-deliver
-          -> MERGE
-          -> write_memory(audit) -> notification(complete) -> log(audit)
-          -> END
+Usage:
+    export ANTHROPIC_API_KEY="sk-ant-..."   # or OPENAI_API_KEY
+    uv run examples/10_enterprise_agent.py
 """
 
 from __future__ import annotations
 
-try:
-    from quartermaster_graph import Graph
-except ImportError:
-    raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
+from quartermaster_graph import Graph
+from _runner import run_graph
 
 # ---------------------------------------------------------------------------
 # Sub-graph: HR department
@@ -42,14 +28,14 @@ except ImportError:
 hr_flow = (
     Graph("HR Handler")
     .start()
-    .instruction("HR analysis", system_instruction="Analyse HR-related query and determine policy")
+    .instruction("HR analysis", model="claude-sonnet-4-20250514", system_instruction="Analyse HR-related query and determine policy")
     .if_node("Needs approval?", expression="requires_manager_approval")
     .on("true")
         .static("Alert manager", text="HR request requires manager approval")
         .user("Awaiting manager response")
     .end()
     .on("false")
-        .instruction("Direct HR response", system_instruction="Provide HR information from policy database")
+        .instruction("Direct HR response", model="claude-sonnet-4-20250514", system_instruction="Provide HR information from policy database")
     .end()
     # No merge — IF picks one branch, they converge here.
     .write_memory("Log HR query", memory_name="hr_query_log")
@@ -65,19 +51,19 @@ hr_flow = (
 it_flow = (
     Graph("IT Handler")
     .start()
-    .instruction("IT diagnosis", system_instruction="Diagnose the reported IT issue")
+    .instruction("IT diagnosis", model="claude-sonnet-4-20250514", system_instruction="Diagnose the reported IT issue")
 
     # Parallel: run security and performance checks concurrently
     .parallel()
     .branch()
-        .instruction("Security check", system_instruction="Check for security implications")
+        .instruction("Security check", model="claude-sonnet-4-20250514", system_instruction="Check for security implications")
     .end()
     .branch()
-        .instruction("Performance check", system_instruction="Assess performance impact")
+        .instruction("Performance check", model="claude-sonnet-4-20250514", system_instruction="Assess performance impact")
     .end()
     .static_merge("Combine IT checks")
 
-    .instruction("Suggest fix", system_instruction="Provide troubleshooting steps based on diagnosis and checks")
+    .instruction("Suggest fix", model="claude-sonnet-4-20250514", system_instruction="Provide troubleshooting steps based on diagnosis and checks")
     .end()
 )
 
@@ -89,14 +75,14 @@ it_flow = (
 finance_flow = (
     Graph("Finance Handler")
     .start()
-    .instruction("Finance analysis", system_instruction="Analyse the finance-related request")
+    .instruction("Finance analysis", model="claude-sonnet-4-20250514", system_instruction="Analyse the finance-related request")
     .if_node("Large amount?", expression="amount > 10000")
     .on("true")
         .static("CFO alert", text="Finance request over $10k requires CFO approval")
-        .instruction("Prepare CFO brief", system_instruction="Summarise request for CFO review")
+        .instruction("Prepare CFO brief", model="claude-sonnet-4-20250514", system_instruction="Summarise request for CFO review")
     .end()
     .on("false")
-        .instruction("Process directly", system_instruction="Handle finance request within standard limits")
+        .instruction("Process directly", model="claude-sonnet-4-20250514", system_instruction="Handle finance request within standard limits")
     .end()
     # No merge — IF picks one branch.
     .write_memory("Log finance query", memory_name="last_finance_query")
@@ -112,7 +98,7 @@ agent = (
     .start()
     .user("How can I help you today?")
     .write_memory("Log session start", memory_name="session_start", variables=[{"name": "timestamp", "value": "{{timestamp}}"}])
-    .instruction("Classify request", system_instruction="Classify the request into: hr, it, finance, or general")
+    .instruction("Classify request", model="claude-sonnet-4-20250514", system_instruction="Classify the request into: hr, it, finance, or general")
 
     # --- Department routing ---------------------------------------------------
     .decision("Department?", options=["hr", "it", "finance", "general"])
@@ -126,19 +112,19 @@ agent = (
         .use(finance_flow)
     .end()
     .on("general")
-        .instruction("General help", system_instruction="Provide general assistance")
+        .instruction("General help", model="claude-sonnet-4-20250514", system_instruction="Provide general assistance")
     .end()
     # No merge after decision — only one department branch runs.
 
     # --- Quality gate ---------------------------------------------------------
-    .instruction("Quality check", system_instruction="Review the response for accuracy and completeness (0-1 score)")
+    .instruction("Quality check", model="claude-sonnet-4-20250514", system_instruction="Review the response for accuracy and completeness (0-1 score)")
     .if_node("Quality OK?", expression="quality_score > 0.8")
     .on("true")
-        .instruction("Deliver", system_instruction="Format and deliver the final response")
+        .instruction("Deliver", model="claude-sonnet-4-20250514", system_instruction="Format and deliver the final response")
     .end()
     .on("false")
-        .instruction("Improve", system_instruction="Rewrite the response to improve clarity and accuracy")
-        .instruction("Re-deliver", system_instruction="Format and deliver the improved response")
+        .instruction("Improve", model="claude-sonnet-4-20250514", system_instruction="Rewrite the response to improve clarity and accuracy")
+        .instruction("Re-deliver", model="claude-sonnet-4-20250514", system_instruction="Format and deliver the improved response")
     .end()
     # No merge after IF — only one branch runs.
 
@@ -149,33 +135,5 @@ agent = (
     .end()
 )
 
-# ---------------------------------------------------------------------------
-# Print graph stats
-# ---------------------------------------------------------------------------
-
-print("Enterprise Agent")
-print(f"  Nodes: {len(agent.nodes)}")
-print(f"  Edges: {len(agent.edges)}")
-
-node_types: dict[str, int] = {}
-for n in agent.nodes:
-    t = n.type.value
-    node_types[t] = node_types.get(t, 0) + 1
-print(f"  Node types: {dict(sorted(node_types.items()))}")
-
-print("\nFull node list:")
-for node in agent.nodes:
-    meta_summary = ""
-    si = node.metadata.get("system_instruction", "")
-    if si:
-        meta_summary = f' -- "{si[:50]}"'
-    ch = node.metadata.get("channel", "")
-    if ch:
-        meta_summary = f" -- channel={ch}"
-    print(f"  [{node.type.value:15s}] {node.name}{meta_summary}")
-
-print("\nEdge list:")
-name_map = {n.id: n.name for n in agent.nodes}
-for edge in agent.edges:
-    label = f"  [{edge.label}]" if edge.label else ""
-    print(f"  {name_map[edge.source_id]} -> {name_map[edge.target_id]}{label}")
+# Execute with a real LLM
+run_graph(agent, user_input="My laptop won't connect to the VPN and I need access to the finance portal urgently")

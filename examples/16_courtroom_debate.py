@@ -15,46 +15,16 @@ This example demonstrates:
   - Text templates for dramatic courtroom narration
   - Reasoning node for judicial deliberation
 
-Architecture::
-
-    START -> User -> VAR -> WRITE_MEMORY -> Text("Court in session")
-      |
-    PARALLEL(preparation)
-      |── Prosecution: "Build case"
-      |── Defense: "Build defense"
-      |
-    STATIC_MERGE -> VAR(round=1)
-      |
-    LOOP(max=3) <─────────────────────────────────────────────+
-      |                                                       |
-    Text("Round {{round_number}}")                            |
-    Instruction("Prosecution argues")                         |
-    Instruction("Defense rebuts")                             |
-    Instruction("Judge evaluates round")                      |
-    UPDATE_MEMORY(transcript) -> VAR(round+1)                 |
-      |                                                       |
-    IF(round > 3)                                             |
-      |── true:  Text("Enough") ─→ verdict                   |
-      |── false: Text("Continue") ────────────────────────────+
-      |
-    Reasoning("Deliberate") -> Instruction("Final verdict")
-      |
-    DECISION(verdict)
-      |── guilty:     Text(GUILTY)
-      |── not_guilty: Text(NOT GUILTY)
-      |── mistrial:   Text(MISTRIAL)
-      |
-    WRITE_MEMORY(verdict) -> Text("Adjourned") -> END
+Usage:
+    export ANTHROPIC_API_KEY="sk-ant-..."   # or OPENAI_API_KEY
+    uv run examples/16_courtroom_debate.py
 """
 
 from __future__ import annotations
 
-try:
-    from quartermaster_graph import Graph
-    from quartermaster_graph.enums import NodeType, TraverseOut
-    from quartermaster_graph.models import GraphEdge
-except ImportError:
-    raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
+from quartermaster_graph import Graph
+from quartermaster_graph.models import GraphEdge
+from _runner import run_graph
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +36,7 @@ prosecution_prep = (
     .start()
     .instruction(
         "Build prosecution case",
+        model="claude-sonnet-4-20250514",
         system_instruction=(
             "You are the lead prosecutor. Prepare your legal strategy:\n"
             "1. Key evidence (access logs, code similarity, timeline)\n"
@@ -86,6 +57,7 @@ defense_prep = (
     .start()
     .instruction(
         "Build defense case",
+        model="claude-sonnet-4-20250514",
         system_instruction=(
             "You are the lead defense attorney. Prepare your strategy:\n"
             "1. Evidence supporting the defendant's innocence\n"
@@ -134,7 +106,7 @@ trial = (
     .var("Init round", variable="round_number", expression="1")
 
     # --- LOOP: multi-round debate (up to 3 rounds) --------------------------
-    .instruction("Debate loop", system_instruction="Manage the debate loop (up to 3 rounds)")
+    .instruction("Debate loop", model="claude-sonnet-4-20250514", system_instruction="Manage the debate loop (up to 3 rounds)")
 
     .text("Round header", template=(
         "\n--- ROUND {{round_number}} ---\n"
@@ -143,6 +115,7 @@ trial = (
 
     .instruction(
         "Prosecution argues",
+        model="claude-sonnet-4-20250514",
         system_instruction=(
             "You are the prosecutor. This is round {{round_number}} of the trial.\n"
             "Round 1: Opening statement and initial evidence.\n"
@@ -154,6 +127,7 @@ trial = (
 
     .instruction(
         "Defense rebuts",
+        model="claude-sonnet-4-20250514",
         system_instruction=(
             "You are the defense attorney. This is round {{round_number}}.\n"
             "You just heard the prosecution. Counter their argument directly:\n"
@@ -166,6 +140,7 @@ trial = (
 
     .instruction(
         "Judge evaluates round",
+        model="claude-sonnet-4-20250514",
         system_instruction=(
             "You are the presiding judge. You just heard round {{round_number}}.\n"
             "Assess briefly:\n"
@@ -206,6 +181,7 @@ trial = (
 
     .instruction(
         "Final verdict",
+        model="claude-sonnet-4-20250514",
         system_instruction=(
             "You are the presiding judge. You have heard the full trial across "
             "multiple rounds. Review the complete transcript.\n\n"
@@ -267,60 +243,17 @@ trial._edges.append(
     GraphEdge(source_id=continue_node.id, target_id=loop_node.id, label="next_round")
 )
 
-# Build the final AgentVersion (skip validation -- intentional cycle)
+# Build the final AgentGraph (skip validation -- intentional cycle)
 agent = trial.build(validate=False)
 
-
-# ---------------------------------------------------------------------------
-# Print graph structure
-# ---------------------------------------------------------------------------
-
-print("=" * 60)
-print("THE PEOPLE v. AI ENGINEER")
-print("A Multi-Round Courtroom Drama with Loop-Back")
-print("=" * 60)
-print(f"\n  Nodes: {len(agent.nodes)}")
-print(f"  Edges: {len(agent.edges)}")
-
-# Count by type
-node_types: dict[str, int] = {}
-for n in agent.nodes:
-    t = n.type.value
-    node_types[t] = node_types.get(t, 0) + 1
-print(f"\n  Node types:")
-for t, count in sorted(node_types.items()):
-    print(f"    {t:20s} x{count}")
-
-# Show the flow
-print(f"\n  Edge list ({len(agent.edges)} edges):")
-name_map = {n.id: n.name for n in agent.nodes}
-for edge in agent.edges:
-    label = f"  [{edge.label}]" if edge.label else ""
-    src = name_map.get(edge.source_id, "?")
-    tgt = name_map.get(edge.target_id, "?")
-    is_loop = "  <-- LOOP BACK" if "Debate loop" in tgt and "Init" not in src else ""
-    print(f"    {src} -> {tgt}{label}{is_loop}")
-
-# Debate structure
-print(f"\n  Debate loop (up to 3 rounds):")
-print(f"    Each round:")
-print(f"      1. Prosecution argues (adapts strategy per round)")
-print(f"      2. Defense rebuts (counters prosecution directly)")
-print(f"      3. Judge evaluates (decides if more rounds needed)")
-print(f"      4. IF round > 3: break -> final verdict")
-print(f"      5. IF round <= 3: loop back to Debate loop")
-
-# Roles
-print(f"\n  Agents in the courtroom:")
-for n in agent.nodes:
-    name_lower = n.name.lower()
-    if "judge" in name_lower or "deliberat" in name_lower or "verdict" in name_lower:
-        role = "JUDGE"
-    elif "defense" in name_lower:
-        role = "DEFENSE"
-    elif "prosecution" in name_lower:
-        role = "PROSECUTION"
-    else:
-        continue
-    if n.type.value in ("Instruction1", "Reasoning1"):
-        print(f"    [{role:11s}] {n.name}")
+# Execute with a real LLM
+run_graph(
+    agent,
+    user_input=(
+        "A senior AI engineer left TechCorp to join a startup. TechCorp alleges "
+        "she copied proprietary training data and model weights before leaving, "
+        "violating her NDA and non-compete agreement. The defense argues the "
+        "non-compete is overly broad and the engineer only used publicly available "
+        "techniques and open-source models."
+    ),
+)

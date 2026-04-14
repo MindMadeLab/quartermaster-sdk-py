@@ -1,18 +1,26 @@
-"""Example 14 — Using local / self-hosted LLM providers.
+"""Example 14 -- Using local / self-hosted LLM providers.
 
 Quartermaster works fully offline with your own infrastructure.  No
-external API keys needed — just point to your Ollama, vLLM, LM Studio,
+external API keys needed -- just point to your Ollama, vLLM, LM Studio,
 TGI, LocalAI, or llama.cpp server.
 
 This example shows three setups:
 
-1. **Ollama only** — simplest local setup, one line
-2. **Mixed** — cloud (OpenAI) for smart tasks + local (vLLM) for fast ones
-3. **Fully private** — all traffic stays on your infrastructure
+1. **Ollama only** -- simplest local setup, one line
+2. **Mixed** -- cloud (Anthropic) for smart tasks + local (vLLM) for fast ones
+3. **Fully private** -- all traffic stays on your infrastructure
+
+Usage:
+    # For Ollama graphs: ollama must be running locally (ollama serve)
+    # For vLLM graphs: vLLM server must be running on your GPU box
+    # For mixed: export ANTHROPIC_API_KEY="sk-ant-..."
+
+    uv run examples/14_local_providers.py
 """
 
 from quartermaster_graph import Graph
 from quartermaster_providers import ProviderRegistry
+from _runner import run_graph
 
 # =====================================================================
 # Setup 1: Ollama only  (one line!)
@@ -31,8 +39,8 @@ registry.add_model_pattern(r"codellama.*", "ollama")
 registry.add_model_pattern(r"gemma.*", "ollama")
 
 # Now model references resolve automatically:
-#   registry.get_for_model("llama3.1:70b")   → OllamaProvider
-#   registry.get_for_model("phi-3-mini")     → OllamaProvider
+#   registry.get_for_model("llama3.1:70b")   -> OllamaProvider
+#   registry.get_for_model("phi-3-mini")     -> OllamaProvider
 
 graph_ollama = (
     Graph("LocalAssistant")
@@ -50,14 +58,13 @@ graph_ollama = (
 )
 
 # =====================================================================
-# Setup 2: Mixed — cloud for smart, local for fast
+# Setup 2: Mixed -- cloud for smart, local for fast
 # =====================================================================
 
 mixed_registry = ProviderRegistry(auto_configure=False)
 
 # Cloud provider for complex reasoning
-from quartermaster_providers.providers import OpenAIProvider
-mixed_registry.register("openai", OpenAIProvider, api_key="sk-...")
+mixed_registry.register("anthropic")
 
 # Local vLLM on a GPU box for fast inference
 mixed_registry.register_local(
@@ -70,7 +77,7 @@ graph_mixed = (
     Graph("HybridPipeline")
     .start()
     .user("Describe the problem")
-    # Decision node — LLM picks which path to take
+    # Decision node -- LLM picks which path to take
     .decision("Classify")
     .on("simple")
         .instruction(
@@ -83,19 +90,19 @@ graph_mixed = (
     .on("complex")
         .agent(
             "Deep Analysis",
-            model="gpt-4o",          # cloud for heavy reasoning
-            provider="openai",
+            model="claude-sonnet-4-20250514",
+            provider="anthropic",
             system_instruction="Perform thorough analysis.",
             tools=["web_search", "code_interpreter"],
             max_iterations=15,
         )
     .end()
-    # No merge — decision picks one branch.
+    # No merge -- decision picks one branch.
     .end()
 )
 
 # =====================================================================
-# Setup 3: Fully private — no external calls
+# Setup 3: Fully private -- no external calls
 # =====================================================================
 
 private_registry = ProviderRegistry(auto_configure=False)
@@ -149,16 +156,20 @@ graph_private = (
 )
 
 
-# ── Print graph info ─────────────────────────────────────────────────
+# -- Execute graphs -----------------------------------------------------------
+# NOTE: Ollama must be running locally for graph_ollama to work.
+# NOTE: vLLM must be running on gpu-box:8000 for graph_mixed/graph_private.
+# We run only graph_ollama here as it's the most common local setup.
+# Comment/uncomment as needed for your infrastructure.
+
 if __name__ == "__main__":
-    for name, g, reg in [
-        ("Ollama-only", graph_ollama, registry),
-        ("Mixed", graph_mixed, mixed_registry),
-        ("Fully-private", graph_private, private_registry),
-    ]:
-        print(f"\n{'='*60}")
-        print(f" {name}")
-        print(f"{'='*60}")
-        print(f"  Nodes: {len(g.nodes)}")
-        print(f"  Edges: {len(g.edges)}")
-        print(f"  Providers: {reg.list_providers()}")
+    print("Running Ollama-only graph (requires: ollama serve)")
+    print("Make sure you have llama3.1:70b pulled: ollama pull llama3.1:70b")
+    print()
+    run_graph(graph_ollama, user_input="Explain the difference between TCP and UDP in simple terms", provider="ollama")
+
+    # Uncomment to run the mixed graph (requires ANTHROPIC_API_KEY + vLLM):
+    # run_graph(graph_mixed, user_input="Why is the sky blue?")
+
+    # Uncomment to run the fully-private graph (requires vLLM + Ollama + corp-gateway):
+    # run_graph(graph_private, user_input="Design a real-time data pipeline for IoT sensor data")

@@ -2,34 +2,32 @@
 
 Demonstrates a multi-way switch (more than two branches) for routing
 based on detected values. Uses a decision node with many options to
-model a switch/case pattern.
+model a switch/case pattern. Executed with a real LLM via the runner.
+
+Usage:
+    export ANTHROPIC_API_KEY="sk-ant-..."   # or OPENAI_API_KEY
+    uv run examples/07_switch_router.py
 """
 
 from __future__ import annotations
 
-try:
-    from quartermaster_graph import Graph
-except ImportError:
-    raise SystemExit("Install quartermaster-graph first:  pip install -e quartermaster-graph")
+from quartermaster_graph import Graph
+from _runner import run_graph
 
 # Multi-language support agent with switch-style routing
 agent = (
     Graph("Multi-Language Agent")
     .start()
     .user("Enter your message")
-    .instruction("Detect language", system_instruction="Detect the language. Output: en/es/fr/de/other")
+    .instruction("Detect language", model="claude-sonnet-4-20250514", system_instruction="Detect the language. Output: en/es/fr/de/other")
     .decision("Language?", options=["en", "es", "fr", "de", "other"])
-    .on("en").instruction("English handler", system_instruction="Respond in English").end()
-    .on("es").instruction("Spanish handler", system_instruction="Responde en espanol").end()
-    .on("fr").instruction("French handler", system_instruction="Repondez en francais").end()
-    .on("de").instruction("German handler", system_instruction="Antworten Sie auf Deutsch").end()
-    .on("other").instruction("Fallback", system_instruction="Respond in English, note language").end()
-    # No merge — decision picks one language branch, they converge on End.
+    .on("en").instruction("English handler", model="claude-sonnet-4-20250514", system_instruction="Respond in English").end()
+    .on("es").instruction("Spanish handler", model="claude-sonnet-4-20250514", system_instruction="Responde en espanol").end()
+    .on("fr").instruction("French handler", model="claude-sonnet-4-20250514", system_instruction="Repondez en francais").end()
+    .on("de").instruction("German handler", model="claude-sonnet-4-20250514", system_instruction="Antworten Sie auf Deutsch").end()
+    .on("other").instruction("Fallback", model="claude-sonnet-4-20250514", system_instruction="Respond in English, note language").end()
+    # No merge -- decision picks one language branch, they converge on End.
     .end()
 )
 
-print(f"Language agent: {len(agent.nodes)} nodes, {len(agent.edges)} edges")
-print("\nBranch structure:")
-for edge in agent.edges:
-    label = f" [{edge.label}]" if edge.label else ""
-    print(f"  {edge.source_id} -> {edge.target_id}{label}")
+run_graph(agent, user_input="Bonjour, comment allez-vous aujourd'hui?")
