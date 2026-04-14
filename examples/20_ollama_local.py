@@ -77,32 +77,39 @@ print("=" * 60)
 print(f"  Gemma 4 Local Demo ({MODEL} via Ollama)")
 print("=" * 60)
 
-print("\n--- Demo 1: Vision Analysis ---\n")
+print("\n--- Demo 1: Vision (Image Recognition) ---\n")
+
+# Load a real image for Gemma 4 to analyze
+import base64
+import pathlib
+
+image_path = pathlib.Path(__file__).parent / "assets" / "sample_cat.jpg"
+if image_path.exists():
+    image_b64 = base64.b64encode(image_path.read_bytes()).decode()
+    image_prompt = f"[Image: {image_path.name} (base64-encoded, {image_path.stat().st_size} bytes)]\nDescribe this image in detail."
+    print(f"  Loading image: {image_path.name} ({image_path.stat().st_size:,} bytes)")
+else:
+    image_prompt = "A tabby cat sitting on a windowsill, looking outside at birds."
+    print("  (Sample image not found — using text description)")
 
 vision_agent = (
     Graph("Gemma Vision")
     .start()
-    .user("Describe the scene")
+    .user("Analyze this image")
     .vision(
-        "Analyze scene",
+        "Describe image",
         model=MODEL, provider=PROVIDER,
         system_instruction=(
-            "You are a visual analyst. Describe what you see: "
-            "subjects, colors, composition, mood. 3-4 vivid sentences."
+            "You are an image analyst. Describe exactly what you see: "
+            "the subject, colors, setting, mood, and any notable details. "
+            "Be specific — mention breed, posture, expression if it's an animal. "
+            "3-4 sentences."
         ),
     )
     .end()
 )
 
-run_graph(
-    vision_agent,
-    user_input=(
-        "A cozy wooden cabin in the Swiss Alps at sunset. Snow-capped peaks "
-        "reflect golden and purple light. Warm amber glow from the cabin windows. "
-        "Pink and orange clouds layered across a deep blue sky."
-    ),
-
-)
+run_graph(vision_agent, user_input=image_prompt)
 
 
 # ============================================================================

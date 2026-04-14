@@ -62,16 +62,13 @@ uv run examples/run_interactive.py
 | 11 | `11_nested_control_flow.py` | Parallel fan-out with IF decisions nested inside branches |
 | 12 | `12_full_showcase.py` | Kitchen-sink: AI Research Assistant using every major pattern |
 | 13 | `13_orchestrator.py` | Agent orchestrator with spawn/collect session tools |
-| 14 | `14_local_providers.py` | Local LLM providers: Ollama, vLLM, mixed cloud+local |
-| 15 | `15_user_forms.py` | User forms, variables, IF conditions, and Jinja2 templates |
-| 16 | `16_courtroom_debate.py` | Multi-round courtroom drama: loop-back debate across 3 providers, judge verdict |
-| 17 | `17_tool_agent.py` | Custom tools with `@tool()`, JSON schema export, tool-aware LLM agent |
-| 18 | `18_streaming_events.py` | FlowRunner direct usage with event streaming (no API keys needed) |
-| 19 | `19_data_pipeline.py` | Multi-stage data pipeline with parallel analysis and mixed providers |
-| 20 | `20_compliance_guard.py` | PII detection/redaction, EU AI Act risk classification, audit logging |
-| 21 | `21_mcp_client.py` | MCP protocol client: discover tools, bridge to Quartermaster graphs |
-| 22 | `22_ollama_local.py` | Local Ollama with Gemma model, streaming, no cloud API keys |
-| 23 | `23_vision.py` | Image vision analysis with multimodal LLM pipeline |
+| 14 | `14_user_forms.py` | User forms, variables, IF conditions, and Jinja2 templates |
+| 15 | `15_courtroom_debate.py` | Multi-round courtroom drama: loop-back debate across 3 providers, judge verdict |
+| 16 | `16_tool_agent.py` | Custom tools with `@tool()`, JSON schema export, tool-aware LLM agent |
+| 17 | `17_streaming_events.py` | FlowRunner direct usage with event streaming (no API keys needed) |
+| 18 | `18_compliance_guard.py` | PII detection/redaction, EU AI Act risk classification, audit logging |
+| 19 | `19_mcp_client.py` | MCP protocol client: discover tools, bridge to Quartermaster graphs |
+| 20 | `20_ollama_local.py` | Local Gemma 4: vision (real image), tool calling, streaming, multi-step |
 | -- | `run_interactive.py` | Interactive stdin conversation loop with Ctrl+C exit |
 
 ## Patterns Demonstrated
