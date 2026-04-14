@@ -54,10 +54,26 @@ def _detect_provider() -> tuple[str, str]:
     return "", ""
 
 
+_PROVIDER_CLASSES = {
+    "anthropic": "quartermaster_providers.providers.anthropic:AnthropicProvider",
+    "openai": "quartermaster_providers.providers.openai:OpenAIProvider",
+    "google": "quartermaster_providers.providers.google:GoogleProvider",
+    "groq": "quartermaster_providers.providers.groq:GroqProvider",
+    "xai": "quartermaster_providers.providers.xai:XAIProvider",
+}
+
+
 def _get_provider_registry(provider_name: str) -> ProviderRegistry:
     """Create a ProviderRegistry with the detected provider."""
     registry = ProviderRegistry()
-    registry.register(provider_name)
+    cls_path = _PROVIDER_CLASSES.get(provider_name)
+    if not cls_path:
+        raise ValueError(f"Unknown provider: {provider_name}")
+    module_path, cls_name = cls_path.rsplit(":", 1)
+    import importlib
+    module = importlib.import_module(module_path)
+    provider_cls = getattr(module, cls_name)
+    registry.register(provider_name, provider_cls)
     return registry
 
 
@@ -78,7 +94,7 @@ class LLMExecutor(NodeExecutor):
         model = context.get_meta("llm_model", self._default_model)
         provider_name = context.get_meta("llm_provider", self._default_provider)
 
-        provider = self._registry.get_provider(provider_name)
+        provider = self._registry.get(provider_name)
         if provider is None:
             return NodeResult(success=False, data={}, error=f"Provider '{provider_name}' not available")
 
@@ -126,7 +142,7 @@ class DecisionExecutor(NodeExecutor):
         if options:
             decision_prompt += f"\n\nOptions: {', '.join(options)}\nRespond with EXACTLY one of the options above, nothing else."
 
-        provider = self._registry.get_provider(provider_name)
+        provider = self._registry.get(provider_name)
         if provider is None:
             # Fallback: pick first option
             picked = options[0] if options else ""
