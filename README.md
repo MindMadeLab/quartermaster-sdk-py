@@ -18,8 +18,10 @@ pip install quartermaster-sdk
 pip install quartermaster-sdk[openai]
 pip install quartermaster-sdk[anthropic]
 
-# With uv
-uv pip install quartermaster-sdk
+# From source (for development or running examples)
+git clone https://github.com/MindMadeLab/quartermaster-sdk-py.git
+cd quartermaster-sdk-py
+uv sync
 ```
 
 ## Quick Start
@@ -199,16 +201,17 @@ quartermaster-code-runner   Standalone Docker code execution
 git clone https://github.com/MindMadeLab/quartermaster-sdk-py.git
 cd quartermaster-sdk-py
 
-# Install all packages (with uv)
-uv pip install -e quartermaster-providers -e quartermaster-graph \
-  -e quartermaster-tools -e quartermaster-nodes -e quartermaster-engine \
-  -e quartermaster-sdk
+# Install everything (uv workspace -- one command)
+uv sync
+
+# Run an example
+uv run examples/01_hello_agent.py
 
 # Run tests for a single package
-cd quartermaster-graph && pytest
+uv run pytest quartermaster-graph/tests/
 
-# Run all examples
-for f in examples/*.py; do python "$f"; done
+# Run all tests
+uv run pytest quartermaster-graph/tests/ quartermaster-tools/tests/ quartermaster-engine/tests/
 ```
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full development guide.
