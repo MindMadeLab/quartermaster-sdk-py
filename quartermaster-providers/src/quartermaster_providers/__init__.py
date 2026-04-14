@@ -43,7 +43,7 @@ from quartermaster_providers.exceptions import (
 from quartermaster_providers.registry import ProviderRegistry, infer_provider, get_default_registry
 
 __version__ = "0.1.0"
-__author__ = "Quartermaster AI"
+__author__ = "MindMade"
 
 __all__ = [
     # Configuration

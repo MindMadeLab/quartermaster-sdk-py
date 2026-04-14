@@ -44,9 +44,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/quartermaster-ai/quartermaster"
-Repository = "https://github.com/quartermaster-ai/quartermaster"
-Issues = "https://github.com/quartermaster-ai/quartermaster/issues"
+Homepage = "https://github.com/MindMadeLab/quartermaster-sdk-py"
+Repository = "https://github.com/MindMadeLab/quartermaster-sdk-py"
+Issues = "https://github.com/MindMadeLab/quartermaster-sdk-py/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quartermaster_engine"]

@@ -17,7 +17,7 @@ keywords = [
     "quartermaster", "mindmade",
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
@@ -72,10 +72,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/MindMade/quartermaster"
-Documentation = "https://github.com/MindMade/quartermaster/tree/master/docs"
-Repository = "https://github.com/MindMade/quartermaster"
-Issues = "https://github.com/MindMade/quartermaster/issues"
+Homepage = "https://github.com/MindMadeLab/quartermaster-sdk-py"
+Repository = "https://github.com/MindMadeLab/quartermaster-sdk-py"
+Issues = "https://github.com/MindMadeLab/quartermaster-sdk-py/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quartermaster_sdk"]

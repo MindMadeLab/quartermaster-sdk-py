@@ -47,12 +47,12 @@ agent = (
 
 See the [docs/](https://github.com/MindMade/quartermaster/tree/master/docs) directory:
 
-- [Getting Started](docs/getting-started.md)
-- [Graph Building](docs/graph-building.md)
-- [Architecture](docs/architecture.md)
-- [Tools Catalog](docs/tools-catalog.md)
-- [Providers](docs/providers.md)
-- [Security](docs/security.md)
+- [Getting Started](../docs/getting-started.md)
+- [Graph Building](../docs/graph-building.md)
+- [Architecture](../docs/architecture.md)
+- [Tools Catalog](../docs/tools-catalog.md)
+- [Providers](../docs/providers.md)
+- [Security](../docs/security.md)
 
 ## License
 
