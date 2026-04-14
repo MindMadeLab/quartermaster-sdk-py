@@ -108,7 +108,7 @@ jobs:
           python -c "from quartermaster_providers import ProviderRegistry; print('Providers OK')"
           python -c "from quartermaster_tools import ToolRegistry; print('Tools OK')"
           python -c "from quartermaster_engine import FlowRunner; print('Engine OK')"
-          python -c "from quartermaster_mcp_client import MCPClient; print('MCP OK')"
+          python -c "from quartermaster_mcp_client import McpClient; print('MCP OK')"
 
   # -----------------------------------------------------------------------
   # Run all examples to verify they work end-to-end
@@ -133,6 +133,10 @@ jobs:
           pip install -e quartermaster-tools
           pip install -e quartermaster-nodes
           pip install -e quartermaster-engine
+          # Optional packages — example 19 needs mcp-client; future examples
+          # may exercise code-runner. Install them so the import-guarded
+          # examples can actually run instead of bailing with "FAIL".
+          pip install -e quartermaster-mcp-client
 
       - name: Run all examples
         run: |
