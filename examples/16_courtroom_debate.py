@@ -1,8 +1,14 @@
 """Courtroom debate -- multi-round prosecution vs defense with loop-back.
 
-Demonstrates sub-graphs, loops, IF branching, memory, and mixed providers
-in a courtroom trial simulation. The debate round is a reusable sub-graph
-that gets looped 5 times via a back-edge.
+Demonstrates loops, IF branching, memory, show_output, connect(), and
+mixed providers in a courtroom trial with 5 rounds of escalating argument.
+
+Each round covers different ground:
+  Round 1: Opening statements
+  Round 2: Evidence presentation and witness testimony
+  Round 3: Cross-examination and challenges
+  Round 4: Rebuttal and counter-evidence
+  Round 5: Closing arguments
 
 Providers:
   - Prosecution: xAI Grok (aggressive style)
@@ -29,35 +35,6 @@ JUDGE      = dict(model="claude-haiku-4-5-20251001", provider="anthropic")
 MAX_ROUNDS = 5
 
 
-# -- Sub-graph: one round of debate ----------------------------------------
-
-debate_round = (
-    Graph("Debate Round")
-    .start()
-    .instruction(
-        "Prosecution argues", **PROSECUTOR,
-        system_instruction=(
-            "You are the lead prosecutor. Adapt to the round:\n"
-            "  Early rounds: present evidence, call witnesses, build your case.\n"
-            "  Later rounds: rebut defense, reinforce strongest points.\n"
-            "  Final round: powerful closing argument.\n"
-            "Be forceful. 2-3 paragraphs. Address the judge."
-        ),
-    )
-    .instruction(
-        "Defense rebuts", **DEFENSE,
-        system_instruction=(
-            "You are the defense attorney. Counter the prosecution directly:\n"
-            "  Early rounds: challenge evidence, present your theory.\n"
-            "  Later rounds: cross-examine, expose contradictions.\n"
-            "  Final round: passionate plea for acquittal.\n"
-            "Be sharp. 2-3 paragraphs. Address the judge."
-        ),
-    )
-    .end()
-)
-
-
 # -- Main trial graph -------------------------------------------------------
 
 trial = (
@@ -80,34 +57,95 @@ trial = (
     # -- Initialize loop counter --
     .var("Init round", variable="round_number", expression="1", show_output=False)
 
-    # -- Loop target: round header --
+    # -- Loop target --
     .text("Round announce", template=(
         "\n──── Round {{round_number}} of 5 ────"
     ), traverse_in=TraverseIn.AWAIT_FIRST)
 
-    # -- Inline the debate sub-graph --
-    .use(debate_round)
+    # -- Round context injected as a text node so LLMs see it --
+    .text("Round context", template=(
+        "COURT CLERK: This is round {{round_number}} of 5.\n"
+        "{% if round_number == 1 %}"
+        "Phase: OPENING STATEMENTS. Present your theory of the case."
+        "{% elif round_number == 2 %}"
+        "Phase: EVIDENCE. Present forensic evidence, call expert witnesses, cite specific data."
+        "{% elif round_number == 3 %}"
+        "Phase: CROSS-EXAMINATION. Challenge the opposing side's evidence and witnesses directly."
+        "{% elif round_number == 4 %}"
+        "Phase: REBUTTAL. Address weaknesses in your case, introduce new counter-evidence."
+        "{% else %}"
+        "Phase: CLOSING ARGUMENTS. This is your final chance. Make it count."
+        "{% endif %}"
+    ), show_output=False)
+
+    # -- Prosecution --
+    .instruction(
+        "Prosecution argues", **PROSECUTOR,
+        system_instruction=(
+            "You are the lead prosecutor in TechCorp v. Dr. Sarah Chen.\n"
+            "The court clerk has announced the current phase. Follow it STRICTLY:\n\n"
+            "OPENING STATEMENTS: Lay out your theory — charges, motive, what you'll prove.\n"
+            "EVIDENCE: Present specific forensic findings — access logs showing bulk downloads "
+            "48 hours before resignation, expert testimony on code architecture matching, "
+            "the 78% similarity breakdown showing proprietary vs open-source components.\n"
+            "CROSS-EXAMINATION: Attack the defense's claims directly — name specific flaws "
+            "in their open-source argument, challenge their expert's credentials.\n"
+            "REBUTTAL: Address your case's weaknesses head-on, then present the timeline "
+            "evidence and internal communications that corroborate premeditation.\n"
+            "CLOSING: Powerful emotional and legal summary. Connect all evidence. Ask for guilty.\n\n"
+            "IMPORTANT: Do NOT repeat arguments from previous rounds. Build on them.\n"
+            "2-3 paragraphs. Address the judge as 'Your Honor'."
+        ),
+    )
+
+    # -- Defense --
+    .instruction(
+        "Defense rebuts", **DEFENSE,
+        system_instruction=(
+            "You are the defense attorney for Dr. Sarah Chen.\n"
+            "The court clerk has announced the current phase. Follow it STRICTLY:\n\n"
+            "OPENING STATEMENTS: Present your theory — Dr. Chen is innocent, the non-compete "
+            "is unenforceable, her work is original.\n"
+            "EVIDENCE: Present your counter-evidence — independent code audit showing open-source "
+            "origins, Dr. Chen's published research predating TechCorp work, industry expert "
+            "testimony on common AI patterns.\n"
+            "CROSS-EXAMINATION: Directly challenge prosecution's forensic expert — question "
+            "methodology, show the 78% figure includes standard library code, present "
+            "alternative similarity analysis.\n"
+            "REBUTTAL: Address prosecution's strongest points, present character witnesses, "
+            "show Dr. Chen's ethical track record.\n"
+            "CLOSING: Passionate plea — invoke reasonable doubt, the right to work, "
+            "the danger of criminalizing common knowledge.\n\n"
+            "IMPORTANT: Do NOT repeat arguments from previous rounds. Build on them.\n"
+            "Directly reference and counter what the prosecution just said.\n"
+            "2-3 paragraphs. Address the judge as 'Your Honor'."
+        ),
+    )
 
     # -- Increment and check --
     .var("Increment", variable="round_number", expression="round_number + 1", show_output=False)
     .if_node("More rounds?", expression=f"round_number > {MAX_ROUNDS}", show_output=False)
 
-    # TRUE: done debating -> verdict
+    # TRUE: verdict
     .on("true")
         .text("Debate over", template=(
             "\n═══════════════════════════════════════════\n"
-            "  CLOSING DEBATE — PROCEEDING TO VERDICT\n"
+            "  ALL ARGUMENTS HEARD — DELIVERING VERDICT\n"
             "═══════════════════════════════════════════"
         ))
         .instruction(
             "Judge delivers verdict", **JUDGE,
             system_instruction=(
-                "You are the presiding judge. After hearing all rounds:\n"
-                "1. Summarize each side's strongest points\n"
-                "2. Evaluate the key evidence\n"
-                "3. Rule on the non-compete enforceability\n"
-                "4. Deliver your verdict with reasoning\n\n"
-                "End with: VERDICT: GUILTY, VERDICT: NOT GUILTY, or VERDICT: MISTRIAL"
+                "You are the presiding judge delivering the FINAL VERDICT.\n"
+                "You heard 5 rounds: openings, evidence, cross-examination, rebuttal, closings.\n\n"
+                "Structure your verdict:\n"
+                "1. FINDINGS OF FACT — what was established\n"
+                "2. PROSECUTION'S CASE — strongest points and weaknesses\n"
+                "3. DEFENSE'S CASE — strongest points and weaknesses\n"
+                "4. EVIDENCE EVALUATION — the 78% code similarity, access logs, expert testimony\n"
+                "5. NON-COMPETE RULING — enforceable or not, with legal reasoning\n"
+                "6. VERDICT — GUILTY, NOT GUILTY, or MISTRIAL with clear rationale\n\n"
+                "Be thorough and judicial. This is a formal ruling."
             ),
         )
         .text("Adjournment", template="\n--- Court is adjourned ---")
@@ -115,7 +153,7 @@ trial = (
 
     # FALSE: loop back
     .on("false")
-        .text("Next round", template="JUDGE: We continue.", show_output=False)
+        .text("Next round", template="", show_output=False)
     .end()
 
     .end()

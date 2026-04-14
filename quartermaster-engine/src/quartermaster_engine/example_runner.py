@@ -100,6 +100,46 @@ def _get_provider_registry(provider_name: str) -> ProviderRegistry:
 
 
 # ---------------------------------------------------------------------------
+# Conversation helpers
+# ---------------------------------------------------------------------------
+
+def _get_conversation(context: ExecutionContext) -> list[dict]:
+    """Get the conversation history from flow memory."""
+    return list(context.memory.get("__conversation__", []))
+
+
+def _append_to_conversation(
+    conversation: list[dict], role: str, text: str, round_num: Any = None,
+) -> list[dict]:
+    """Append an entry to conversation history."""
+    if not text or not text.strip():
+        return conversation
+    entry = {"role": role, "text": text}
+    if round_num is not None:
+        entry["round"] = round_num
+    conversation.append(entry)
+    return conversation
+
+
+def _format_conversation(conversation: list[dict], user_input: str) -> str:
+    """Format conversation history as a prompt string."""
+    if not conversation:
+        return user_input
+
+    parts = []
+    current_round = None
+    for entry in conversation:
+        r = entry.get("round")
+        if r is not None and r != current_round:
+            current_round = r
+            parts.append(f"--- Round {r} ---")
+        parts.append(f"[{entry['role']}]: {entry['text']}")
+
+    history = "\n\n".join(parts)
+    return f"{history}\n\n---\nOriginal case: {user_input}"
+
+
+# ---------------------------------------------------------------------------
 # Node executors
 # ---------------------------------------------------------------------------
 
@@ -127,25 +167,10 @@ class LLMExecutor(NodeExecutor):
             except Exception:
                 return NodeResult(success=False, data={}, error=f"Provider '{provider_name}' not available")
 
-        # Build prompt from conversation history stored in memory
-        conversation = context.memory.get("__conversation__", [])
+        # Build prompt from conversation history + original user input
+        conversation = _get_conversation(context)
         user_input = str(context.memory.get("__user_input__", "Hello"))
-
-        # Also check engine messages
-        for msg in context.messages:
-            if msg.content:
-                user_input = msg.content
-
-        # Build the prompt: include recent conversation for context (truncated)
-        if conversation:
-            parts = []
-            for entry in conversation:
-                text = entry["text"]
-                parts.append(f"[{entry['role']}]: {text}")
-            history = "\n\n".join(parts)
-            prompt = f"Previous conversation:\n{history}\n\nUser's original request: {user_input}"
-        else:
-            prompt = user_input
+        prompt = _format_conversation(conversation, user_input)
 
         config = LLMConfig(
             model=model,
@@ -160,9 +185,10 @@ class LLMExecutor(NodeExecutor):
             text = response.content
             context.emit_token(text)
 
-            # Append to conversation history in memory
+            # Append to conversation history
             node_name = context.current_node.name if context.current_node else "Assistant"
-            conversation.append({"role": node_name, "text": text})
+            round_num = context.memory.get("round_number")
+            _append_to_conversation(conversation, node_name, text, round_num)
             return NodeResult(
                 success=True, data={"memory_updates": {"__conversation__": conversation}},
                 output_text=text,
@@ -206,21 +232,10 @@ class DecisionExecutor(NodeExecutor):
                 picked = options[0] if options else ""
                 return NodeResult(success=True, data={}, output_text=picked, picked_node=picked)
 
-        # Build prompt with conversation history
-        conversation = context.memory.get("__conversation__", [])
+        # Build prompt from conversation history
+        conversation = _get_conversation(context)
         user_input = str(context.memory.get("__user_input__", "Choose"))
-        for msg in context.messages:
-            if msg.content:
-                user_input = msg.content
-
-        if conversation:
-            history = "\n\n".join(
-                f"[{entry['role']}] {entry['text']}"
-                for entry in conversation[-4:]
-            )
-            prompt = f"Based on the conversation:\n{history}\n\nOriginal request: {user_input}"
-        else:
-            prompt = user_input
+        prompt = _format_conversation(conversation, user_input)
 
         config = LLMConfig(
             model=model,
@@ -308,7 +323,7 @@ class IfExecutor(NodeExecutor):
 
 
 class TextExecutor(NodeExecutor):
-    """Renders a Jinja2 template using flow memory."""
+    """Renders a Jinja2 template using flow memory. Appends to conversation if visible."""
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
         template_str = context.get_meta("text", "")
@@ -318,6 +333,18 @@ class TextExecutor(NodeExecutor):
             result = template.render(**context.memory)
         except Exception:
             result = template_str
+
+        # Append text nodes to conversation so subsequent LLM nodes see context
+        if result and result.strip():
+            conversation = _get_conversation(context)
+            node_name = context.current_node.name if context.current_node else "Narrator"
+            round_num = context.memory.get("round_number")
+            _append_to_conversation(conversation, node_name, result, round_num)
+            return NodeResult(
+                success=True,
+                data={"memory_updates": {"__conversation__": conversation}},
+                output_text=result,
+            )
         return NodeResult(success=True, data={}, output_text=result)
 
 
