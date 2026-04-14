@@ -21,12 +21,21 @@ from quartermaster_graph.validation import validate_graph
 
 _FLOW_CONFIG_KEYS = {"traverse_in", "traverse_out", "thought_type", "message_type", "error_handling"}
 
+# Metadata-level config keys (stored in node.metadata, not as node attributes)
+_META_CONFIG_KEYS = {"show_output"}
+
+# Combined set for extraction from kwargs
+_ALL_CONFIG_KEYS = _FLOW_CONFIG_KEYS | _META_CONFIG_KEYS
+
 
 def _apply_flow_config(node: GraphNode, kwargs: dict[str, Any]) -> None:
     """Apply optional flow config kwargs (traverse_in, traverse_out, etc.) to a node."""
     for key in _FLOW_CONFIG_KEYS:
         if key in kwargs:
             setattr(node, key, kwargs.pop(key))
+    for key in _META_CONFIG_KEYS:
+        if key in kwargs:
+            node.metadata[key] = kwargs.pop(key)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -56,7 +65,7 @@ def _llm_meta(
         "llm_vision": vision,
         "llm_thinking_level": thinking_level,
     }
-    meta.update({k: v for k, v in extra.items() if k not in _FLOW_CONFIG_KEYS})
+    meta.update({k: v for k, v in extra.items() if k not in _ALL_CONFIG_KEYS})
     return meta
 
 
@@ -225,7 +234,7 @@ class _BranchBuilder:
 
         Streams the LLM response. Use ``agent()`` instead if you need tool use.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
             model=model, provider=provider, temperature=temperature,
             system_instruction=system_instruction, **kwargs,
@@ -245,7 +254,7 @@ class _BranchBuilder:
         **kwargs: Any,
     ) -> _BranchBuilder:
         """Add a Summarize node — LLM condenses conversation history."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
             model=model, provider=provider, temperature=temperature,
             system_instruction=system_instruction, **kwargs,
@@ -274,7 +283,7 @@ class _BranchBuilder:
             tools: List of tool/program-version IDs the agent may call.
             max_iterations: Maximum loop iterations before forced stop.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
             model=model, provider=provider,
             system_instruction=system_instruction, **kwargs,
@@ -295,7 +304,7 @@ class _BranchBuilder:
         **kwargs: Any,
     ) -> _BranchBuilder:
         """Add an image vision/analysis node."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
             model=model, provider=provider,
             system_instruction=system_instruction, vision=True, **kwargs,
@@ -315,7 +324,7 @@ class _BranchBuilder:
         Args:
             prompts: Optional text snippets to show the user.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta: dict[str, Any] = {}
         if prompts:
             meta["text_snippets"] = prompts
@@ -332,7 +341,7 @@ class _BranchBuilder:
         Args:
             parameters: List of form field definitions.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.USER_FORM, name=name,
             metadata={"parameters": parameters or []},
@@ -347,7 +356,7 @@ class _BranchBuilder:
 
     def static(self, name: str, text: str = "", **kwargs: Any) -> _BranchBuilder:
         """Add a Static node — outputs fixed text content, NO LLM."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.STATIC, name=name,
             metadata={"static_text": text},
@@ -357,7 +366,7 @@ class _BranchBuilder:
 
     def text(self, name: str, template: str = "", **kwargs: Any) -> _BranchBuilder:
         """Add a Text node — renders Jinja2 template using thought metadata."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.TEXT, name=name,
             metadata={"text": template},
@@ -372,7 +381,7 @@ class _BranchBuilder:
             variable: Name of the variable to create.
             expression: Python expression to evaluate.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.VAR, name=name,
             metadata={"name": variable, "expression": expression},
@@ -384,7 +393,7 @@ class _BranchBuilder:
 
     def code(self, name: str, code: str = "", filename: str = "", **kwargs: Any) -> _BranchBuilder:
         """Add a Code node — code execution (handled by runtime environment)."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.CODE, name=name,
             metadata={"code": code, "filename": filename},
@@ -396,7 +405,7 @@ class _BranchBuilder:
 
     def text_to_variable(self, name: str, variable: str = "", source: str = "", **kwargs: Any) -> _BranchBuilder:
         """Convert text output to a variable."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.TEXT_TO_VARIABLE, name=name,
             metadata={"variable": variable, "source": source},
@@ -408,7 +417,7 @@ class _BranchBuilder:
 
     def program_runner(self, name: str, program: str = "", **kwargs: Any) -> _BranchBuilder:
         """Run a program/tool inline."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.PROGRAM_RUNNER, name=name,
             metadata={"program": program, **kwargs},
@@ -429,7 +438,7 @@ class _BranchBuilder:
         Args:
             expression: Python expression that evaluates to truthy/falsy.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         self._auto_merge_if_needed()
         node = GraphNode(
             type=NodeType.IF, name=name,
@@ -462,7 +471,7 @@ class _BranchBuilder:
 
         Use ``.on(label)`` for each option.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         self._auto_merge_if_needed()
         meta = _llm_meta(
             model=model, provider=provider, temperature=temperature,
@@ -492,7 +501,7 @@ class _BranchBuilder:
         Args:
             expression: Python expression that evaluates to truthy/falsy.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         self._auto_merge_if_needed()
         node = GraphNode(
             type=NodeType.STATIC_DECISION, name=name,
@@ -515,7 +524,7 @@ class _BranchBuilder:
 
         Use ``.on(label)`` for each option.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         self._auto_merge_if_needed()
         node = GraphNode(
             type=NodeType.USER_DECISION, name=name,
@@ -574,7 +583,7 @@ class _BranchBuilder:
             cases: List of ``{"expression": "...", "edge_id": "..."}`` dicts.
             default_edge_id: Fallback edge ID if no case matches.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta: dict[str, Any] = {
             "cases": cases or [],
             "default_edge_id": default_edge_id,
@@ -598,7 +607,7 @@ class _BranchBuilder:
         Args:
             targets: What to clear: ``[]`` (full break), ``['tools']``, ``['thinking']``.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.BREAK, name=name,
             metadata={"break_targets": targets or []},
@@ -649,7 +658,7 @@ class _BranchBuilder:
 
         Use ``static_merge()`` if you don't need LLM processing.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
             model=model, provider=provider, temperature=temperature,
             system_instruction=system_instruction, **kwargs,
@@ -681,7 +690,7 @@ class _BranchBuilder:
         Waits for ALL branches (traverse_in=AwaitAll), appends static text,
         then continues. No LLM call involved.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         merge_node = GraphNode(
             type=NodeType.STATIC_MERGE, name=name,
             traverse_in=TraverseIn.AWAIT_ALL,
@@ -718,7 +727,7 @@ class _BranchBuilder:
             memory_type: ``"flow"`` (scoped to this flow) or ``"user"`` (persists across flows).
             variable_names: Which variables to load.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.READ_MEMORY, name=name,
             metadata={
@@ -746,7 +755,7 @@ class _BranchBuilder:
             memory_type: ``"flow"`` or ``"user"``.
             variables: List of ``{"name": "...", "expression": "..."}`` dicts.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.WRITE_MEMORY, name=name,
             metadata={
@@ -768,7 +777,7 @@ class _BranchBuilder:
         **kwargs: Any,
     ) -> _BranchBuilder:
         """Update existing persistent memory variables."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.UPDATE_MEMORY, name=name,
             metadata={
@@ -793,7 +802,7 @@ class _BranchBuilder:
         This is a *definition* node — the Start node initialises it at
         runtime via ``_memory_initializer``.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.FLOW_MEMORY, name=name,
             metadata={
@@ -813,7 +822,7 @@ class _BranchBuilder:
         **kwargs: Any,
     ) -> _BranchBuilder:
         """Define user-scoped persistent memory (survives across flow executions)."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.USER_MEMORY, name=name,
             metadata={
@@ -832,7 +841,7 @@ class _BranchBuilder:
 
     def comment(self, name: str, text: str = "", **kwargs: Any) -> _BranchBuilder:
         """Add a Comment node — documentation only, no runtime logic."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.COMMENT, name=name,
             metadata={"comment": text},
@@ -852,7 +861,7 @@ class _BranchBuilder:
         Args:
             graph_id: ID of the agent graph to execute as a sub-flow.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.SUB_ASSISTANT, name=name,
             metadata={"sub_assistant_id": graph_id},
@@ -873,7 +882,7 @@ class _BranchBuilder:
         **kwargs: Any,
     ) -> _BranchBuilder:
         """Add a generic node."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(type=node_type, name=name, metadata=metadata or {}, **kwargs)
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1157,7 +1166,7 @@ class GraphBuilder:
 
         Streams the LLM response. Use ``agent()`` instead if you need tool use.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
             model=model, provider=provider, temperature=temperature,
             system_instruction=system_instruction, **kwargs,
@@ -1177,7 +1186,7 @@ class GraphBuilder:
         **kwargs: Any,
     ) -> GraphBuilder:
         """Add a Summarize node — LLM condenses conversation history."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
             model=model, provider=provider, temperature=temperature,
             system_instruction=system_instruction, **kwargs,
@@ -1206,7 +1215,7 @@ class GraphBuilder:
             tools: List of tool/program-version IDs the agent may call.
             max_iterations: Maximum loop iterations before forced stop.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
             model=model, provider=provider,
             system_instruction=system_instruction, **kwargs,
@@ -1227,7 +1236,7 @@ class GraphBuilder:
         **kwargs: Any,
     ) -> GraphBuilder:
         """Add an image vision/analysis node (INSTRUCTION_IMAGE_VISION)."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
             model=model, provider=provider,
             system_instruction=system_instruction, vision=True, **kwargs,
@@ -1259,7 +1268,7 @@ class GraphBuilder:
 
         Use ``.on(label)`` to define each branch.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         self._auto_merge_if_needed()
         meta = _llm_meta(
             model=model, provider=provider, temperature=temperature,
@@ -1296,7 +1305,7 @@ class GraphBuilder:
         Args:
             expression: Python expression that evaluates to truthy/falsy.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         self._auto_merge_if_needed()
         node = GraphNode(
             type=NodeType.STATIC_DECISION, name=name,
@@ -1327,7 +1336,7 @@ class GraphBuilder:
             cases: List of ``{"expression": "...", "edge_id": "..."}`` dicts.
             default_edge_id: Fallback edge ID if no case matches.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         self._auto_merge_if_needed()
         meta: dict[str, Any] = {
             "cases": cases or [],
@@ -1395,7 +1404,7 @@ class GraphBuilder:
         Args:
             expression: Python expression that evaluates to truthy/falsy.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         self._auto_merge_if_needed()
         node = GraphNode(
             type=NodeType.IF, name=name,
@@ -1420,7 +1429,7 @@ class GraphBuilder:
         Args:
             targets: What to clear: ``[]`` (full break), ``['tools']``, ``['thinking']``.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.BREAK, name=name,
             metadata={"break_targets": targets or []},
@@ -1436,7 +1445,7 @@ class GraphBuilder:
 
     def static(self, name: str, text: str = "", **kwargs: Any) -> GraphBuilder:
         """Add a Static node — outputs fixed text content, NO LLM."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.STATIC, name=name,
             metadata={"static_text": text},
@@ -1446,7 +1455,7 @@ class GraphBuilder:
 
     def code(self, name: str, code: str = "", filename: str = "", **kwargs: Any) -> GraphBuilder:
         """Add a Code node — code execution (handled by runtime environment)."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.CODE, name=name,
             metadata={"code": code, "filename": filename},
@@ -1463,7 +1472,7 @@ class GraphBuilder:
             variable: Name of the variable to create.
             expression: Python expression to evaluate.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.VAR, name=name,
             metadata={"name": variable, "expression": expression},
@@ -1475,7 +1484,7 @@ class GraphBuilder:
 
     def text(self, name: str, template: str = "", **kwargs: Any) -> GraphBuilder:
         """Add a Text node — renders Jinja2 template using thought metadata."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.TEXT, name=name,
             metadata={"text": template},
@@ -1485,7 +1494,7 @@ class GraphBuilder:
 
     def text_to_variable(self, name: str, variable: str = "", source: str = "", **kwargs: Any) -> GraphBuilder:
         """Convert text output to a variable."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.TEXT_TO_VARIABLE, name=name,
             metadata={"variable": variable, "source": source},
@@ -1497,7 +1506,7 @@ class GraphBuilder:
 
     def program_runner(self, name: str, program: str = "", **kwargs: Any) -> GraphBuilder:
         """Run a program/tool inline."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.PROGRAM_RUNNER, name=name,
             metadata={"program": program, **kwargs},
@@ -1518,7 +1527,7 @@ class GraphBuilder:
         **kwargs: Any,
     ) -> GraphBuilder:
         """Read variables from persistent memory into thought metadata."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.READ_MEMORY, name=name,
             metadata={
@@ -1540,7 +1549,7 @@ class GraphBuilder:
         **kwargs: Any,
     ) -> GraphBuilder:
         """Write variables from thought metadata to persistent memory."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.WRITE_MEMORY, name=name,
             metadata={
@@ -1562,7 +1571,7 @@ class GraphBuilder:
         **kwargs: Any,
     ) -> GraphBuilder:
         """Update existing persistent memory variables."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.UPDATE_MEMORY, name=name,
             metadata={
@@ -1583,7 +1592,7 @@ class GraphBuilder:
         **kwargs: Any,
     ) -> GraphBuilder:
         """Define flow-scoped persistent memory."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.FLOW_MEMORY, name=name,
             metadata={
@@ -1603,7 +1612,7 @@ class GraphBuilder:
         **kwargs: Any,
     ) -> GraphBuilder:
         """Define user-scoped persistent memory (survives across flow executions)."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.USER_MEMORY, name=name,
             metadata={
@@ -1626,7 +1635,7 @@ class GraphBuilder:
         Args:
             prompts: Optional text snippets to show the user.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta: dict[str, Any] = {}
         if prompts:
             meta["text_snippets"] = prompts
@@ -1643,7 +1652,7 @@ class GraphBuilder:
 
         Use ``.on(label)`` for each option.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         self._auto_merge_if_needed()
         node = GraphNode(
             type=NodeType.USER_DECISION, name=name,
@@ -1670,7 +1679,7 @@ class GraphBuilder:
         Args:
             parameters: List of form field definitions.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.USER_FORM, name=name,
             metadata={"parameters": parameters or []},
@@ -1685,7 +1694,7 @@ class GraphBuilder:
 
     def comment(self, name: str, text: str = "", **kwargs: Any) -> GraphBuilder:
         """Add a Comment node — documentation only, no runtime logic."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.COMMENT, name=name,
             metadata={"comment": text},
@@ -1709,7 +1718,7 @@ class GraphBuilder:
         Args:
             graph_id: ID of the agent graph to execute as a sub-flow.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(
             type=NodeType.SUB_ASSISTANT, name=name,
             metadata={"sub_assistant_id": graph_id},
@@ -1761,7 +1770,7 @@ class GraphBuilder:
 
         Use ``static_merge()`` instead if you don't need LLM processing.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
             model=model, provider=provider, temperature=temperature,
             system_instruction=system_instruction, **kwargs,
@@ -1793,7 +1802,7 @@ class GraphBuilder:
         Waits for ALL branches (traverse_in=AwaitAll), appends static text,
         then continues. No LLM call involved.
         """
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         merge_node = GraphNode(
             type=NodeType.STATIC_MERGE, name=name,
             traverse_in=TraverseIn.AWAIT_ALL,
@@ -1838,7 +1847,7 @@ class GraphBuilder:
         **kwargs: Any,
     ) -> GraphBuilder:
         """Add a generic node of any type."""
-        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _FLOW_CONFIG_KEYS}
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         node = GraphNode(type=node_type, name=name, metadata=metadata or {}, **kwargs)
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)

@@ -493,21 +493,29 @@ def run_graph(
     # Set up node registry
     node_registry = _build_registry(provider_registry, model, provider_name)
 
-    # Event handler — skip Start/End nodes to avoid duplicate echo
-    _skip_types = {NodeType.START.value, NodeType.END.value}
+    # Event handler — respects show_output metadata flag
+    _silent_types = {NodeType.START.value, NodeType.END.value}
+    _node_map = {n.id: n for n in agent_graph.nodes}
+
+    def _should_show(node_id) -> bool:
+        """Check if a node's output should be displayed."""
+        node = _node_map.get(node_id)
+        if not node:
+            return True
+        if node.type.value in _silent_types:
+            return False
+        # Metadata flag: show_output=False hides the node
+        return node.metadata.get("show_output", True)
 
     def on_event(event: FlowEvent) -> None:
         if not verbose:
             return
         if isinstance(event, NodeStarted):
-            if event.node_type.value in _skip_types:
+            if not _should_show(event.node_id):
                 return
             print(f"  [{event.node_type.value:15s}] {event.node_name}", flush=True)
         elif isinstance(event, NodeFinished):
-            if event.node_id and any(
-                n.id == event.node_id and n.type.value in _skip_types
-                for n in agent_graph.nodes
-            ):
+            if not _should_show(event.node_id):
                 return
             output = event.result[:120] + "..." if len(event.result) > 120 else event.result
             if output:
