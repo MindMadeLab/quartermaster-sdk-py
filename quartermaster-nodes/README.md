@@ -152,7 +152,7 @@ InstructionNodeV1.think(ctx)
 
 ## Node Categories
 
-### LLM Nodes (10)
+### LLM Nodes (9)
 
 | Node | Description |
 |------|-------------|
@@ -162,7 +162,7 @@ InstructionNodeV1.think(ctx)
 | `InstructionProgram1` | LLM with tool/function execution |
 | `InstructionProgramParameters1` | LLM with tools and structured output |
 | `Decision1` | LLM picks a branch path |
-| `ReasoningV1` | Extended thinking / chain-of-thought reasoning |
+
 | `AgentNodeV1` | Autonomous agent with agentic loop and tool orchestration |
 | `Summarize1` | LLM-powered summarization |
 | `Merge1` | Combine parallel branches via LLM |

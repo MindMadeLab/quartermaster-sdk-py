@@ -64,7 +64,7 @@ An agent graph is a **directed acyclic graph (DAG)** where:
 | `End1` | Exit point of the graph |
 | `Instruction1` | LLM instruction / prompt execution |
 | `Decision1` | LLM-driven branching decision |
-| `Reasoning1` | Chain-of-thought reasoning step |
+
 | `Agent1` | Delegate to another agent |
 | `Merge1` | Merge multiple branches |
 | `If1` | Conditional branch (expression-based) |
@@ -116,7 +116,7 @@ An agent graph is a **directed acyclic graph (DAG)** where:
 
 The `metadata` field is a JSON object whose schema depends on the node type. Common schemas:
 
-**InstructionMetadata** (for `Instruction1`, `Reasoning1`):
+**InstructionMetadata** (for `Instruction1`):
 ```json
 {
   "system_instruction": "string",

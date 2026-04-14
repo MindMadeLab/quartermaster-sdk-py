@@ -217,24 +217,6 @@ class _BranchBuilder:
         node = GraphNode(type=NodeType.INSTRUCTION, name=name, metadata=meta)
         return self._add_node(node)
 
-    def reasoning(
-        self,
-        name: str,
-        model: str = "o1-mini",
-        provider: str = "openai",
-        **kwargs: Any,
-    ) -> _BranchBuilder:
-        """Add a Reasoning node — specialized for o-series reasoning models.
-
-        Does NOT use system instructions (reasoning models handle internally).
-        """
-        meta = _llm_meta(
-            model=model, provider=provider, temperature=0.0,
-            system_instruction="", **kwargs,
-        )
-        node = GraphNode(type=NodeType.REASONING, name=name, metadata=meta)
-        return self._add_node(node)
-
     def summarize(
         self,
         name: str,
@@ -1039,24 +1021,6 @@ class GraphBuilder:
             system_instruction=system_instruction, **kwargs,
         )
         node = GraphNode(type=NodeType.INSTRUCTION, name=name, metadata=meta)
-        return self._add_node(node)
-
-    def reasoning(
-        self,
-        name: str,
-        model: str = "o1-mini",
-        provider: str = "openai",
-        **kwargs: Any,
-    ) -> GraphBuilder:
-        """Add a Reasoning node — specialized for o-series reasoning models.
-
-        Does NOT use system instructions (reasoning models handle internally).
-        """
-        meta = _llm_meta(
-            model=model, provider=provider, temperature=0.0,
-            system_instruction="", **kwargs,
-        )
-        node = GraphNode(type=NodeType.REASONING, name=name, metadata=meta)
         return self._add_node(node)
 
     def summarize(

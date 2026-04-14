@@ -60,21 +60,6 @@ class TestDecisionNode:
         assert info.metadata.get("llm_stream") is False
 
 
-class TestReasoningNode:
-    def test_info(self):
-        from quartermaster_nodes.nodes.llm.reasoning import ReasoningV1
-
-        info = ReasoningV1.info()
-        assert "reasoning" in info.description.lower()
-
-    def test_defaults(self):
-        from quartermaster_nodes.nodes.llm.reasoning import ReasoningV1
-
-        assert ReasoningV1.metadata_model_default_value == "o1-mini"
-        assert ReasoningV1.metadata_system_instruction_default_value is None
-        assert ReasoningV1.metadata_temperature_default_value is None
-
-
 class TestAgentNode:
     def test_info(self):
         from quartermaster_nodes.nodes.llm.agent import AgentNodeV1

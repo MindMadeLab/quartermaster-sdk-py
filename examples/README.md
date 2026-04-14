@@ -46,7 +46,7 @@ uv run examples/run_interactive.py
 | 05 | `05_memory_flow.py` | Customer service with var, text templates, write/read/update memory |
 | 06 | `06_tool_decorator.py` | `@tool()` decorator for creating tools from plain functions |
 | 07 | `07_switch_router.py` | Multi-way switch (5 branches) for language routing |
-| 08 | `08_reasoning.py` | Reasoning and summarization nodes for analytical workflows |
+
 | 09 | `09_parallel_agents.py` | Parallel agent sessions with `SessionManager` |
 | 10 | `10_enterprise_agent.py` | Enterprise agent: department sub-graphs, decisions, IF gates, parallel, memory |
 | 11 | `11_nested_control_flow.py` | Parallel fan-out with IF decisions nested inside branches |
@@ -69,6 +69,6 @@ uv run examples/run_interactive.py
 - **Memory**: `var()`, `write_memory()`, `read_memory()`, `update_memory()` for state
 - **Templates**: `text()` with `{{variable}}` Jinja2 interpolation
 - **User forms**: `user_form()` with typed parameters for structured data collection
-- **Reasoning**: `reasoning()` and `summarize()` for analytical pipelines
+- **Summarize**: `summarize()` for condensing conversation history
 - **Tools**: `@tool()` and `@registry.tool()` decorator with automatic type and docstring extraction
 - **Local LLMs**: `register_local("ollama")` for self-hosted inference

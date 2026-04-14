@@ -23,7 +23,7 @@ class NodeType(str, Enum):
     MERGE = "Merge1"
     PROGRAM_RUNNER = "ProgramRunner1"
     READ_MEMORY = "ReadMemory1"
-    REASONING = "Reasoning1"
+
     START = "Start1"
     STATIC = "Static1"
     STATIC_DECISION = "StaticDecision1"

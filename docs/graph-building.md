@@ -177,9 +177,6 @@ graph.sub_agent("Delegate", graph_id="agent-uuid-here")
 # Agent node (autonomous tool-use loop)
 graph.agent("Researcher", model="gpt-4o", tools=["web-search-v1"], max_iterations=10)
 
-# Reasoning (for o-series models)
-graph.reasoning("Deep analysis", model="o1-mini")
-
 # Summarize conversation
 graph.summarize("Summary", system_instruction="Summarize the conversation.")
 
@@ -217,7 +214,7 @@ The `NodeType` enum defines all available node types. Here is the complete list 
 | `INSTRUCTION_PARAMETERS` | `InstructionParameters1` | LLM call with structured parameter extraction. |
 | `INSTRUCTION_PROGRAM` | `InstructionProgram1` | LLM call with tool execution. |
 | `INSTRUCTION_PROGRAM_PARAMETERS` | `InstructionProgramParameters1` | Combined instruction + tool + structured parameters. |
-| `REASONING` | `Reasoning1` | Extended thinking / chain-of-thought mode (o-series models). |
+
 | `SUMMARIZE` | `Summarize1` | Summarize conversation or content. |
 
 ### User Interaction

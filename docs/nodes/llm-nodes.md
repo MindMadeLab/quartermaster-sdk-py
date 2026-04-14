@@ -240,17 +240,6 @@ graph TD
 
 ---
 
-## ReasoningV1
-
-**Node name:** `ReasoningNode` | **Version:** 1.0 | **Class:** `ReasoningV1`
-
-Specialized for reasoning models (o1-mini, o1). No system instruction is sent.
-Defaults: model `o1-mini`, temperature `None`, max input tokens `32768`, max
-output tokens `None`. Traversal: `AwaitFirst` / `SpawnAll`.
-Use for complex multi-step reasoning, math, or code analysis.
-
----
-
 ## Summarize1
 
 **Node name:** `Summarize1` | **Version:** 1.0 | **Class:** `Summarize1`
@@ -354,10 +343,8 @@ graph TD
     B -->|Yes| F[InstructionParameters1]
     D -->|No| G[InstructionProgram1]
     D -->|Yes| H[InstructionProgramParameters1]
-    E -->|No| I{Need reasoning?}
+    E -->|No| I{Need summarization?}
     E -->|Yes| J[InstructionImageVision1]
-    I -->|No| K{Need summarization?}
-    I -->|Yes| L[ReasoningV1]
-    K -->|No| M[InstructionNodeV1]
-    K -->|Yes| N[Summarize1]
+    I -->|No| K[InstructionNodeV1]
+    I -->|Yes| L[Summarize1]
 ```

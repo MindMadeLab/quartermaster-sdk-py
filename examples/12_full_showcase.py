@@ -14,7 +14,7 @@ Patterns demonstrated
   - Memory read/write/update
   - Text templating with {{variables}}
   - Var capture
-  - Reasoning and summarisation nodes
+  - Summarisation nodes
   - Logging and notifications
   - Multiple merge points
 
@@ -128,7 +128,7 @@ agent = (
     .static_merge("Quality review complete")
 
     # --- Synthesis and delivery -----------------------------------------------
-    .reasoning("Synthesise findings", model="claude-haiku-4-5-20251001", provider="anthropic")
+    .instruction("Synthesise findings", model="claude-haiku-4-5-20251001", provider="anthropic", system_instruction="Synthesise all research findings into a coherent analysis")
     .summarize("Executive summary", model="claude-haiku-4-5-20251001", system_instruction="Create a concise executive summary with key takeaways")
 
     # --- Audit trail ----------------------------------------------------------

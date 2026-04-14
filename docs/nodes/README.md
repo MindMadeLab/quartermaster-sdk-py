@@ -70,7 +70,7 @@ LLM nodes delegate work to a `Chain` of handlers executed in sequence:
 | AgentNode | `AgentNodeV1` | Autonomous agent with tool loop | [llm-nodes.md](llm-nodes.md) |
 | Decision1 | `Decision1` | LLM picks which edge to follow | [llm-nodes.md](llm-nodes.md) |
 | Merge1 | `Merge1` | Synthesize parallel (SpawnAll) branch outputs via LLM | [llm-nodes.md](llm-nodes.md) |
-| ReasoningNode | `ReasoningV1` | Chain-of-thought reasoning | [llm-nodes.md](llm-nodes.md) |
+
 | Summarize1 | `Summarize1` | LLM summarization | [llm-nodes.md](llm-nodes.md) |
 | InstructionParameters1 | `InstructionParameters1` | Structured output via tool calling | [llm-nodes.md](llm-nodes.md) |
 | InstructionProgram1 | `InstructionProgram1` | LLM with tool execution | [llm-nodes.md](llm-nodes.md) |

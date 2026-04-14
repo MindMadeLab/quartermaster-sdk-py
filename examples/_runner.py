@@ -103,7 +103,7 @@ def _get_provider_registry(provider_name: str) -> ProviderRegistry:
 # ---------------------------------------------------------------------------
 
 class LLMExecutor(NodeExecutor):
-    """Calls a real LLM for Instruction, Reasoning, and Summarize nodes."""
+    """Calls a real LLM for Instruction and Summarize nodes."""
 
     def __init__(self, provider_registry: ProviderRegistry, default_model: str, default_provider: str):
         self._registry = provider_registry
@@ -374,7 +374,7 @@ def _build_registry(
 
     # LLM nodes
     reg.register(NodeType.INSTRUCTION.value, llm)
-    reg.register(NodeType.REASONING.value, llm)
+
     reg.register(NodeType.SUMMARIZE.value, llm)
     reg.register(NodeType.AGENT.value, llm)
     reg.register(NodeType.INSTRUCTION_IMAGE_VISION.value, llm)

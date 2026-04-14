@@ -135,7 +135,7 @@ with open("agent.yaml") as f:
 |--------|---------|-------------|
 | `.instruction(name, model, provider, temperature, system_instruction, **kwargs)` | `GraphBuilder` | LLM text generation, no tools, streams response |
 | `.decision(name, model, provider, temperature, prefix_message, suffix_message, options, **kwargs)` | `GraphBuilder` | LLM picks one path via `pick_path` tool (non-streaming) |
-| `.reasoning(name, model, provider, **kwargs)` | `GraphBuilder` | Reasoning model node (o-series) |
+
 | `.summarize(name, model, provider, temperature, system_instruction, **kwargs)` | `GraphBuilder` | LLM condenses conversation history |
 | `.agent(name, model, provider, system_instruction, tools, max_iterations, **kwargs)` | `GraphBuilder` | Agentic loop with tools, up to `max_iterations` |
 | `.vision(name, model, provider, system_instruction, **kwargs)` | `GraphBuilder` | Image vision/analysis node |
@@ -253,7 +253,7 @@ path = get_path(agent_graph, start_id, end_id)
 
 | Enum | Values |
 |------|--------|
-| `NodeType` | 40+ types: `START`, `END`, `INSTRUCTION`, `DECISION`, `IF`, `SWITCH`, `AGENT`, `USER`, `USER_FORM`, `USER_DECISION`, `CODE`, `MERGE`, `STATIC`, `STATIC_MERGE`, `STATIC_DECISION`, `VAR`, `TEXT`, `REASONING`, `SUMMARIZE`, `SUB_ASSISTANT`, `BREAK`, `COMMENT`, etc. |
+| `NodeType` | 40+ types: `START`, `END`, `INSTRUCTION`, `DECISION`, `IF`, `SWITCH`, `AGENT`, `USER`, `USER_FORM`, `USER_DECISION`, `CODE`, `MERGE`, `STATIC`, `STATIC_MERGE`, `STATIC_DECISION`, `VAR`, `TEXT`, `SUMMARIZE`, `SUB_ASSISTANT`, `BREAK`, `COMMENT`, etc. |
 | `TraverseIn` | `AWAIT_ALL`, `AWAIT_FIRST` |
 | `TraverseOut` | `SPAWN_ALL`, `SPAWN_NONE`, `SPAWN_START`, `SPAWN_PICKED` |
 | `ThoughtType` | `SKIP`, `NEW`, `NEW_HIDDEN`, `NEW_COLLAPSED`, `INHERIT`, `CONTINUE`, `EDIT_OR_NEW`, `EDIT_SAME`, `APPEND`, `USE_PREVIOUS`, etc. |

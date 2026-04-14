@@ -93,17 +93,6 @@ class SummarizeMetadata(LLMMetadata):
     llm_system_instruction: str = "Summarize the given conversation concisely."
 
 
-class ReasoningMetadata(LLMMetadata):
-    """Metadata for Reasoning nodes — specialized for o-series models.
-
-    Does NOT use system instructions (reasoning models handle internally).
-    """
-
-    llm_model: str = "o1-mini"
-    llm_temperature: float = 0.0  # reasoning models ignore this
-    llm_system_instruction: str = ""  # not used for reasoning
-
-
 # ── Control flow nodes ───────────────────────────────────────────────
 
 class IfMetadata(BaseModel):
@@ -254,7 +243,7 @@ _NODE_TYPE_METADATA: dict[NodeType, type[BaseModel]] = {
     NodeType.MERGE: MergeMetadata,
     NodeType.AGENT: AgentMetadata,
     NodeType.SUMMARIZE: SummarizeMetadata,
-    NodeType.REASONING: ReasoningMetadata,
+
     NodeType.INSTRUCTION_IMAGE_VISION: InstructionMetadata,
     # Control flow
     NodeType.IF: IfMetadata,

@@ -503,21 +503,6 @@ class TestSwitchNode:
         assert _no_errors(graph) == []
 
 
-class TestReasoningNode:
-    def test_reasoning(self):
-        graph = (
-            GraphBuilder("R")
-            .start()
-            .reasoning("Think hard", model="o1-preview")
-            .end()
-            .build()
-        )
-        r_nodes = [n for n in graph.nodes if n.type == NodeType.REASONING]
-        assert len(r_nodes) == 1
-        assert r_nodes[0].metadata["llm_model"] == "o1-preview"
-        assert _no_errors(graph) == []
-
-
 class TestSummarizeNode:
     def test_summarize(self):
         graph = (
@@ -684,19 +669,6 @@ class TestComplexDecisionChain:
 
 class TestBranchBuilderNewNodes:
     """Verify that _BranchBuilder has all the new node methods."""
-
-    def test_reasoning_on_branch(self):
-        graph = (
-            GraphBuilder("B")
-            .start()
-            .decision("D", options=["a", "b"])
-            .on("a").reasoning("Think", model="o1").end()
-            .on("b").instruction("Skip").end()
-            .end()
-            .build()
-        )
-        r_nodes = [n for n in graph.nodes if n.type == NodeType.REASONING]
-        assert len(r_nodes) == 1
 
     def test_var_on_branch(self):
         graph = (

@@ -1,7 +1,7 @@
 """Node implementations for building AI agent graphs.
 
 Categories:
-- llm: Nodes that call LLM providers (Instruction, Decision, Reasoning, Agent, etc.)
+- llm: Nodes that call LLM providers (Instruction, Decision, Agent, etc.)
 - control_flow: Flow control nodes (Start, End, Merge, If, Switch, Break)
 - data: Data manipulation nodes (Static, Var, Text, Code, ProgramRunner)
 - user_interaction: User-facing nodes (User, UserDecision, UserForm)
@@ -16,7 +16,7 @@ from quartermaster_nodes.nodes.llm.instruction_parameters import InstructionPara
 from quartermaster_nodes.nodes.llm.instruction_program import InstructionProgram1
 from quartermaster_nodes.nodes.llm.instruction_program_parameters import InstructionProgramParameters1
 from quartermaster_nodes.nodes.llm.decision import Decision1
-from quartermaster_nodes.nodes.llm.reasoning import ReasoningV1
+
 from quartermaster_nodes.nodes.llm.agent import AgentNodeV1
 from quartermaster_nodes.nodes.llm.summarize import Summarize1
 from quartermaster_nodes.nodes.llm.merge import Merge1
@@ -69,7 +69,7 @@ __all__ = [
     "InstructionProgram1",
     "InstructionProgramParameters1",
     "Decision1",
-    "ReasoningV1",
+
     "AgentNodeV1",
     "Summarize1",
     "Merge1",

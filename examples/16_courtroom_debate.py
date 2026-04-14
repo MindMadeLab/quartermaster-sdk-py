@@ -218,7 +218,7 @@ trial = (
         "BAILIFF: The court will now deliberate. Please remain seated.\n"
     ))
 
-    .reasoning("Judge deliberates on all evidence and arguments", model=JUDGE_MODEL, provider=JUDGE_PROVIDER)
+    .instruction("Judge deliberates", model=JUDGE_MODEL, provider=JUDGE_PROVIDER, system_instruction="You are the judge. Deliberate carefully on all evidence and arguments presented. Weigh the prosecution's and defense's cases methodically before reaching your verdict.")
 
     .instruction(
         "Final verdict",
