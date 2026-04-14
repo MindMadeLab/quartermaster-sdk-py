@@ -179,13 +179,17 @@ class LLMExecutor(NodeExecutor):
             provider=provider_name,
             system_message=system_instruction,
             temperature=context.get_meta("llm_temperature", 0.7),
-            stream=False,
+            stream=True,
         )
 
         try:
-            response = await provider.generate_text_response(prompt, config)
-            text = response.content
-            context.emit_token(text)
+            stream = await provider.generate_text_response(prompt, config)
+            chunks = []
+            async for token_response in stream:
+                if token_response.content:
+                    chunks.append(token_response.content)
+                    context.emit_token(token_response.content)
+            text = "".join(chunks)
 
             # Append to conversation history
             node_name = context.current_node.name if context.current_node else "Assistant"
@@ -557,17 +561,28 @@ def run_graph(
             return False
         return node.metadata.get("show_output", True)
 
+    _streaming_node = [None]  # track which node is currently streaming
+
     def on_event(event: FlowEvent) -> None:
         if not verbose:
             return
         if isinstance(event, NodeStarted):
             if not _should_show(event.node_id):
                 return
-            print(f"  [{event.node_type.value:15s}] {event.node_name}", flush=True)
+            print(f"\n  [{event.node_type.value:15s}] {event.node_name}", flush=True)
+            _streaming_node[0] = event.node_id
+        elif isinstance(event, TokenGenerated):
+            if _should_show(event.node_id):
+                print(event.token, end="", flush=True)
         elif isinstance(event, NodeFinished):
             if not _should_show(event.node_id):
                 return
-            if event.result:
+            if _streaming_node[0] == event.node_id:
+                # Tokens already printed — just add a newline
+                print(flush=True)
+                _streaming_node[0] = None
+            elif event.result:
+                # Non-streaming node (text, var, etc.) — print result
                 print(f"\n{event.result}\n", flush=True)
         elif isinstance(event, FlowError):
             print(f"  [ERROR] {event.error}", flush=True)
