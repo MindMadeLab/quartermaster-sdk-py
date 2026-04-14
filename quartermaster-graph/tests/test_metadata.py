@@ -3,32 +3,17 @@
 
 from quartermaster_graph.enums import NodeType
 from quartermaster_graph.metadata import (
-    AggregatorMetadata,
-    ApiCallMetadata,
     CodeMetadata,
     DecisionMetadata,
-    FilterMetadata,
     IfMetadata,
     InstructionMetadata,
-    LogMetadata,
-    LoopMetadata,
-    NotificationMetadata,
-    RouterMetadata,
     StaticMetadata,
     SwitchMetadata,
-    TimerMetadata,
-    ToolMetadata,
-    TransformerMetadata,
     UserFormMetadata,
-    ValidatorMetadata,
     VarMetadata,
     get_metadata_class,
     validate_metadata,
 )
-
-# Note: The metadata classes still exist for potential use with custom node() calls,
-# but they are no longer registered in the _NODE_TYPE_METADATA lookup since the
-# corresponding NodeType enum members were removed.
 
 
 class TestGetMetadataClass:
@@ -132,54 +117,3 @@ class TestIndividualMetadata:
             parameters=[{"name": "email", "type": "text"}],
         )
         assert len(m.parameters) == 1
-
-    def test_tool_metadata(self):
-        m = ToolMetadata(tool_name="web_search", tool_args={"query": "test"})
-        assert m.tool_name == "web_search"
-
-    def test_api_call_metadata(self):
-        m = ApiCallMetadata(url="https://api.example.com", method="POST")
-        assert m.method == "POST"
-
-    def test_timer_metadata(self):
-        m = TimerMetadata(delay_seconds=5.0)
-        assert m.delay_seconds == 5.0
-
-    def test_loop_metadata(self):
-        m = LoopMetadata(max_iterations=20, break_condition="done == True")
-        assert m.max_iterations == 20
-
-    def test_validator_metadata(self):
-        m = ValidatorMetadata(validation_schema='{"type": "object"}')
-        assert "object" in m.validation_schema
-
-    def test_transformer_metadata(self):
-        m = TransformerMetadata(
-            transform_expression="upper()",
-            input_variable="text",
-            output_variable="result",
-        )
-        assert m.output_variable == "result"
-
-    def test_filter_metadata(self):
-        m = FilterMetadata(filter_expression="len(x) > 0", input_variable="items")
-        assert m.input_variable == "items"
-
-    def test_aggregator_metadata(self):
-        m = AggregatorMetadata(strategy="merge", input_variable="results")
-        assert m.strategy == "merge"
-
-    def test_router_metadata(self):
-        m = RouterMetadata(
-            route_expression="category",
-            routes={"A": "path_a", "B": "path_b"},
-        )
-        assert len(m.routes) == 2
-
-    def test_log_metadata(self):
-        m = LogMetadata(level="warning", message_template="Issue: {msg}")
-        assert m.level == "warning"
-
-    def test_notification_metadata(self):
-        m = NotificationMetadata(channel="slack", message_template="Alert!")
-        assert m.channel == "slack"
