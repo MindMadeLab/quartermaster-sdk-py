@@ -33,7 +33,7 @@ if _env_file.is_file():
             key, _, value = line.partition("=")
             key = key.strip()
             value = value.strip().strip("'\"")
-            if key and not os.environ.get(key):
+            if key:
                 os.environ[key] = value
 
 from quartermaster_engine import FlowRunner, InMemoryStore, NodeStarted, NodeFinished, FlowEvent, FlowError, TokenGenerated
