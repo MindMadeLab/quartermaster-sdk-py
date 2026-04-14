@@ -113,14 +113,24 @@ class LLMExecutor(NodeExecutor):
             except Exception:
                 return NodeResult(success=False, data={}, error=f"Provider '{provider_name}' not available")
 
-        # Extract prompt: last message content, or user input from memory
-        prompt = ""
-        for msg in reversed(context.messages):
+        # Build prompt from conversation history stored in memory
+        conversation = context.memory.get("__conversation__", [])
+        user_input = str(context.memory.get("__user_input__", "Hello"))
+
+        # Also check engine messages
+        for msg in context.messages:
             if msg.content:
-                prompt = msg.content
-                break
-        if not prompt:
-            prompt = str(context.memory.get("__user_input__", "Hello"))
+                user_input = msg.content
+
+        # Build the prompt: include recent conversation for context
+        if conversation:
+            history = "\n\n".join(
+                f"[{entry['role']}] {entry['text']}"
+                for entry in conversation[-6:]  # last 6 exchanges for context
+            )
+            prompt = f"Previous conversation:\n{history}\n\nUser's original request: {user_input}"
+        else:
+            prompt = user_input
 
         config = LLMConfig(
             model=model,
@@ -134,7 +144,14 @@ class LLMExecutor(NodeExecutor):
             response = await provider.generate_text_response(prompt, config)
             text = response.content
             context.emit_token(text)
-            return NodeResult(success=True, data={}, output_text=text)
+
+            # Append to conversation history in memory
+            node_name = context.current_node.name if context.current_node else "Assistant"
+            conversation.append({"role": node_name, "text": text})
+            return NodeResult(
+                success=True, data={"memory_updates": {"__conversation__": conversation}},
+                output_text=text,
+            )
         except Exception as e:
             return NodeResult(success=False, data={}, error=str(e))
 
@@ -173,13 +190,21 @@ class DecisionExecutor(NodeExecutor):
                 picked = options[0] if options else ""
                 return NodeResult(success=True, data={}, output_text=picked, picked_node=picked)
 
-        prompt = ""
-        for msg in reversed(context.messages):
+        # Build prompt with conversation history
+        conversation = context.memory.get("__conversation__", [])
+        user_input = str(context.memory.get("__user_input__", "Choose"))
+        for msg in context.messages:
             if msg.content:
-                prompt = msg.content
-                break
-        if not prompt:
-            prompt = str(context.memory.get("__user_input__", "Choose"))
+                user_input = msg.content
+
+        if conversation:
+            history = "\n\n".join(
+                f"[{entry['role']}] {entry['text']}"
+                for entry in conversation[-4:]
+            )
+            prompt = f"Based on the conversation:\n{history}\n\nOriginal request: {user_input}"
+        else:
+            prompt = user_input
 
         config = LLMConfig(
             model=model,
