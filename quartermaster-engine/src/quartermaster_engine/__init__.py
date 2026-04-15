@@ -11,13 +11,24 @@ from quartermaster_engine.events import (
     TokenGenerated,
     UserInputRequired,
 )
+from quartermaster_engine.example_runner import (
+    AgentExecutor,
+    LLMExecutor,
+    build_default_registry,
+    run_graph,
+)
 from quartermaster_engine.memory.flow_memory import FlowMemory
 from quartermaster_engine.memory.persistent_memory import InMemoryPersistence, PersistentMemory
 from quartermaster_engine.messaging.context_manager import ContextManager
 from quartermaster_engine.messaging.message_router import MessageRouter
-from quartermaster_engine.runner.flow_runner import FlowRunner
+from quartermaster_engine.nodes import (
+    NodeExecutor,
+    NodeRegistry,
+    NodeResult,
+    SimpleNodeRegistry,
+)
+from quartermaster_engine.runner.flow_runner import FlowResult, FlowRunner
 from quartermaster_engine.stores.base import ExecutionStore
-from quartermaster_engine.example_runner import run_graph
 from quartermaster_engine.stores.memory_store import InMemoryStore
 from quartermaster_engine.types import (
     ErrorStrategy,
@@ -61,6 +72,12 @@ __all__ = [
     "InMemoryStore",
     # Runner
     "FlowRunner",
+    "FlowResult",
+    # Node registry / executor protocol
+    "NodeRegistry",
+    "NodeExecutor",
+    "NodeResult",
+    "SimpleNodeRegistry",
     # Memory
     "FlowMemory",
     "PersistentMemory",
@@ -68,8 +85,11 @@ __all__ = [
     # Messaging
     "MessageRouter",
     "ContextManager",
-    # Example runner
+    # Example runner / default node registry builder
     "run_graph",
+    "build_default_registry",
+    "LLMExecutor",
+    "AgentExecutor",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"

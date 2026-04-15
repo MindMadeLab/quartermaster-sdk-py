@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quartermaster-graph"
-version = "0.1.0"
+version = "0.1.2"
 description = "Framework-agnostic agent graph schema for AI agent workflows as directed acyclic graphs"
 readme = "README.md"
 license = "Apache-2.0"

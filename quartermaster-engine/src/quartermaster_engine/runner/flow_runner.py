@@ -82,14 +82,60 @@ class FlowRunner:
     def __init__(
         self,
         graph: GraphSpec,
-        node_registry: NodeRegistry,
+        node_registry: NodeRegistry | None = None,
         store: ExecutionStore | None = None,
         dispatcher: Any | None = None,
         context_manager: ContextManager | None = None,
         on_event: Callable[[FlowEvent], None] | None = None,
+        *,
+        provider_registry: Any | None = None,
+        tool_registry: Any | None = None,
     ) -> None:
+        """Construct a runner.
+
+        Either *node_registry* (the low-level node-type → executor map) or
+        *provider_registry* (a :class:`quartermaster_providers.ProviderRegistry`)
+        must be supplied.  When only *provider_registry* is given the runner
+        builds a default node registry via
+        :func:`quartermaster_engine.build_default_registry` — which covers
+        every node type the bundled DSL can emit.
+
+        Pass *tool_registry* (e.g. a ``quartermaster_tools.ToolRegistry``)
+        to enable real tool execution for ``agent()`` nodes; without it
+        the agent loop still runs but treats tool-less graphs as plain
+        text completion.
+
+        ``self.provider_registry`` and ``self.tool_registry`` are stored
+        for introspection but are only meaningful when supplied through
+        this constructor.  When you build the node registry yourself the
+        runner has no way to know which provider/tool registry sits
+        behind it, so they will be ``None`` — that's expected, not a bug.
+        """
+        if node_registry is None:
+            if provider_registry is None:
+                raise TypeError(
+                    "FlowRunner requires either node_registry or "
+                    "provider_registry. Pass a ProviderRegistry to use the "
+                    "default node registry, or build a SimpleNodeRegistry "
+                    "directly via quartermaster_engine.build_default_registry()."
+                )
+            # Imported here to avoid the example_runner ↔ flow_runner cycle
+            # at module import time.
+            from quartermaster_engine.example_runner import build_default_registry
+
+            node_registry = build_default_registry(
+                provider_registry,
+                interactive=False,
+                tool_registry=tool_registry,
+            )
+
         self.graph = graph
         self.node_registry = node_registry
+        # NOTE: these are introspection-only references; they're ``None``
+        # when callers wire their own ``node_registry`` because we have no
+        # safe way to recover them from an arbitrary executor map.
+        self.provider_registry = provider_registry
+        self.tool_registry = tool_registry
         self.store: ExecutionStore = store or InMemoryStore()
         self.dispatcher = dispatcher or SyncDispatcher()
         self.context_manager = context_manager or ContextManager()
@@ -287,20 +333,38 @@ class FlowRunner:
             )
             return
 
-        # Mark as finished
-        execution.finish(result=result.output_text, output_data=result.data)
-        self.store.save_node_execution(flow_id, node_id, execution)
-
-        self._emit(
-            NodeFinished(
-                flow_id=flow_id,
-                node_id=node_id,
-                result=result.output_text or "",
-                output_data=result.data,
+        # Surface explicit failures from the executor.  Without this branch
+        # a node that returns ``NodeResult(success=False, error=...)`` would
+        # be marked FINISHED and the error would silently drop on the floor
+        # — making FlowResult.success=True even though no output was
+        # produced (e.g. provider connection refused).  Route through the
+        # standard error-handling pipeline so RETRY / SKIP / STOP semantics
+        # apply uniformly whether the executor raised or just returned a
+        # failure result.
+        if not result.success:
+            handled = self._handle_node_error(
+                flow_id, node, execution, result.error or "Node reported failure"
             )
-        )
+            if handled is None:
+                # RETRY in flight — _handle_node_error has already
+                # re-dispatched; nothing further to do here.
+                return
+            # Replace with the handled result so _dispatch_successors sees
+            # the failure status and applies STOP-vs-SKIP correctly.
+            result = handled
+        else:
+            execution.finish(result=result.output_text, output_data=result.data)
+            self.store.save_node_execution(flow_id, node_id, execution)
+            self._emit(
+                NodeFinished(
+                    flow_id=flow_id,
+                    node_id=node_id,
+                    result=result.output_text or "",
+                    output_data=result.data,
+                )
+            )
 
-        # Determine and dispatch successors
+        # Determine and dispatch successors (no-op when STOP + failure).
         self._dispatch_successors(flow_id, node, result, user_input)
 
     def _execute_control_node(

@@ -14,14 +14,19 @@ from quartermaster_providers.providers.local import (
     VLLMProvider,
 )
 from quartermaster_providers.providers.openai_compat import OpenAICompatibleProvider
-from quartermaster_providers.registry import ProviderRegistry, infer_provider
+from quartermaster_providers.registry import (
+    ProviderRegistry,
+    infer_provider,
+    register_local,
+)
 
 
 # ── Provider class defaults ──────────────────────────────────────────
 
 
 class TestOllamaProvider:
-    def test_default_base_url(self):
+    def test_default_base_url(self, monkeypatch):
+        monkeypatch.delenv("OLLAMA_HOST", raising=False)
         p = OllamaProvider()
         assert p.base_url == "http://localhost:11434/v1"
 
@@ -36,6 +41,24 @@ class TestOllamaProvider:
     def test_custom_base_url(self):
         p = OllamaProvider(base_url="http://gpu-box:11434/v1")
         assert p.base_url == "http://gpu-box:11434/v1"
+
+    def test_base_url_appends_v1(self):
+        p = OllamaProvider(base_url="http://host.docker.internal:11434")
+        assert p.base_url == "http://host.docker.internal:11434/v1"
+
+    def test_base_url_preserves_v1(self):
+        p = OllamaProvider(base_url="http://host.docker.internal:11434/v1/")
+        assert p.base_url == "http://host.docker.internal:11434/v1"
+
+    def test_ollama_host_env_var(self, monkeypatch):
+        monkeypatch.setenv("OLLAMA_HOST", "http://remote-ollama:11434")
+        p = OllamaProvider()
+        assert p.base_url == "http://remote-ollama:11434/v1"
+
+    def test_explicit_base_url_overrides_env(self, monkeypatch):
+        monkeypatch.setenv("OLLAMA_HOST", "http://wrong:11434")
+        p = OllamaProvider(base_url="http://right:11434/v1")
+        assert p.base_url == "http://right:11434/v1"
 
 
 class TestVLLMProvider:
@@ -294,3 +317,67 @@ class TestMixedLocalCloud:
         reg.register_local("vllm", name="my-vllm")
         assert "ollama" in reg.list_providers()
         assert "my-vllm" in reg.list_providers()
+
+
+# ── default_model and module-level register_local() ────────────────────
+
+
+class TestDefaultModel:
+    def test_default_model_routes_literal_name(self):
+        """register_local(default_model=...) makes get_for_model find ollama."""
+        reg = ProviderRegistry(auto_configure=False)
+        reg.register_local("ollama", default_model="gemma4:26b")
+        assert isinstance(reg.get_for_model("gemma4:26b"), OllamaProvider)
+
+    def test_default_model_records_for_get_default_model(self):
+        reg = ProviderRegistry(auto_configure=False)
+        reg.register_local("ollama", default_model="gemma4:26b")
+        assert reg.get_default_model("ollama") == "gemma4:26b"
+
+    def test_default_model_implies_default_provider(self):
+        """Unknown models should fall back to the provider with default_model."""
+        reg = ProviderRegistry(auto_configure=False)
+        reg.register_local("ollama", default_model="gemma4:26b")
+        # A totally unknown model name still resolves to ollama
+        provider = reg.get_for_model("custom-finetune-x")
+        assert isinstance(provider, OllamaProvider)
+        # And the registry knows what model to use
+        assert reg.get_default_model() == "gemma4:26b"
+
+    def test_default_model_with_special_regex_chars(self):
+        """Model names containing colon (gemma4:26b) must escape correctly."""
+        reg = ProviderRegistry(auto_configure=False)
+        reg.register_local("ollama", default_model="llama3.1:70b")
+        # The literal name (with colon and dot) must route exactly
+        assert isinstance(reg.get_for_model("llama3.1:70b"), OllamaProvider)
+
+
+class TestModuleLevelRegisterLocal:
+    """The user-facing one-liner ``from quartermaster_providers import register_local``."""
+
+    def test_returns_provider_registry(self):
+        reg = register_local("ollama")
+        assert isinstance(reg, ProviderRegistry)
+
+    def test_user_snippet(self):
+        """Mirror the exact 0.1.2 release-note snippet."""
+        reg = register_local(
+            "ollama",
+            base_url="http://host.docker.internal:11434",
+            default_model="gemma4:26b",
+        )
+        provider = reg.get("ollama")
+        assert isinstance(provider, OllamaProvider)
+        # base_url got the /v1 suffix appended automatically
+        assert provider.base_url == "http://host.docker.internal:11434/v1"
+        # default_model is recorded for engine-level use
+        assert reg.get_default_model("ollama") == "gemma4:26b"
+        # Default provider is set so unrouted models resolve here
+        assert reg.default_provider == "ollama"
+
+    def test_extending_existing_registry(self):
+        """Passing registry= reuses an existing instance instead of building a new one."""
+        existing = ProviderRegistry(auto_configure=False)
+        returned = register_local("ollama", registry=existing)
+        assert returned is existing
+        assert existing.is_registered("ollama")

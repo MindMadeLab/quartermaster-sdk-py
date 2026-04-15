@@ -84,6 +84,7 @@ class ProviderRegistry:
         self._factories: dict[str, tuple[type[AbstractLLMProvider], dict[str, Any]]] = {}
         self._custom_patterns: list[tuple[str, str]] = []
         self._default_provider: str | None = None
+        self._default_models: dict[str, str] = {}
         self._auto_configured = False
         if auto_configure:
             self._auto_configure()
@@ -166,6 +167,7 @@ class ProviderRegistry:
         name: str | None = None,
         models: list[str] | None = None,
         default: bool = False,
+        default_model: str | None = None,
         **kwargs: Any,
     ) -> None:
         """One-liner registration for local / self-hosted LLM engines.
@@ -185,6 +187,12 @@ class ProviderRegistry:
                 ``get_for_model("llama3.1:70b")`` resolve here.
             default: If ``True``, set this as the default fallback
                 provider for any model that can't be resolved.
+            default_model: Optional default model to associate with this
+                provider — engine-level helpers (``FlowRunner`` /
+                ``run_graph``) use it when a node doesn't pin its own
+                ``llm_model``.  Implies ``default=True`` so unrouted
+                model names also resolve here, and registers a literal
+                pattern for the model name itself.
             **kwargs: Extra keyword arguments forwarded to the provider
                 constructor.
 
@@ -211,7 +219,10 @@ class ProviderRegistry:
                 default=True,
             )
         """
-        from quartermaster_providers.providers.local import LOCAL_PROVIDERS
+        from quartermaster_providers.providers.local import (
+            LOCAL_PROVIDERS,
+            _normalize_openai_compat_url,
+        )
         from quartermaster_providers.providers.openai_compat import (
             OpenAICompatibleProvider,
         )
@@ -221,7 +232,10 @@ class ProviderRegistry:
         if engine == "custom":
             if not base_url:
                 raise ProviderError("engine='custom' requires a base_url argument.")
-            ctor_kwargs: dict[str, Any] = {"base_url": base_url, **kwargs}
+            ctor_kwargs: dict[str, Any] = {
+                "base_url": _normalize_openai_compat_url(base_url),
+                **kwargs,
+            }
             if api_key:
                 ctor_kwargs["api_key"] = api_key
             ctor_kwargs.setdefault("provider_name", provider_name)
@@ -230,7 +244,7 @@ class ProviderRegistry:
             cls = LOCAL_PROVIDERS[engine]
             ctor_kwargs = {**kwargs}
             if base_url:
-                ctor_kwargs["base_url"] = base_url
+                ctor_kwargs["base_url"] = _normalize_openai_compat_url(base_url)
             if api_key:
                 ctor_kwargs["api_key"] = api_key
             self._factories[provider_name] = (cls, ctor_kwargs)
@@ -247,6 +261,15 @@ class ProviderRegistry:
         if models:
             for pattern in models:
                 self.add_model_pattern(pattern, provider_name)
+
+        if default_model:
+            # Route the literal model name to this provider and remember it
+            # so consumers (FlowRunner et al.) can resolve "no model
+            # specified" → the user's intended default for this engine.
+            self.add_model_pattern(re.escape(default_model), provider_name)
+            self._default_models[provider_name] = default_model
+            # default_model implies "use me when nothing else matches"
+            self.set_default_provider(provider_name)
 
         if default:
             self.set_default_provider(provider_name)
@@ -341,6 +364,7 @@ class ProviderRegistry:
         """Remove a provider registration."""
         self._providers.pop(name, None)
         self._factories.pop(name, None)
+        self._default_models.pop(name, None)
 
     def clear(self) -> None:
         """Remove all registrations."""
@@ -348,6 +372,33 @@ class ProviderRegistry:
         self._factories.clear()
         self._custom_patterns.clear()
         self._default_provider = None
+        self._default_models.clear()
+
+    def get_default_model(self, provider_name: str | None = None) -> str | None:
+        """Return the default model for a provider (or the registry's default).
+
+        When *provider_name* is omitted, the registry's default-fallback
+        provider's default model is used (set via
+        ``register_local(default_model=...)`` or ``set_default_model()``).
+        """
+        if provider_name is None:
+            provider_name = self._default_provider
+        if not provider_name:
+            return None
+        return self._default_models.get(provider_name)
+
+    def set_default_model(self, provider_name: str, model: str) -> None:
+        """Associate a default model with a provider name.
+
+        This does not affect routing — it just records the model so engine-
+        level helpers can pick it when a node leaves ``llm_model`` blank.
+        """
+        self._default_models[provider_name] = model
+
+    @property
+    def default_provider(self) -> str | None:
+        """Name of the catch-all fallback provider, if one is configured."""
+        return self._default_provider
 
 
 # Global default registry
@@ -357,3 +408,46 @@ _default_registry = ProviderRegistry()
 def get_default_registry() -> ProviderRegistry:
     """Get the global default provider registry."""
     return _default_registry
+
+
+def register_local(
+    engine: str,
+    *,
+    base_url: str | None = None,
+    api_key: str | None = None,
+    name: str | None = None,
+    models: list[str] | None = None,
+    default: bool = True,
+    default_model: str | None = None,
+    registry: ProviderRegistry | None = None,
+    **kwargs: Any,
+) -> ProviderRegistry:
+    """Module-level convenience: build a registry with one local engine.
+
+    The simplest possible path from "I have Ollama running" to "I have a
+    ``ProviderRegistry`` ready to hand to the engine"::
+
+        from quartermaster_providers import register_local
+
+        provider_registry = register_local(
+            "ollama",
+            base_url="http://host.docker.internal:11434",
+            default_model="gemma4:26b",
+        )
+
+    *registry* lets callers extend an existing registry instead of
+    creating a fresh one.  All other arguments are forwarded to
+    :meth:`ProviderRegistry.register_local`.
+    """
+    reg = registry if registry is not None else ProviderRegistry(auto_configure=False)
+    reg.register_local(
+        engine,
+        base_url=base_url,
+        api_key=api_key,
+        name=name,
+        models=models,
+        default=default,
+        default_model=default_model,
+        **kwargs,
+    )
+    return reg
