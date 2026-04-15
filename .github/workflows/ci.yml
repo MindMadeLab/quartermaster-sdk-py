@@ -24,6 +24,9 @@ jobs:
           - quartermaster-engine
           - quartermaster-mcp-client
           - quartermaster-code-runner
+          # SDK has its own tests (public-surface guard) since v0.1.4 —
+          # added so a missing re-export or version drift fails CI.
+          - quartermaster-sdk
 
     steps:
       - uses: actions/checkout@v4
@@ -79,7 +82,10 @@ jobs:
     needs: test
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        # Match the main test matrix — drift here was caught in the v0.1.4
+        # audit (SDK was tested only on 3.11/3.12 while everything else
+        # had 3.13 too).
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
