@@ -12,7 +12,7 @@ Composable node types for building AI agent graphs.
 - **Framework-agnostic** via the `NodeContext` protocol -- integrates with any runtime
 - **Stateless class-based design** -- all nodes use `@classmethod` with no instance state
 - **Chain-of-Responsibility pattern** for composable LLM processing pipelines
-- **NodeRegistry** with auto-discovery, version tracking, and catalog generation
+- **NodeCatalog** with auto-discovery, version tracking, and catalog generation (formerly `NodeRegistry` — old name still works as an alias)
 - **Configurable flow behavior** per node: traversal strategy, thought type, message type, error handling
 
 ## Installation
@@ -28,28 +28,35 @@ pip install quartermaster-nodes
 ### Register and Discover Nodes
 
 ```python
-from quartermaster_nodes import NodeRegistry
+from quartermaster_nodes import NodeCatalog
 from quartermaster_nodes.nodes import InstructionNodeV1, StartNodeV1, EndNodeV1, Decision1
 
 # Manual registration
-registry = NodeRegistry()
-registry.register(StartNodeV1)
-registry.register(InstructionNodeV1)
-registry.register(Decision1)
-registry.register(EndNodeV1)
+catalog = NodeCatalog()
+catalog.register(StartNodeV1)
+catalog.register(InstructionNodeV1)
+catalog.register(Decision1)
+catalog.register(EndNodeV1)
 
 # Or auto-discover all built-in nodes
-registry = NodeRegistry()
-count = registry.discover("quartermaster_nodes.nodes")
+catalog = NodeCatalog()
+count = catalog.discover("quartermaster_nodes.nodes")
 print(f"Discovered {count} nodes")
 
 # Look up a node by name
-node_cls = registry.get("InstructionNode")
+node_cls = catalog.get("InstructionNode")
 print(node_cls.info().description)
 
 # Generate a JSON catalog of all nodes
-catalog = registry.catalog_json()
+all_nodes = catalog.catalog_json()
 ```
+
+> **Not the runtime registry.** `NodeCatalog` is a design-time catalog of node
+> class definitions. If you're wiring up `FlowRunner`, you want a **runtime
+> executor registry** — use `quartermaster_engine.SimpleNodeRegistry` for that.
+> `NodeRegistry` (the old name, still aliased here) collides with
+> `quartermaster_engine.nodes.NodeRegistry` (a Protocol); passing the wrong one
+> to `FlowRunner` now raises a clear `TypeError` instead of `AttributeError`.
 
 ### Creating a Custom Node
 
@@ -262,7 +269,7 @@ Defines a node's flow behavior constraints.
 | `message_type` | `AvailableMessageTypes` | Message role (Automatic, User, Assistant, etc.) |
 | `error_handling_strategy` | `AvailableErrorHandlingStrategies` | Stop, Continue, or Retry |
 
-### NodeRegistry
+### NodeCatalog (formerly NodeRegistry)
 
 | Method | Description |
 |--------|-------------|
@@ -273,6 +280,9 @@ Defines a node's flow behavior constraints.
 | `catalog_json() -> list[dict]` | JSON-serializable catalog |
 | `discover(package) -> int` | Auto-discover nodes from a package |
 | `count -> int` | Number of registered nodes |
+| `get_executor(...)` | **Guard** — raises `TypeError` pointing you to `quartermaster_engine.SimpleNodeRegistry`. This method exists only to give a helpful error if you accidentally pass a `NodeCatalog` to `FlowRunner`. |
+
+> `NodeRegistry` is kept as a backward-compatible alias for `NodeCatalog`.
 
 ### Chain-of-Responsibility
 
@@ -315,18 +325,37 @@ from quartermaster_graph.enums import NodeType             # Canonical source
 
 ### With quartermaster-engine (execution runtime)
 
-The engine resolves node types from the registry and calls `think()` through an adapter:
+`quartermaster-nodes` and `quartermaster-engine` operate on different axes:
+
+- `NodeCatalog` (this package) — design-time catalog of *node class definitions*
+  for discovery, introspection, and versioning.
+- `SimpleNodeRegistry` (engine) — runtime registry of *node executors* that
+  `FlowRunner` dispatches to.
+
+For runtime execution with `FlowRunner`, register executors directly with the
+engine registry:
 
 ```python
-from quartermaster_nodes import NodeRegistry
-from quartermaster_nodes.nodes import InstructionNodeV1
+from quartermaster_engine import FlowRunner
+from quartermaster_engine.nodes import SimpleNodeRegistry
 
-registry = NodeRegistry()
-registry.discover("quartermaster_nodes.nodes")
+registry = SimpleNodeRegistry()
+registry.register("Instruction1", my_instruction_executor)
+runner = FlowRunner(graph=graph, node_registry=registry)
+```
 
-# The engine looks up nodes by name and invokes think()
-node_cls = registry.get("InstructionNode", "1.0")
-node_cls.think(execution_context)
+The design-time catalog is still useful — to *inspect* available node classes
+before wiring executors:
+
+```python
+from quartermaster_nodes import NodeCatalog
+
+catalog = NodeCatalog()
+catalog.discover("quartermaster_nodes.nodes")
+
+node_cls = catalog.get("InstructionNode", "1.0")
+print(node_cls.info().description)
+node_cls.think(execution_context)  # direct invocation (no engine involved)
 ```
 
 ## Contributing

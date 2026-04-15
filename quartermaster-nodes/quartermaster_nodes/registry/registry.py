@@ -1,9 +1,26 @@
-"""Node registry with auto-discovery and catalog generation."""
+"""Node catalog with auto-discovery and catalog generation.
+
+IMPORTANT — naming gotcha:
+=========================
+
+This module exports ``NodeCatalog`` (aliased as ``NodeRegistry`` for
+backward compatibility). It is a *design-time catalog* of node **class
+definitions** — not a runtime executor registry.
+
+The ``FlowRunner`` in ``quartermaster_engine`` expects a **different**
+registry that maps node types to ``NodeExecutor`` instances. Use
+``quartermaster_engine.SimpleNodeRegistry`` (or anything implementing
+the ``quartermaster_engine.nodes.NodeRegistry`` Protocol) for that.
+
+Passing a ``NodeCatalog`` / ``quartermaster_nodes.NodeRegistry`` to
+``FlowRunner(node_registry=...)`` will raise a ``TypeError`` at the
+first node dispatch, pointing here.
+"""
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, NoReturn, Optional, Type
 
 from quartermaster_nodes.base import AbstractAssistantNode
 from quartermaster_nodes.exceptions import NodeNotFoundError
@@ -11,19 +28,30 @@ from quartermaster_nodes.exceptions import NodeNotFoundError
 logger = logging.getLogger(__name__)
 
 
-class NodeRegistry:
-    """Registry for discovering and managing node types.
+class NodeCatalog:
+    """Design-time catalog of node **class definitions**.
 
-    Provides registration, lookup, and catalog generation for all
-    available node types.
+    Tracks which :class:`AbstractAssistantNode` subclasses are
+    available to the framework — their names, versions, metadata
+    schemas, and flow config. Supports auto-discovery from a package.
 
-    Example:
-        registry = NodeRegistry()
-        registry.register(InstructionNodeV1)
-        node_cls = registry.get("Instruction1")
+    .. note::
+
+        This is NOT the registry ``FlowRunner`` uses at runtime.
+        ``FlowRunner`` expects a mapping from node-type strings to
+        ``NodeExecutor`` instances — use
+        ``quartermaster_engine.SimpleNodeRegistry`` for that. See
+        :meth:`get_executor` for the full error message if you've
+        wired the wrong one.
+
+    Example::
+
+        catalog = NodeCatalog()
+        catalog.register(InstructionNodeV1)
+        node_cls = catalog.get("Instruction1")
 
         # Or use auto-discovery
-        registry.discover("quartermaster_nodes.nodes")
+        catalog.discover("quartermaster_nodes.nodes")
     """
 
     def __init__(self) -> None:
@@ -139,14 +167,54 @@ class NodeRegistry:
         """Number of unique registered nodes (name:version pairs)."""
         return sum(1 for k in self._nodes if ":" in k)
 
+    # ------------------------------------------------------------------
+    # Wrong-registry guard
+    # ------------------------------------------------------------------
+    def get_executor(self, node_type: str) -> NoReturn:
+        """Guard — this is NOT an executor registry.
 
-def register_node(registry: NodeRegistry):
-    """Decorator for registering a node class with a registry.
+        ``FlowRunner._execute_logic_node`` calls ``get_executor`` on the
+        registry it was handed. If the hand-off was wrong (passing this
+        catalog instead of ``quartermaster_engine.SimpleNodeRegistry``),
+        we'd crash with an unhelpful ``AttributeError``. Provide a clear
+        redirect instead.
+        """
+        raise TypeError(
+            "quartermaster_nodes.NodeCatalog (aka NodeRegistry) is a "
+            "design-time catalog of node CLASS definitions, not a runtime "
+            "executor registry. FlowRunner expects a registry mapping node "
+            "types to NodeExecutor instances.\n\n"
+            "Use quartermaster_engine.SimpleNodeRegistry instead:\n\n"
+            "    from quartermaster_engine import FlowRunner\n"
+            "    from quartermaster_engine.nodes import SimpleNodeRegistry\n\n"
+            "    registry = SimpleNodeRegistry()\n"
+            "    registry.register('Instruction1', my_instruction_executor)\n"
+            "    runner = FlowRunner(graph=graph, node_registry=registry)\n\n"
+            f"(attempted: get_executor({node_type!r}))"
+        )
 
-    Example:
-        registry = NodeRegistry()
 
-        @register_node(registry)
+# ------------------------------------------------------------------
+# Backward-compatibility alias
+# ------------------------------------------------------------------
+# ``NodeRegistry`` was the original name. It collides with
+# ``quartermaster_engine.nodes.NodeRegistry`` (a Protocol for runtime
+# executors with a completely different API), which caused user-visible
+# confusion — ``FlowRunner(node_registry=quartermaster_nodes.NodeRegistry())``
+# crashed with ``AttributeError: get_executor``. Keep the old name as an
+# alias so existing code compiles, and handle the actual mis-use via the
+# ``get_executor`` guard above.
+NodeRegistry = NodeCatalog
+
+
+def register_node(registry: NodeCatalog):
+    """Decorator for registering a node class with a catalog.
+
+    Example::
+
+        catalog = NodeCatalog()
+
+        @register_node(catalog)
         class MyNode(AbstractAssistantNode):
             ...
     """
@@ -158,5 +226,5 @@ def register_node(registry: NodeRegistry):
     return decorator
 
 
-# Global default registry
-default_registry = NodeRegistry()
+# Global default catalog
+default_registry = NodeCatalog()
