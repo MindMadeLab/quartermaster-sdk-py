@@ -14,7 +14,7 @@ from quartermaster_nodes.base import AbstractAssistantNode, AbstractLLMAssistant
 from quartermaster_nodes.chain import Chain, Handler
 from quartermaster_nodes.registry import NodeCatalog, NodeRegistry, register_node
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 __all__ = [
     # Enums
