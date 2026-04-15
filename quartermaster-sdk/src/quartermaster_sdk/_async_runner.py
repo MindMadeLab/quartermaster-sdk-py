@@ -40,9 +40,11 @@ from ._chunks import Chunk, DoneChunk, ErrorChunk
 from ._config import get_default_registry
 from ._result import Result
 from ._runner import (
+    StreamDeadlineExceeded,
     _event_to_chunk,
     _extract_inline_tools,
     _merge_inline_tools,
+    _resolve_call_timeouts,
     _resolve_graph,
 )
 from ._stream_filters import _AsyncStream
@@ -73,6 +75,9 @@ class _ARunCallable:
         images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
+        timeout: float | None = None,
+        connect_timeout: float | None = None,
+        read_timeout: float | None = None,
     ) -> Result:
         """Execute *graph* against *user_input* and return a :class:`Result`.
 
@@ -89,6 +94,9 @@ class _ARunCallable:
             tool_registry: Optional :class:`quartermaster_tools.ToolRegistry`
                 made available to ``agent()``-type nodes that specify
                 ``tools=[...]``.
+            timeout / connect_timeout / read_timeout: Per-call LLM
+                timeout overrides (added in v0.4.0). Same resolution
+                as :meth:`_RunCallable.__call__`.
 
         **Cancellation:** if the awaiting task is cancelled, the running
         flow is stopped via :meth:`FlowRunner.stop` before the
@@ -100,6 +108,11 @@ class _ARunCallable:
         registry = provider_registry or get_default_registry()
         prepared_images = prepare_images(image=image, images=images)
         effective_tool_registry = _merge_inline_tools(tool_registry, inline_tools)
+        llm_timeouts = _resolve_call_timeouts(
+            timeout=timeout,
+            connect_timeout=connect_timeout,
+            read_timeout=read_timeout,
+        )
 
         # v0.3.0 trace: accumulate every FlowEvent on the worker
         # thread so we can build a ``Trace`` and attach it to the
@@ -137,6 +150,7 @@ class _ARunCallable:
                 user_input,
                 images=prepared_images or None,
                 flow_id=flow_id,
+                llm_timeouts=llm_timeouts,
             )
         except asyncio.CancelledError:
             # ``asyncio.to_thread`` can't actually interrupt the worker
@@ -169,6 +183,10 @@ class _ARunCallable:
         images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
+        timeout: float | None = None,
+        connect_timeout: float | None = None,
+        read_timeout: float | None = None,
+        deadline_seconds: float | None = None,
     ) -> _AsyncStream:
         """Run the graph and yield typed :class:`Chunk` events as they arrive.
 
@@ -185,15 +203,53 @@ class _ARunCallable:
         :class:`asyncio.Queue` so the event loop keeps servicing other
         tasks between chunks — no blocking ``next()`` inside the coro.
 
-        **Cancellation:** if the async iterator is abandoned early
-        (``break`` out of ``async for``, enclosing task cancelled, etc.)
-        :meth:`FlowRunner.stop` is called on the pre-generated
-        ``flow_id``.  The engine short-circuits on its next
-        ``_execute_node`` dispatch — nodes mid-LLM-call finish their
-        current request but no new work is scheduled, so long agent
-        loops unwind within a bounded time instead of leaking API costs
-        after the consumer goes away.
+        **Cancellation (v0.4.0):** the returned wrapper supports the
+        async context-manager protocol — ``async with qm.arun.stream(...)
+        as s:``. On every exit path (normal completion, ``break``,
+        ``return``, cancellation, or exception) the wrapper calls
+        :meth:`FlowRunner.stop` on the in-flight ``flow_id`` so the
+        engine short-circuits on its next ``_execute_node`` dispatch.
+        Nodes mid-LLM-call finish their current request but no new
+        work is scheduled — long agent loops unwind within a bounded
+        time instead of leaking API costs after the consumer goes
+        away. Tools polling ``qm.current_context().cancelled`` see
+        ``True`` as soon as the ``async with`` exit fires and can bail
+        out cooperatively.
+
+        Legacy raw ``async for``-only call sites keep working: the
+        generator's ``finally`` block fires the same stop when the
+        async iterator is abandoned.
         """
+        # v0.4.0 cancellation: mutable cell the async generator
+        # populates with (runner, flow_id) once it boots. The async
+        # generator body doesn't execute until the first ``anext()``,
+        # so the callback needs a handle populated as early as
+        # possible for break-before-first-iteration cases.
+        stop_handle: dict[str, Any] = {}
+
+        async def _on_exit() -> None:
+            runner = stop_handle.get("runner")
+            fid = stop_handle.get("flow_id")
+            if runner is None or fid is None:
+                # ``async with`` opened but never iterated; nothing
+                # was spun up, so nothing to stop.
+                return
+            try:
+                runner.stop(fid)
+            except Exception:  # pragma: no cover — defensive
+                logger.exception(
+                    "arun.stream: runner.stop(%s) raised from "
+                    "async-context-manager exit",
+                    fid,
+                )
+            # NB: we don't await the run_task here — it's scoped
+            # inside the async generator's closure. The generator's
+            # own ``finally`` block performs the bounded
+            # ``asyncio.wait_for(shield(run_task), timeout=5.0)``
+            # dance when the async iterator is closed; ``__aexit__``
+            # just needs to flip the engine's ``_stopped`` gate +
+            # per-flow cancel event so no new nodes dispatch.
+
         return _AsyncStream(
             self._aiter_chunks(
                 graph=graph,
@@ -202,7 +258,13 @@ class _ARunCallable:
                 images=images,
                 provider_registry=provider_registry,
                 tool_registry=tool_registry,
-            )
+                stop_handle=stop_handle,
+                timeout=timeout,
+                connect_timeout=connect_timeout,
+                read_timeout=read_timeout,
+                deadline_seconds=deadline_seconds,
+            ),
+            on_exit=_on_exit,
         )
 
     async def _aiter_chunks(
@@ -214,17 +276,37 @@ class _ARunCallable:
         images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
+        stop_handle: dict[str, Any] | None = None,
+        timeout: float | None = None,
+        connect_timeout: float | None = None,
+        read_timeout: float | None = None,
+        deadline_seconds: float | None = None,
     ) -> AsyncIterator[Chunk]:
         """Inner async generator that powers :meth:`stream`.
 
         Kept private: callers always go through ``stream()`` which
         wraps the result in :class:`_AsyncStream` for filter support.
+
+        *stop_handle* (v0.4.0) is the mutable cell the
+        async-context-manager exit callback reads. Populated with the
+        live runner + flow_id immediately after both exist so a caller
+        that ``async with``-opens then breaks before any events arrive
+        still triggers ``runner.stop`` on the way out.
         """
+        if deadline_seconds is not None and deadline_seconds <= 0:
+            raise ValueError(
+                f"arun.stream(): deadline_seconds must be > 0, got {deadline_seconds!r}"
+            )
         inline_tools = _extract_inline_tools(graph)
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
         prepared_images = prepare_images(image=image, images=images)
         effective_tool_registry = _merge_inline_tools(tool_registry, inline_tools)
+        llm_timeouts = _resolve_call_timeouts(
+            timeout=timeout,
+            connect_timeout=connect_timeout,
+            read_timeout=read_timeout,
+        )
 
         # Capture the consumer's loop so the thread can marshal events
         # back to it via ``call_soon_threadsafe``.  ``run_coroutine_threadsafe``
@@ -259,6 +341,13 @@ class _ARunCallable:
             on_event=on_event,
         )
 
+        # v0.4.0: publish runner+flow_id to the async context-manager
+        # exit callback so ``__aexit__`` can call runner.stop even
+        # before the first event flows through.
+        if stop_handle is not None:
+            stop_handle["runner"] = runner
+            stop_handle["flow_id"] = flow_id
+
         def _run_sync() -> None:
             """Runs on the ``to_thread`` worker — synchronous engine loop."""
             try:
@@ -266,6 +355,7 @@ class _ARunCallable:
                     user_input,
                     images=prepared_images or None,
                     flow_id=flow_id,
+                    llm_timeouts=llm_timeouts,
                 )
                 holder["result"] = fr
             except Exception as exc:  # pragma: no cover — defensive
@@ -280,9 +370,29 @@ class _ARunCallable:
             asyncio.to_thread(_run_sync), name="qm-arun-stream"
         )
 
+        # v0.4.0: total wall-clock ceiling for the whole async stream.
+        # Independent of ``read_timeout`` (per-LLM-call). Computed once
+        # so a stalled ``q.get`` doesn't silently push the budget out.
+        deadline_at: float | None = (
+            loop.time() + deadline_seconds if deadline_seconds is not None else None
+        )
+
         try:
             while True:
-                event = await q.get()
+                if deadline_at is not None:
+                    remaining = deadline_at - loop.time()
+                    if remaining <= 0:
+                        raise StreamDeadlineExceeded(
+                            f"arun.stream: exceeded deadline_seconds={deadline_seconds}"
+                        )
+                    try:
+                        event = await asyncio.wait_for(q.get(), timeout=remaining)
+                    except asyncio.TimeoutError:
+                        raise StreamDeadlineExceeded(
+                            f"arun.stream: exceeded deadline_seconds={deadline_seconds}"
+                        ) from None
+                else:
+                    event = await q.get()
                 if event is None:
                     break
                 chunk = _event_to_chunk(event)

@@ -94,6 +94,7 @@ def configure(
         want to introspect it.
     """
     global _default_registry, _default_model
+    global _default_connect_timeout, _default_read_timeout
 
     # Validate the Ollama tool-protocol knob here — we want a clear
     # ``ValueError`` at boot rather than a cryptic ``TypeError`` when
@@ -105,6 +106,31 @@ def configure(
             f"configure(): ollama_tool_protocol={ollama_tool_protocol!r} is invalid. "
             f"Expected one of {sorted(VALID_TOOL_PROTOCOLS)}."
         )
+
+    # v0.4.0: resolve timeouts first so a validation failure doesn't
+    # leave the module half-configured. The shortcut and split forms
+    # are mutually exclusive.
+    if timeout is not None and (
+        connect_timeout is not None or read_timeout is not None
+    ):
+        raise ValueError(
+            "configure(): pass timeout= OR connect_timeout/read_timeout, not both."
+        )
+    for label, value in (
+        ("timeout", timeout),
+        ("connect_timeout", connect_timeout),
+        ("read_timeout", read_timeout),
+    ):
+        if value is not None and value <= 0:
+            raise ValueError(f"configure(): {label}= must be > 0, got {value!r}")
+    if timeout is not None:
+        resolved_connect: float | None = float(timeout)
+        resolved_read: float | None = float(timeout)
+    else:
+        resolved_connect = (
+            float(connect_timeout) if connect_timeout is not None else None
+        )
+        resolved_read = float(read_timeout) if read_timeout is not None else None
 
     resolved_default_model = default_model or os.environ.get("QM_DEFAULT_MODEL")
 
@@ -129,11 +155,16 @@ def configure(
         _default_registry = register_local(provider, **register_kwargs)
 
     _default_model = resolved_default_model
+    _default_connect_timeout = resolved_connect
+    _default_read_timeout = resolved_read
     logger.info(
-        "quartermaster_sdk configured: provider=%s default_model=%s ollama_tool_protocol=%s",
+        "quartermaster_sdk configured: provider=%s default_model=%s "
+        "ollama_tool_protocol=%s connect_timeout=%s read_timeout=%s",
         provider,
         resolved_default_model,
         ollama_tool_protocol if provider == "ollama" else "n/a",
+        resolved_connect,
+        resolved_read,
     )
     return _default_registry
 

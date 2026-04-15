@@ -36,6 +36,7 @@ __version__ = "0.3.1"
 # remain available for integrators who need the low-level surface.
 from quartermaster_engine import (  # noqa: F401
     AgentExecutor,
+    Cancelled,
     FlowResult,
     FlowRunner,
     LLMExecutor,
@@ -80,13 +81,14 @@ from ._config import (  # noqa: F401
     configure,
     get_default_model,
     get_default_registry,
+    get_default_timeouts,
     reset_config,
 )
 from . import telemetry  # noqa: F401  — exposes ``qm.telemetry.instrument()`` without explicit import
 from ._async_runner import arun  # noqa: F401
 from ._helpers import instruction, instruction_form  # noqa: F401
 from ._result import Result  # noqa: F401
-from ._runner import run  # noqa: F401
+from ._runner import StreamDeadlineExceeded, run  # noqa: F401
 from ._trace import NodeTrace, Trace  # noqa: F401
 
 
@@ -100,6 +102,9 @@ __all__ = [
     "instruction",
     "instruction_form",
     "Result",
+    # v0.4.0 cooperative cancellation — stream context-manager exit
+    # and/or tools raising qm.Cancelled inside the agent loop.
+    "Cancelled",
     # Structured post-mortem trace — v0.3.0
     "Trace",
     "NodeTrace",
@@ -141,5 +146,8 @@ __all__ = [
     "register_local",
     "get_default_registry",
     "get_default_model",
+    "get_default_timeouts",
     "reset_config",
+    # v0.4.0 stream deadline
+    "StreamDeadlineExceeded",
 ]

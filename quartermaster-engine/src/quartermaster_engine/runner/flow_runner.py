@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import logging
+import threading
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
@@ -195,6 +196,15 @@ class FlowRunner:
         self._traverse_out = TraverseOutGate()
         self._message_router = MessageRouter(self.store)
         self._stopped: set[UUID] = set()
+        # v0.4.0 per-flow cancellation events (Sorex round-2 P1.2).
+        # Every ExecutionContext this runner builds for a given flow
+        # shares the same ``threading.Event``; :meth:`stop` sets it so
+        # tools polling ``ctx.cancelled`` observe the abort and can
+        # bail cooperatively. The event also gates ``_execute_node``
+        # dispatch (alongside the legacy ``_stopped`` set) so long
+        # agent loops unwind within a bounded time after a consumer
+        # disconnects.
+        self._cancel_events: dict[UUID, threading.Event] = {}
         # v0.3.1 Back → Start loop safety cap.  A Back node dispatches
         # the Start node again; a broken loop (e.g. a Decision that
         # always picks the Back arm) would otherwise recurse forever.
@@ -205,12 +215,29 @@ class FlowRunner:
         self._loop_counter: dict[UUID, int] = {}
         self.max_loop_iterations = 100
 
+    def _get_cancel_event(self, flow_id: UUID) -> threading.Event:
+        """Return (creating if needed) the per-flow cancellation event.
+
+        Called from :meth:`_execute_logic_node` when building an
+        :class:`ExecutionContext` and from :meth:`stop`. Creating lazily
+        means a runner instance that never executes a flow doesn't
+        allocate an event; at the same time, both the stopper and the
+        node-setup paths see the same event object because we dedupe
+        on ``flow_id``.
+        """
+        event = self._cancel_events.get(flow_id)
+        if event is None:
+            event = threading.Event()
+            self._cancel_events[flow_id] = event
+        return event
+
     def run(
         self,
         input_message: str,
         *,
         images: list[tuple[str, str]] | None = None,
         flow_id: UUID | None = None,
+        llm_timeouts: dict[str, float | None] | None = None,
     ) -> FlowResult:
         """Execute the graph synchronously.
 
@@ -225,6 +252,13 @@ class FlowRunner:
                 the SDK normalises them to the internal base64 tuple
                 shape before calling this method.
             flow_id: Optional flow ID (auto-generated if not provided).
+            llm_timeouts: Optional ``{"connect_timeout": float,
+                "read_timeout": float}`` dict stashed in flow memory
+                under ``__llm_timeouts__`` so every LLM-executing
+                node's ``_build_llm_config`` picks up the same budget.
+                Added in v0.4.0 — the SDK populates it from
+                ``qm.configure`` defaults and per-call
+                ``qm.run(..., read_timeout=...)`` overrides.
 
         Returns:
             A FlowResult with the final output and metadata.
@@ -245,6 +279,15 @@ class FlowRunner:
             # a plain list[tuple[str, str]] — base64 ASCII + MIME type.
             if images:
                 self.store.save_memory(fid, "__user_images__", list(images))
+            # v0.4.0: stash application-level LLM timeouts so every node's
+            # ``_build_llm_config`` sees the same defaults. Only written
+            # when the caller actually configured timeouts — otherwise
+            # leaving the key absent lets provider SDKs fall back to
+            # their own defaults (preserves v0.3.x behaviour).
+            if llm_timeouts:
+                cleaned = {k: v for k, v in llm_timeouts.items() if v is not None}
+                if cleaned:
+                    self.store.save_memory(fid, "__llm_timeouts__", cleaned)
 
             # Execute the start node, which kicks off the traversal
             self._execute_node(fid, start_node.id, input_message)
@@ -344,8 +387,21 @@ class FlowRunner:
         return result
 
     def stop(self, flow_id: UUID) -> None:
-        """Stop a running flow. Marks all active nodes as failed."""
+        """Stop a running flow. Marks all active nodes as failed.
+
+        v0.4.0: also sets the per-flow cancellation event so every
+        :class:`ExecutionContext` bound to this flow sees
+        ``ctx.cancelled == True`` on its next read. Tools polling the
+        flag can short-circuit immediately instead of waiting for the
+        next ``_execute_node`` dispatch to skip them (which is still
+        the enforcement backstop — see the ``flow_id in self._stopped``
+        guard at the top of :meth:`_execute_node`).
+        """
         self._stopped.add(flow_id)
+        # Flip the per-flow cancellation event — every context already
+        # bound to this flow shares this event object, so polling
+        # tools observe ``ctx.cancelled`` turning True on the next read.
+        self._get_cancel_event(flow_id).set()
         executions = self.store.get_all_node_executions(flow_id)
         for nid, execution in executions.items():
             if execution.status.is_active:
@@ -578,6 +634,11 @@ class FlowRunner:
                     payload=payload,
                 )
             ),
+            # v0.4.0: wire the per-flow cancellation event in so
+            # ``ctx.cancelled`` reads the same source of truth
+            # ``runner.stop(flow_id)`` flips. Every context the runner
+            # builds for this flow shares the same event object.
+            _cancelled_event=self._get_cancel_event(flow_id),
         )
 
         # Execute with error handling

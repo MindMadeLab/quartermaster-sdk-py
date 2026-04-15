@@ -224,6 +224,15 @@ class OpenAIProvider(AbstractLLMProvider):
             params["stream"] = True
             params["stream_options"] = {"include_usage": True}
 
+        # v0.4.0: thread timeouts through to the openai SDK. The SDK
+        # accepts ``timeout=`` on every request; passing ``httpx.Timeout``
+        # is honoured through its underlying httpx transport. Leave
+        # unset when neither connect_timeout nor read_timeout is
+        # configured so the SDK default keeps applying.
+        timeout = self._resolve_httpx_timeout(config)
+        if timeout is not None:
+            params["timeout"] = timeout
+
         return params
 
     async def list_models(self) -> list[str]:

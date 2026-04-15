@@ -57,7 +57,7 @@ from ._chunks import (
     ToolCallChunk,
     ToolResultChunk,
 )
-from ._config import get_default_registry
+from ._config import get_default_registry, get_default_timeouts
 from ._result import Result
 from ._stream_filters import _Stream
 from ._trace import Trace
@@ -67,6 +67,64 @@ if TYPE_CHECKING:
     from quartermaster_providers import ProviderRegistry
 
 logger = logging.getLogger(__name__)
+
+
+class StreamDeadlineExceeded(TimeoutError):
+    """The stream's total wall-clock budget was exhausted.
+
+    Raised by ``qm.run.stream(..., deadline_seconds=N)`` /
+    ``qm.arun.stream(..., deadline_seconds=N)`` when the consumer
+    loop hasn't terminated after *N* seconds. Subclasses
+    :class:`TimeoutError` so callers that already ``except
+    TimeoutError`` keep catching it. Added in v0.4.0.
+    """
+
+
+def _resolve_call_timeouts(
+    *,
+    timeout: float | None,
+    connect_timeout: float | None,
+    read_timeout: float | None,
+) -> dict[str, float | None]:
+    """Merge configure-time defaults with per-call overrides.
+
+    Added in v0.4.0. Per-call overrides take precedence over the
+    configure-time defaults; passing ``timeout=`` as a shortcut sets
+    both phases for this call only.
+
+    Raises ``ValueError`` when the caller passes both the shortcut
+    and a specific field — same rule as :func:`configure`.
+    """
+    if timeout is not None and (
+        connect_timeout is not None or read_timeout is not None
+    ):
+        raise ValueError(
+            "run(): pass timeout= OR connect_timeout/read_timeout, not both."
+        )
+    for label, value in (
+        ("timeout", timeout),
+        ("connect_timeout", connect_timeout),
+        ("read_timeout", read_timeout),
+    ):
+        if value is not None and value <= 0:
+            raise ValueError(f"run(): {label}= must be > 0, got {value!r}")
+
+    defaults = get_default_timeouts()
+    if timeout is not None:
+        resolved_connect: float | None = float(timeout)
+        resolved_read: float | None = float(timeout)
+    else:
+        resolved_connect = (
+            float(connect_timeout)
+            if connect_timeout is not None
+            else defaults["connect_timeout"]
+        )
+        resolved_read = (
+            float(read_timeout)
+            if read_timeout is not None
+            else defaults["read_timeout"]
+        )
+    return {"connect_timeout": resolved_connect, "read_timeout": resolved_read}
 
 
 def _resolve_graph(graph: GraphBuilder | GraphSpec) -> GraphSpec:
@@ -236,6 +294,9 @@ class _RunCallable:
         images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
+        timeout: float | None = None,
+        connect_timeout: float | None = None,
+        read_timeout: float | None = None,
     ) -> Result:
         """Execute *graph* against *user_input* and return a :class:`Result`.
 
@@ -259,12 +320,26 @@ class _RunCallable:
             tool_registry: Optional :class:`quartermaster_tools.ToolRegistry`
                 made available to ``agent()``-type nodes that specify
                 ``tools=[...]``.
+            timeout: Per-call shortcut — same budget for both the
+                connect and read phases of every LLM call in this
+                flow. Overrides the ``qm.configure(timeout=...)``
+                default. Added in v0.4.0. Mutually exclusive with
+                ``connect_timeout`` / ``read_timeout``.
+            connect_timeout: Per-call override for the connect phase.
+                Added in v0.4.0.
+            read_timeout: Per-call override for the read phase (per-
+                LLM-call ceiling). Added in v0.4.0.
         """
         inline_tools = _extract_inline_tools(graph)
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
         prepared_images = prepare_images(image=image, images=images)
         effective_tool_registry = _merge_inline_tools(tool_registry, inline_tools)
+        llm_timeouts = _resolve_call_timeouts(
+            timeout=timeout,
+            connect_timeout=connect_timeout,
+            read_timeout=read_timeout,
+        )
 
         # v0.3.0 trace: accumulate every FlowEvent into a local list
         # so we can build a ``Trace`` and attach it to the returned
@@ -287,7 +362,11 @@ class _RunCallable:
             on_event=_collect,
         )
         started = time.perf_counter()
-        fr = runner.run(user_input, images=prepared_images or None)
+        fr = runner.run(
+            user_input,
+            images=prepared_images or None,
+            llm_timeouts=llm_timeouts,
+        )
         elapsed = time.perf_counter() - started
 
         result = Result.from_flow_result(fr)
@@ -309,6 +388,10 @@ class _RunCallable:
         images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
+        timeout: float | None = None,
+        connect_timeout: float | None = None,
+        read_timeout: float | None = None,
+        deadline_seconds: float | None = None,
     ) -> _Stream:
         """Run the graph and yield typed :class:`Chunk` events as they arrive.
 
@@ -329,15 +412,55 @@ class _RunCallable:
         executes on a background thread so the caller can iterate the
         yielded chunks synchronously — no ``async``/``await`` required.
 
-        **Cancellation:** breaking out of the loop early (``break``,
-        ``return`` from an enclosing function, raising inside the
-        consumer) calls :meth:`FlowRunner.stop` on the in-flight
-        ``flow_id``, which the engine checks in ``_execute_node``
-        before dispatching any further work.  Nodes already mid-flight
-        finish their current LLM/tool call — no hard kill — but no new
-        nodes are dispatched, so long agent loops unwind within a
-        bounded time instead of leaking API costs in the background.
+        **Cancellation (v0.4.0):** the returned wrapper supports the
+        context-manager protocol — ``with qm.run.stream(...) as s:``.
+        On every exit path (normal completion, ``break``, ``return``,
+        or exception) the wrapper calls :meth:`FlowRunner.stop` on the
+        in-flight ``flow_id``, which the engine checks in
+        ``_execute_node`` before dispatching any further work. Nodes
+        already mid-flight finish their current LLM/tool call — no
+        hard kill — but no new nodes are dispatched, so long agent
+        loops unwind within a bounded time instead of leaking API
+        costs in the background. Tools polling
+        ``qm.current_context().cancelled`` observe ``True`` immediately
+        after the ``with`` exit fires and can bail cooperatively.
+
+        Legacy raw-iteration call sites keep their old behaviour — the
+        generator's ``finally`` block still calls ``runner.stop`` when
+        the iterator is abandoned (break from a plain ``for`` loop).
+
+        Args (v0.4.0):
+            timeout / connect_timeout / read_timeout: Per-LLM-call
+                timeout overrides (see :meth:`__call__`).
+            deadline_seconds: Total wall-clock budget for the entire
+                stream. Raises :class:`StreamDeadlineExceeded` when
+                exceeded. Independent of *read_timeout*.
         """
+        # v0.4.0 stream cancellation: a mutable "stop handle" dict the
+        # generator populates with (runner, flow_id) once it boots.
+        # The context-manager exit callback reads from this cell so it
+        # can call :meth:`FlowRunner.stop` even if the caller opened
+        # the ``with`` block but hasn't iterated yet. Closing over the
+        # generator's local ``runner`` directly wouldn't work because
+        # the generator body doesn't run until the first ``next()``.
+        stop_handle: dict[str, Any] = {}
+
+        def _on_exit() -> None:
+            runner = stop_handle.get("runner")
+            fid = stop_handle.get("flow_id")
+            if runner is None or fid is None:
+                # Generator never started — nothing to stop. Legitimate
+                # when the caller opens the ``with`` but exits before
+                # the first iteration.
+                return
+            try:
+                runner.stop(fid)
+            except Exception:  # pragma: no cover — defensive
+                logger.exception(
+                    "run.stream: runner.stop(%s) raised from context-manager exit",
+                    fid,
+                )
+
         return _Stream(
             self._iter_chunks(
                 graph=graph,
@@ -346,7 +469,13 @@ class _RunCallable:
                 images=images,
                 provider_registry=provider_registry,
                 tool_registry=tool_registry,
-            )
+                timeout=timeout,
+                connect_timeout=connect_timeout,
+                read_timeout=read_timeout,
+                deadline_seconds=deadline_seconds,
+                stop_handle=stop_handle,
+            ),
+            on_exit=_on_exit,
         )
 
     def _iter_chunks(
@@ -358,17 +487,37 @@ class _RunCallable:
         images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
+        timeout: float | None = None,
+        connect_timeout: float | None = None,
+        read_timeout: float | None = None,
+        deadline_seconds: float | None = None,
+        stop_handle: dict[str, Any] | None = None,
     ) -> Iterator[Chunk]:
         """Inner generator that powers :meth:`stream`.
 
         Kept private: callers always go through ``stream()`` which
         wraps the result in :class:`_Stream` for filter support.
+
+        *stop_handle* is the mutable cell the context-manager exit
+        callback in :meth:`stream` reads to fire ``runner.stop``. We
+        populate it with the live runner + flow_id as soon as both
+        exist so the callback has something to act on even if the
+        caller breaks out of the ``with`` before any events arrive.
         """
+        if deadline_seconds is not None and deadline_seconds <= 0:
+            raise ValueError(
+                f"run.stream(): deadline_seconds must be > 0, got {deadline_seconds!r}"
+            )
         inline_tools = _extract_inline_tools(graph)
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
         prepared_images = prepare_images(image=image, images=images)
         effective_tool_registry = _merge_inline_tools(tool_registry, inline_tools)
+        llm_timeouts = _resolve_call_timeouts(
+            timeout=timeout,
+            connect_timeout=connect_timeout,
+            read_timeout=read_timeout,
+        )
 
         q: queue.Queue[FlowEvent | None] = queue.Queue()
         holder_lock = threading.Lock()
@@ -402,12 +551,21 @@ class _RunCallable:
             on_event=on_event,
         )
 
+        # v0.4.0: publish the live runner+flow_id to the
+        # context-manager exit callback's stop_handle the moment both
+        # exist. Any break/return/exception during the ``with`` block
+        # now routes through ``_on_exit`` into ``runner.stop(flow_id)``.
+        if stop_handle is not None:
+            stop_handle["runner"] = runner
+            stop_handle["flow_id"] = flow_id
+
         def _run_thread() -> None:
             try:
                 fr = runner.run(
                     user_input,
                     images=prepared_images or None,
                     flow_id=flow_id,
+                    llm_timeouts=llm_timeouts,
                 )
                 with holder_lock:
                     holder["result"] = fr
@@ -425,15 +583,40 @@ class _RunCallable:
         started = time.perf_counter()
         thread.start()
 
+        # v0.4.0: total wall-clock ceiling for the whole stream.
+        # Independent of ``read_timeout`` (per-LLM-call). Computed
+        # once so a stalled ``q.get`` doesn't silently push the
+        # budget out.
+        deadline_at: float | None = (
+            time.monotonic() + deadline_seconds
+            if deadline_seconds is not None
+            else None
+        )
+
         try:
             while True:
                 # Short timeout so the caller can still get control back
                 # (e.g. to abort, log progress) if the runner stalls.
-                try:
-                    event = q.get(timeout=300.0)
-                except queue.Empty:
-                    logger.warning("run.stream: no event for 5 minutes; still waiting")
-                    continue
+                if deadline_at is not None:
+                    remaining = deadline_at - time.monotonic()
+                    if remaining <= 0:
+                        raise StreamDeadlineExceeded(
+                            f"run.stream: exceeded deadline_seconds={deadline_seconds}"
+                        )
+                    try:
+                        event = q.get(timeout=remaining)
+                    except queue.Empty:
+                        raise StreamDeadlineExceeded(
+                            f"run.stream: exceeded deadline_seconds={deadline_seconds}"
+                        ) from None
+                else:
+                    try:
+                        event = q.get(timeout=300.0)
+                    except queue.Empty:
+                        logger.warning(
+                            "run.stream: no event for 5 minutes; still waiting"
+                        )
+                        continue
                 if event is None:
                     break
                 chunk = _event_to_chunk(event)
