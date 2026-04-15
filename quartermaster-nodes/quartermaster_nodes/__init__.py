@@ -12,7 +12,7 @@ from quartermaster_nodes.enums import (
 from quartermaster_nodes.config import AssistantInfo, FlowNodeConf, FlowRunConfig
 from quartermaster_nodes.base import AbstractAssistantNode, AbstractLLMAssistantNode
 from quartermaster_nodes.chain import Chain, Handler
-from quartermaster_nodes.registry import NodeRegistry, register_node
+from quartermaster_nodes.registry import NodeCatalog, NodeRegistry, register_node
 
 __version__ = "0.1.0"
 
@@ -35,7 +35,10 @@ __all__ = [
     # Chain
     "Chain",
     "Handler",
-    # Registry
+    # Catalog (design-time) — NodeRegistry is kept as a deprecated alias
+    # for NodeCatalog; see quartermaster_nodes.registry.registry for the
+    # reason (naming collision with quartermaster_engine.nodes.NodeRegistry).
+    "NodeCatalog",
     "NodeRegistry",
     "register_node",
 ]
