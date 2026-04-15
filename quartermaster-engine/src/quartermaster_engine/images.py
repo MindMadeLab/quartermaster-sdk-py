@@ -137,9 +137,7 @@ def prepare_images(
     are ASCII (never bytes) so JSON serialisation is trivial.
     """
     if image is not None and images is not None:
-        raise ValueError(
-            "Pass either image= (single) or images= (list), not both."
-        )
+        raise ValueError("Pass either image= (single) or images= (list), not both.")
 
     if image is not None:
         return [_prepare_one(image)]

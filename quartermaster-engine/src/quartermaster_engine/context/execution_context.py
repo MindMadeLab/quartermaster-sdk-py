@@ -41,9 +41,7 @@ class ExecutionContext:
     # instead of waiting for the full NodeResult. Payload shape matches
     # ``events.ToolCallStarted`` / ``ToolCallFinished``.
     on_tool_start: Callable[[str, dict, int], None] | None = None
-    on_tool_finish: (
-        Callable[[str, dict, str, Any, str | None, int], None] | None
-    ) = None
+    on_tool_finish: Callable[[str, dict, str, Any, str | None, int], None] | None = None
     # Application-emitted event hooks — populated by the runner so
     # user code calling ``emit_progress`` / ``emit_custom`` from
     # inside a tool interleaves with engine-emitted tokens on the
@@ -67,9 +65,7 @@ class ExecutionContext:
         if self.on_token:
             self.on_token(token)
 
-    def emit_tool_start(
-        self, tool: str, arguments: dict[str, Any], iteration: int
-    ) -> None:
+    def emit_tool_start(self, tool: str, arguments: dict[str, Any], iteration: int) -> None:
         """Fire ``on_tool_start`` for the agent-executor tool loop, if wired."""
         if self.on_tool_start:
             self.on_tool_start(tool, arguments, iteration)

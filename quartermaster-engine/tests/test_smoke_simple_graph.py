@@ -67,7 +67,9 @@ class TestLLMConfigPropagation:
 
     def test_max_output_tokens_reaches_provider(self, provider_registry_with_mock):
         registry, mock = provider_registry_with_mock
-        graph = Graph("chat").start().user().agent("Tight", max_output_tokens=50).end(stop=True).build()
+        graph = (
+            Graph("chat").start().user().agent("Tight", max_output_tokens=50).end(stop=True).build()
+        )
         runner = FlowRunner(graph=graph, provider_registry=registry)
         result = runner.run("ping")
         assert result.success, result.error
@@ -76,14 +78,28 @@ class TestLLMConfigPropagation:
 
     def test_max_input_tokens_reaches_provider(self, provider_registry_with_mock):
         registry, mock = provider_registry_with_mock
-        graph = Graph("chat").start().user().agent("Tight", max_input_tokens=8000).end(stop=True).build()
+        graph = (
+            Graph("chat")
+            .start()
+            .user()
+            .agent("Tight", max_input_tokens=8000)
+            .end(stop=True)
+            .build()
+        )
         runner = FlowRunner(graph=graph, provider_registry=registry)
         runner.run("ping")
         assert mock.last_config.max_input_tokens == 8000
 
     def test_thinking_level_high_propagates_enabled_and_budget(self, provider_registry_with_mock):
         registry, mock = provider_registry_with_mock
-        graph = Graph("chat").start().user().agent("Reasoning", thinking_level="high").end(stop=True).build()
+        graph = (
+            Graph("chat")
+            .start()
+            .user()
+            .agent("Reasoning", thinking_level="high")
+            .end(stop=True)
+            .build()
+        )
         runner = FlowRunner(graph=graph, provider_registry=registry)
         runner.run("ping")
         assert mock.last_config.thinking_enabled is True
@@ -91,7 +107,9 @@ class TestLLMConfigPropagation:
 
     def test_thinking_level_off_disables(self, provider_registry_with_mock):
         registry, mock = provider_registry_with_mock
-        graph = Graph("chat").start().user().agent("Plain", thinking_level="off").end(stop=True).build()
+        graph = (
+            Graph("chat").start().user().agent("Plain", thinking_level="off").end(stop=True).build()
+        )
         runner = FlowRunner(graph=graph, provider_registry=registry)
         runner.run("ping")
         assert mock.last_config.thinking_enabled is False

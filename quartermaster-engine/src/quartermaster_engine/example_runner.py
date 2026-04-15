@@ -488,9 +488,7 @@ class _ToolInvocation:
     error: str | None
 
 
-def _execute_tool_call(
-    tool_registry: Any, tool_name: str, parameters: dict
-) -> _ToolInvocation:
+def _execute_tool_call(tool_registry: Any, tool_name: str, parameters: dict) -> _ToolInvocation:
     """Run one tool from the registry and return both the LLM-facing
     string and the structured payload for live streaming.
 
@@ -733,14 +731,16 @@ class AgentExecutor(NodeExecutor):
                 # ``qm.run(...)`` callers (non-streaming) can read exactly
                 # the same shape the streaming ToolCallFinished event
                 # carries.  Both surfaces stay in sync by construction.
-                tool_call_log.append({
-                    "tool": public_name,
-                    "arguments": dict(params),
-                    "result": invocation.prompt_text,
-                    "raw": invocation.raw,
-                    "error": invocation.error,
-                    "iteration": iteration,
-                })
+                tool_call_log.append(
+                    {
+                        "tool": public_name,
+                        "arguments": dict(params),
+                        "result": invocation.prompt_text,
+                        "raw": invocation.raw,
+                        "error": invocation.error,
+                        "iteration": iteration,
+                    }
+                )
 
                 # Wrap each tool result in an explicit untrusted-data block.
                 # Tool output frequently includes external content (web

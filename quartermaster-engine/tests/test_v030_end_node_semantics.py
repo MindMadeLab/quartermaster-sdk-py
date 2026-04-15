@@ -91,9 +91,7 @@ def test_end_loops_back_to_start_in_main_graph():
 
     start = make_node(NodeType.START, name="Start")
     counter = make_node(NodeType.INSTRUCTION, name="Counter")
-    decision = make_node(
-        NodeType.DECISION, name="Done?", traverse_out=TraverseOut.SPAWN_PICKED
-    )
+    decision = make_node(NodeType.DECISION, name="Done?", traverse_out=TraverseOut.SPAWN_PICKED)
     # loop branch → End (default SPAWN_START loop)
     end_loop = make_node(
         NodeType.END,
@@ -132,8 +130,7 @@ def test_end_loops_back_to_start_in_main_graph():
     result = runner.run("go")
     assert result.success, result.error
     assert counter_exec.call_count == threshold, (
-        f"Counter should run exactly {threshold} times, got "
-        f"{counter_exec.call_count}"
+        f"Counter should run exactly {threshold} times, got {counter_exec.call_count}"
     )
 
 
@@ -146,9 +143,7 @@ def test_end_with_stop_kwarg_does_not_loop():
     once, then the flow terminates."""
     start = make_node(NodeType.START, name="Start")
     inst = make_node(NodeType.INSTRUCTION, name="Once")
-    end = make_node(
-        NodeType.END, name="End", traverse_out=TraverseOut.SPAWN_NONE
-    )
+    end = make_node(NodeType.END, name="End", traverse_out=TraverseOut.SPAWN_NONE)
 
     graph = make_graph(
         [start, inst, end],
@@ -165,8 +160,7 @@ def test_end_with_stop_kwarg_does_not_loop():
     result = runner.run("once")
     assert result.success, result.error
     assert counter_exec.call_count == 1, (
-        f"Instruction should run exactly once with stop=True End, got "
-        f"{counter_exec.call_count}"
+        f"Instruction should run exactly once with stop=True End, got {counter_exec.call_count}"
     )
 
 
@@ -218,9 +212,7 @@ def test_sub_graph_end_returns_to_parent():
     # parent_context is set the runner short-circuits the loop and
     # returns to the parent instead, regardless of SPAWN_START vs
     # SPAWN_NONE.  Keep the default SPAWN_START to prove this.
-    sub_end = make_node(
-        NodeType.END, name="SubEnd", traverse_out=TraverseOut.SPAWN_START
-    )
+    sub_end = make_node(NodeType.END, name="SubEnd", traverse_out=TraverseOut.SPAWN_START)
     sub_graph = make_graph(
         [sub_start, child, sub_end],
         [make_edge(sub_start, child), make_edge(child, sub_end)],
@@ -239,9 +231,7 @@ def test_sub_graph_end_returns_to_parent():
         metadata={"sub_assistant_id": "child"},
     )
     second = make_node(NodeType.INSTRUCTION, name="SecondNode")
-    main_end = make_node(
-        NodeType.END, name="MainEnd", traverse_out=TraverseOut.SPAWN_NONE
-    )
+    main_end = make_node(NodeType.END, name="MainEnd", traverse_out=TraverseOut.SPAWN_NONE)
 
     main_graph = make_graph(
         [main_start, sub, second, main_end],
@@ -312,9 +302,7 @@ def test_parent_context_propagated_into_subgraph():
 
     sub_start = make_node(NodeType.START, name="SubStart")
     child = make_node(NodeType.INSTRUCTION, name="ChildPeek")
-    sub_end = make_node(
-        NodeType.END, name="SubEnd", traverse_out=TraverseOut.SPAWN_START
-    )
+    sub_end = make_node(NodeType.END, name="SubEnd", traverse_out=TraverseOut.SPAWN_START)
     sub_graph = make_graph(
         [sub_start, child, sub_end],
         [make_edge(sub_start, child), make_edge(child, sub_end)],
@@ -322,9 +310,7 @@ def test_parent_context_propagated_into_subgraph():
     )
 
     child_registry = SimpleNodeRegistry()
-    child_registry.register(
-        NodeType.INSTRUCTION.value, _ChildCapturingExecutor()
-    )
+    child_registry.register(NodeType.INSTRUCTION.value, _ChildCapturingExecutor())
 
     main_start = make_node(NodeType.START, name="MainStart")
     sub = make_node(
@@ -336,9 +322,7 @@ def test_parent_context_propagated_into_subgraph():
     # ExecutionContext — keeps parent_seen populated for the identity
     # check below.
     parent_peek = make_node(NodeType.INSTRUCTION, name="ParentPeek")
-    main_end = make_node(
-        NodeType.END, name="MainEnd", traverse_out=TraverseOut.SPAWN_NONE
-    )
+    main_end = make_node(NodeType.END, name="MainEnd", traverse_out=TraverseOut.SPAWN_NONE)
     main_graph = make_graph(
         [main_start, parent_peek, sub, main_end],
         [
@@ -351,9 +335,7 @@ def test_parent_context_propagated_into_subgraph():
 
     resolver = lambda sid: sub_graph if sid == "child" else None
     main_registry = SimpleNodeRegistry()
-    main_registry.register(
-        NodeType.INSTRUCTION.value, _ParentCapturingExecutor()
-    )
+    main_registry.register(NodeType.INSTRUCTION.value, _ParentCapturingExecutor())
     main_registry.register(
         NodeType.SUB_ASSISTANT.value,
         SubAssistantExecutor(resolver=resolver, node_registry=child_registry),
@@ -390,12 +372,7 @@ def test_validator_allows_implicit_end_to_start_cycle():
     # plain Start → user → instruction → End, with End's traverse_out
     # pointing back to Start implicitly.  The validator should accept
     # it without `validate=False`.
-    graph = (
-        qm.Graph("loopy")
-        .instruction("Tick")
-        .end()
-        .build()
-    )
+    graph = qm.Graph("loopy").instruction("Tick").end().build()
     # Sanity: the End node was produced with SPAWN_START (the new
     # default), not SPAWN_NONE.
     end_nodes = [n for n in graph.nodes if n.type == NodeType.END]
@@ -420,9 +397,7 @@ def test_existing_loop_examples_still_work():
 
     start = make_node(NodeType.START, name="Start")
     body = make_node(NodeType.INSTRUCTION, name="Body")
-    decision = make_node(
-        NodeType.DECISION, name="Done?", traverse_out=TraverseOut.SPAWN_PICKED
-    )
+    decision = make_node(NodeType.DECISION, name="Done?", traverse_out=TraverseOut.SPAWN_PICKED)
     loop_end = make_node(
         NodeType.END,
         name="LoopEnd",
@@ -458,8 +433,7 @@ def test_existing_loop_examples_still_work():
     result = runner.run("loop")
     assert result.success, result.error
     assert body_exec.call_count == threshold, (
-        f"Body should have run exactly {threshold} times, got "
-        f"{body_exec.call_count}"
+        f"Body should have run exactly {threshold} times, got {body_exec.call_count}"
     )
 
 
@@ -474,9 +448,7 @@ def test_loop_safety_cap_prevents_infinite_recursion():
     """
     start = make_node(NodeType.START, name="Start")
     body = make_node(NodeType.INSTRUCTION, name="Body")
-    end = make_node(
-        NodeType.END, name="End", traverse_out=TraverseOut.SPAWN_START
-    )
+    end = make_node(NodeType.END, name="End", traverse_out=TraverseOut.SPAWN_START)
 
     graph = make_graph(
         [start, body, end],
