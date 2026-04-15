@@ -33,6 +33,8 @@ from quartermaster_engine import (
     NodeFinished,
     NodeStarted,
     TokenGenerated,
+    ToolCallFinished,
+    ToolCallStarted,
     UserInputRequired,
 )
 
@@ -44,6 +46,8 @@ from ._chunks import (
     NodeFinishChunk,
     NodeStartChunk,
     TokenChunk,
+    ToolCallChunk,
+    ToolResultChunk,
 )
 from ._config import get_default_registry
 from ._result import Result
@@ -222,6 +226,23 @@ def _event_to_chunk(event: FlowEvent) -> Chunk | None:
         return NodeFinishChunk(
             node_name=getattr(event, "node_name", ""),
             output=event.result or "",
+        )
+    if isinstance(event, ToolCallStarted):
+        # Live "tool is being called now" card — fires before the tool
+        # actually runs.  Arguments are passed straight through so UIs
+        # can render them the moment the call is dispatched, instead of
+        # waiting for the final NodeFinish / Done event.
+        return ToolCallChunk(tool=event.tool, args=dict(event.arguments))
+    if isinstance(event, ToolCallFinished):
+        # Paired with ToolCallStarted.  ``result`` is the string the LLM
+        # sees next turn (``"[ERROR: ...]"`` sentinel on failure);
+        # ``raw`` is the structured payload when the tool returned one,
+        # ``None`` otherwise.  ``error`` is non-None only on failure —
+        # UIs can use it as the "red card" trigger.
+        return ToolResultChunk(
+            tool=event.tool,
+            result=event.raw if event.raw is not None else event.result,
+            error=event.error,
         )
     if isinstance(event, UserInputRequired):
         return AwaitInputChunk(

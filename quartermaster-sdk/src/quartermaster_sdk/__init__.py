@@ -77,6 +77,7 @@ from ._config import (  # noqa: F401
     get_default_registry,
     reset_config,
 )
+from ._async_runner import arun  # noqa: F401
 from ._helpers import instruction, instruction_form  # noqa: F401
 from ._result import Result  # noqa: F401
 from ._runner import run  # noqa: F401
@@ -88,6 +89,7 @@ __all__ = [
     # ── v0.2.0 primary surface ──
     "configure",
     "run",
+    "arun",
     "instruction",
     "instruction_form",
     "Result",
