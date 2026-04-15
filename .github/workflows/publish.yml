@@ -45,10 +45,16 @@ jobs:
       new_tag: ${{ steps.bump.outputs.new_tag }}
 
     steps:
+      # Use RELEASE_PAT (a fine-grained PAT owned by a Repository admin)
+      # instead of the default GITHUB_TOKEN. The master branch ruleset
+      # bypasses "Repository admin", and only a real admin's identity
+      # counts toward that role — the github-actions[bot] does not.
+      # Without this the "Release vX.Y.Z" commit push is rejected:
+      #   remote: - Changes must be made through a pull request.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0         # Full history for tag lookup
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PAT }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
