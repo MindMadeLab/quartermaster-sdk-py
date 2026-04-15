@@ -23,6 +23,7 @@ import logging
 import queue
 import threading
 from typing import TYPE_CHECKING, Any, Iterator
+from uuid import uuid4
 
 from quartermaster_engine import (
     FlowError,
@@ -114,19 +115,26 @@ class _RunCallable:
 
         **Cancellation:** breaking out of the loop early (``break``,
         ``return`` from an enclosing function, raising inside the
-        consumer) sets a ``threading.Event`` that the runner checks on
-        every dispatched node, so long-running flows stop promptly
-        instead of continuing in the background.  The engine checks the
-        flag via ``FlowRunner.stop(flow_id)`` — nodes already in flight
-        finish their current tool call, but no new nodes are dispatched.
+        consumer) calls :meth:`FlowRunner.stop` on the in-flight
+        ``flow_id``, which the engine checks in ``_execute_node``
+        before dispatching any further work.  Nodes already mid-flight
+        finish their current LLM/tool call — no hard kill — but no new
+        nodes are dispatched, so long agent loops unwind within a
+        bounded time instead of leaking API costs in the background.
         """
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
 
         q: queue.Queue[FlowEvent | None] = queue.Queue()
-        cancelled = threading.Event()
         holder_lock = threading.Lock()
         holder: dict[str, Any] = {}
+        # Pre-generate the flow_id so cancellation can call
+        # ``runner.stop(flow_id)`` even if the caller breaks out of the
+        # iterator before the first event fires.  ``FlowRunner.run``
+        # accepts an optional ``flow_id=`` and will use ours instead of
+        # minting its own — this is the documented public API, not
+        # reaching into a private attribute.
+        flow_id = uuid4()
 
         def on_event(event: FlowEvent) -> None:
             q.put(event)
@@ -140,7 +148,7 @@ class _RunCallable:
 
         def _run_thread() -> None:
             try:
-                fr = runner.run(user_input)
+                fr = runner.run(user_input, flow_id=flow_id)
                 with holder_lock:
                     holder["result"] = fr
             except Exception as exc:  # pragma: no cover — defensive
@@ -171,30 +179,15 @@ class _RunCallable:
                 if chunk is not None:
                     yield chunk
         finally:
-            # Caller abandoned the iterator — tell the runner to stop.
-            # Nodes currently executing finish (no hard kill), but no
-            # further nodes are dispatched, so long agent loops unwind
-            # within a bounded time instead of leaking.
+            # Caller abandoned the iterator — tell the runner to stop
+            # the flow by its pre-generated id.  ``_execute_node``
+            # short-circuits on the next dispatch, so nodes mid-LLM-call
+            # finish (no hard kill) but no new work is scheduled.
             if thread.is_alive():
-                cancelled.set()
-                # We don't have the flow_id up here because runner.run()
-                # creates one internally — the runner's own ``_stopped``
-                # mechanism needs the id.  Best-effort: mark the event
-                # and let the FlowRunner's graceful-shutdown path pick
-                # it up via the reference stashed on the runner.
                 try:
-                    # The runner owns at most one active flow in the
-                    # single-call ``runner.run(...)`` pattern — grab
-                    # whichever id is in-flight and stop it.
-                    for fid in list(runner._stopped):  # pragma: no cover
-                        pass
-                    # If no flow_id available, the sentinel on the queue
-                    # plus the daemon thread's short idle cycles ensure
-                    # the process exits cleanly even without explicit
-                    # stop().  Future: wire runner.stream(flow_id=...)
-                    # so the flow_id is exposed up-front.
-                except Exception:  # pragma: no cover
-                    pass
+                    runner.stop(flow_id)
+                except Exception:  # pragma: no cover — defensive
+                    logger.exception("run.stream: runner.stop(%s) raised", flow_id)
             thread.join(timeout=5.0)
 
         with holder_lock:

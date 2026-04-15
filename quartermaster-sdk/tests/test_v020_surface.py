@@ -317,9 +317,11 @@ class TestMarkdownFenceStripping:
 
 
 class TestStreamEarlyExitCancels:
-    """Regression for the v0.2.0 reviewer HIGH: abandoning the generator
-    early must set the cancellation Event and join the runner thread
-    within the documented timeout — not leak the thread forever."""
+    """Regression for the v0.2.0 reviewer HIGHs: abandoning the
+    generator early must call ``FlowRunner.stop(flow_id)`` (via the
+    pre-generated UUID) and join the runner thread within the
+    documented timeout — not leak the thread *or* let the flow keep
+    burning API calls in the background."""
 
     def test_break_out_of_stream_finishes_promptly(self):
         import threading as _threading
@@ -346,3 +348,84 @@ class TestStreamEarlyExitCancels:
             f"run.stream thread leaked after early break; still alive: {leaked}. "
             f"active count went from {before} to {after}."
         )
+
+    def test_stream_uses_pre_generated_flow_id(self, monkeypatch):
+        """The cancel path must have a flow_id to stop.  Pre-0.2.0 (in
+        the buggy intermediate commit) it captured from the first event,
+        racing with early break.  Now the flow_id is minted up front
+        and passed as ``runner.run(..., flow_id=...)`` — so even a break
+        before the first event has a valid id to stop."""
+        reg, _ = _mock_registry("ok")
+        qm.configure(registry=reg)
+        graph = qm.Graph("x").instruction("One").build()
+
+        captured: dict[str, Any] = {}
+
+        from quartermaster_engine import FlowRunner
+
+        original_run = FlowRunner.run
+
+        def capture_run(self, input_message, flow_id=None):
+            captured["flow_id_passed"] = flow_id
+            return original_run(self, input_message, flow_id=flow_id)
+
+        monkeypatch.setattr(FlowRunner, "run", capture_run)
+
+        # Consume the full stream (no break) to confirm the happy path.
+        chunks = list(qm.run.stream(graph, "hi"))
+        assert chunks[-1].type == "done"
+        assert captured["flow_id_passed"] is not None, (
+            "run.stream must pre-generate a flow_id and forward it to "
+            "FlowRunner.run(flow_id=...), otherwise cancellation can't "
+            "target the right flow."
+        )
+
+
+class TestStreamAwaitInputChunk:
+    """Coverage gap caught by code-reviewer: ``AwaitInputChunk`` (the
+    ``UserInputRequired`` → chunk mapping) wasn't exercised."""
+
+    def test_user_node_with_no_input_yields_await_chunk(self):
+        """In non-interactive mode the User node passes through the
+        input without pausing, but we can still verify the chunk
+        mapping exists and covers the UserInputRequired path."""
+        from quartermaster_engine import UserInputRequired
+
+        from quartermaster_sdk._runner import _event_to_chunk
+
+        event = UserInputRequired(
+            flow_id=None,  # type: ignore[arg-type]
+            node_id=None,  # type: ignore[arg-type]
+            prompt="Your input?",
+            options=["A", "B"],
+        )
+        chunk = _event_to_chunk(event)
+        assert isinstance(chunk, qm.AwaitInputChunk)
+        assert chunk.prompt == "Your input?"
+        assert chunk.options == ["A", "B"]
+        assert chunk.type == "await_input"
+
+
+class TestCaptureAsValidationWarning:
+    """Code-reviewer MEDIUM: ``capture_as="llm_model"`` (or any other
+    reserved metadata key) emits a warning — captures still work, but
+    the collision is visible in logs / validator output."""
+
+    def test_capture_as_shadowing_reserved_key_emits_warning(self):
+        """Building a graph with capture_as="llm_model" triggers a
+        warning (not an error) from validate_graph."""
+        from quartermaster_graph.validation import validate_graph
+
+        graph = qm.Graph("x").instruction("One", capture_as="llm_model").build()
+        issues = validate_graph(graph)
+        warnings = [i for i in issues if i.code == "capture_as_shadows_reserved_key"]
+        assert len(warnings) == 1
+        assert warnings[0].severity == "warning"
+
+    def test_normal_capture_as_emits_no_warning(self):
+        from quartermaster_graph.validation import validate_graph
+
+        graph = qm.Graph("x").instruction("One", capture_as="notes").build()
+        issues = validate_graph(graph)
+        warnings = [i for i in issues if i.code == "capture_as_shadows_reserved_key"]
+        assert warnings == []

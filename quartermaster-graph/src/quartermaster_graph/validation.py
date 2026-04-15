@@ -212,4 +212,43 @@ def validate_graph(version: GraphSpec) -> list[ValidationError]:  # type: ignore
                     )
                 )
 
+    # --- capture_as collisions with reserved node metadata keys ---
+    # v0.2.0 lets callers name a node's output via ``capture_as="x"``.
+    # A YAML-loaded graph could set ``capture_as: llm_model`` — that's
+    # not a correctness bug (captures are a separate namespace from
+    # node metadata), but the resulting ``result.captures["llm_model"]``
+    # is confusing to debug because it shadows a well-known concept.
+    # Warn so the operator sees it in logs.
+    _reserved_capture_names = frozenset(
+        {
+            "llm_model",
+            "llm_provider",
+            "llm_temperature",
+            "llm_system_instruction",
+            "llm_max_output_tokens",
+            "llm_max_input_tokens",
+            "llm_stream",
+            "llm_vision",
+            "llm_thinking_level",
+            "show_output",
+            "capture_as",
+        }
+    )
+    for node in version.nodes:
+        capture_name = node.metadata.get("capture_as")
+        if isinstance(capture_name, str) and capture_name in _reserved_capture_names:
+            errors.append(
+                ValidationError(
+                    code="capture_as_shadows_reserved_key",
+                    message=(
+                        f"Node '{node.name}' has capture_as={capture_name!r} which "
+                        f"collides with a reserved node-metadata key. Captures "
+                        f"live in a separate namespace so this still works, but "
+                        f"rename to something unambiguous for readability."
+                    ),
+                    node_id=node.id,
+                    severity="warning",
+                )
+            )
+
     return errors

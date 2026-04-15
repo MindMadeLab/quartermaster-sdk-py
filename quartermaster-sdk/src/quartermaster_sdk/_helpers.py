@@ -155,6 +155,16 @@ def instruction_form(
             couldn't be parsed into *schema* (raises a
             ``ValidationError``-wrapping ``RuntimeError`` with the raw
             text attached for debugging).
+
+    .. warning::
+        The schema's JSON representation is injected **verbatim** into
+        the system prompt so the LLM knows the target shape.  That
+        includes every field's ``description=`` and ``default=``
+        metadata.  If your Pydantic model derives descriptions from
+        external / attacker-influenced sources (rare but not unheard of
+        in code-generation pipelines), an attacker could use them as an
+        indirect-prompt-injection channel.  Keep ``Field(description=)``
+        values static / developer-controlled.
     """
     try:
         from pydantic import BaseModel, ValidationError
