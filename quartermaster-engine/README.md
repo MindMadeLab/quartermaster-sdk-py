@@ -46,7 +46,7 @@ provider_registry = register_local(
     default_model="gemma4:26b",
 )
 
-graph = Graph("chat").start().user().agent().end().build()
+graph = Graph("chat").user().agent().end().build()
 runner = FlowRunner(graph=graph, provider_registry=provider_registry)
 result = runner.run("Pozdravljen!")
 print(result.success, result.final_output)
@@ -115,7 +115,6 @@ from quartermaster_engine.nodes import SimpleNodeRegistry
 
 graph = (
     GraphBuilder("Support Agent")
-    .start()
     .instruction("Classify", model="gpt-4o")
     .decision("Route", options=["billing", "technical"])
     .on("billing").instruction("Handle billing").end()

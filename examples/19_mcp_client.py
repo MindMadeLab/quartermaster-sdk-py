@@ -1,4 +1,4 @@
-"""Example 21 -- MCP protocol client integration.
+"""Example 19 -- MCP protocol client integration.
 
 Demonstrates how to connect to MCP (Model Context Protocol) servers,
 discover available tools, and integrate them with Quartermaster graphs.
@@ -8,7 +8,7 @@ MCP client connects to any MCP-compatible server.
 
 Usage:
     # Start an MCP server first, then:
-    uv run examples/21_mcp_client.py
+    uv run examples/19_mcp_client.py
 """
 
 from __future__ import annotations

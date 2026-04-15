@@ -70,7 +70,6 @@ class PassthroughExecutor:
 
 graph = (
     Graph("Event Streaming Demo")
-    .start()
     .user("Say something")
     .instruction(
         "Respond",

@@ -1,4 +1,4 @@
-"""Example 22 -- Local Gemma 4 with Ollama: vision, tool calling, streaming.
+"""Example 20 -- Local Gemma 4 with Ollama: vision, tool calling, streaming.
 
 Runs entirely on your machine — no cloud API keys needed. Demonstrates
 Google's Gemma 4 (26B MoE) via Ollama with vision analysis, tool-aware
@@ -9,7 +9,7 @@ Prerequisites:
     ollama pull gemma4:26b    # 17GB, MoE, 256K context, vision + tools
 
 Usage:
-    uv run examples/22_ollama_local.py
+    uv run examples/20_ollama_local.py
 """
 
 from __future__ import annotations
@@ -74,12 +74,6 @@ def search_knowledge(query: str) -> dict:
     return {"query": query, "results": results}
 
 
-# Build tool descriptions for the system prompt
-tool_list = "\n".join(
-    f"- {s['name']}: {s.get('description', '')}" for s in registry.to_json_schema()
-)
-
-
 # ============================================================================
 # Demo 1: Vision — describe a scene
 # ============================================================================
@@ -128,25 +122,30 @@ qm.run_graph(vision_agent, user_input=image_prompt)
 
 print("\n--- Demo 2: Tool Calling ---\n")
 
+# v0.3.1: use .agent(tools=[...]) so the SDK actually executes the
+# registered tools (was .instruction() with tool descriptions baked
+# into the system prompt, which only made the model roleplay tool use).
 tool_agent = (
     qm.Graph("Gemma Tools")
     .user("Ask anything")
-    .instruction(
-        "Think and call tools",
+    .agent(
+        "Tool agent",
         model=MODEL,
         provider=PROVIDER,
         system_instruction=(
-            "You are a helpful assistant with tools. When you need data, "
-            "describe which tool you would call and why.\n\n"
-            f"Available tools:\n{tool_list}\n\n"
-            "Reason step-by-step about which tools to use, then answer."
+            "You are a helpful assistant with access to weather and "
+            "knowledge-base lookup tools.  Call them as needed, then "
+            "answer concisely."
         ),
+        tools=["get_weather", "search_knowledge"],
+        max_iterations=4,
     )
 )
 
-qm.run_graph(
+qm.run(
     tool_agent,
     user_input="What's the weather in Ljubljana and what do you know about Slovenia?",
+    tool_registry=registry,
 )
 
 

@@ -92,7 +92,7 @@ uv run examples/run_interactive.py
 
 ## Patterns Demonstrated
 
-- **Fluent builder**: `Graph("name").start().user("Input")...end()` -- chainable API
+- **Fluent builder**: `Graph("name").user("Input")...end()` -- chainable API (Start node auto-inserted)
 - **User input**: `.user()` pauses flow and waits for human input
 - **Decision routing**: `decision()` picks ONE branch via LLM
 - **If/else**: `if_node()` with safe AST-evaluated boolean expressions

@@ -15,7 +15,7 @@ Patterns shown
 
 Usage:
     export ANTHROPIC_API_KEY="sk-ant-..."   # or OPENAI_API_KEY
-    uv run examples/15_user_forms.py
+    uv run examples/14_user_forms.py
 """
 
 from __future__ import annotations

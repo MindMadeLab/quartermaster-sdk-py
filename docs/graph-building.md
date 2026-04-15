@@ -23,12 +23,11 @@ graph = Graph("My Agent", description="Processes user queries")
 
 ### Linear Chains
 
-The simplest pattern is a linear sequence of nodes. Every graph should have a `.user()` node after `.start()` to collect input:
+The simplest pattern is a linear sequence of nodes. Every graph should have a `.user()` node near the top to collect input (the Start node is auto-inserted since v0.2.0):
 
 ```python
 graph = (
     Graph("Simple Chain")
-    .start()
     .user("Enter text to process")
     .instruction("Step 1", model="gpt-4o", system_instruction="Summarize the input.")
     .instruction("Step 2", model="gpt-4o", system_instruction="Translate to French.")
@@ -46,7 +45,6 @@ next node.
 ```python
 graph = (
     Graph("Router")
-    .start()
     .user("What would you like help with?")
     .instruction(
         "Classify",
@@ -75,7 +73,6 @@ For boolean conditions, use `.if_node()`:
 ```python
 graph = (
     Graph("Conditional")
-    .start()
     .user("Enter your text")
     .if_node("Check length", expression="len(input) > 100")
     .on("true")
@@ -106,7 +103,6 @@ Two flavours:
 ```python
 graph = (
     Graph("Parallel with Merge")
-    .start()
     .user("Enter your request")
     .instruction("Prepare")
     .parallel()
@@ -130,7 +126,6 @@ branch with `.branch()`, and rejoin with `.static_merge()`:
 ```python
 graph = (
     Graph("Parallel Research")
-    .start()
     .user("Paste your code for review")
     .instruction("Prepare", system_instruction="Prepare the research task")
     .parallel()

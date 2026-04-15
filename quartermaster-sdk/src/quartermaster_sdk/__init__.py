@@ -82,6 +82,7 @@ from ._config import (  # noqa: F401
     get_default_registry,
     reset_config,
 )
+from . import telemetry  # noqa: F401  — exposes ``qm.telemetry.instrument()`` without explicit import
 from ._async_runner import arun  # noqa: F401
 from ._helpers import instruction, instruction_form  # noqa: F401
 from ._result import Result  # noqa: F401

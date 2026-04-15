@@ -167,7 +167,6 @@ The LLM classifies input and picks ONE branch. No merge needed.
 ```python
 agent = (
     Graph("Router")
-    .start()
     .user("Describe your issue")
     .instruction("Classify", system_instruction="Classify as: Technical or General.")
     .decision("Category?", options=["Technical", "General"])
@@ -188,7 +187,6 @@ All branches run concurrently, then merge.
 ```python
 agent = (
     Graph("Code Review")
-    .start()
     .user("Paste your code")
     .parallel()
     .branch()
@@ -208,7 +206,6 @@ agent = (
 ```python
 agent = (
     Graph("Registration")
-    .start()
     .user("Welcome!")
     .user_form("Details", parameters=[
         {"name": "full_name", "type": "text", "label": "Name", "required": "true"},
@@ -314,9 +311,9 @@ quartermaster-code-runner   Standalone Docker code execution
 
 ## Key Concepts
 
-- **Graph** -- A directed graph (supports cycles via `connect()` for loops) of nodes and edges. Built with the fluent `Graph("name").start().user("Input")...end()` API.
+- **Graph** -- A directed graph (supports cycles via `connect()` for loops) of nodes and edges. Built with the fluent `Graph("name").user("Input")...end()` API (Start node auto-inserted).
 - **GraphSpec** -- The serializable graph model (`GraphSpec` in quartermaster-graph). `qm.run(graph, ...)` finalises the builder for you; explicit `Graph.build()` only matters when you want the validated spec to serialise / inspect. `AgentGraph` remains as a deprecated backward-compat alias.
-- **User Node** -- Every graph starts with `.user()` after `.start()` to collect user input.
+- **User Node** -- Every graph typically begins with `.user()` to collect user input (Start node is auto-inserted).
 - **Nodes** -- Units of work: LLM calls, decisions, user input, memory, tools, templates.
 - **Edges** -- Directed connections between nodes. Decision/IF/Switch edges carry labels.
 - **Thoughts** -- Runtime containers that carry text and variables (metadata) between nodes.
