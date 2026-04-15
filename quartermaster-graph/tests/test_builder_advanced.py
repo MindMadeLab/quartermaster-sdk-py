@@ -504,7 +504,10 @@ class TestGraphWithoutBuild:
         assert start.type == NodeType.START
 
     def test_start_node_id_raises_without_start(self):
-        graph = GraphBuilder("Empty")
+        # v0.2.0+: the Graph constructor auto-creates a Start node by
+        # default.  To hit the "no start node" path we have to opt out
+        # with ``auto_start=False``.
+        graph = GraphBuilder("Empty", auto_start=False)
         with pytest.raises(ValueError, match="No start node"):
             _ = graph.start_node_id
 

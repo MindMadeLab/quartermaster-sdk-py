@@ -86,7 +86,16 @@ class TestStartNodeValidation:
 
 
 class TestEndNodeValidation:
-    def test_no_end_node(self, agent):
+    def test_no_end_node_is_now_allowed(self, agent):
+        """v0.2.0+ — graphs without an explicit End node validate clean.
+
+        Pre-0.2.0 the validator emitted a ``no_end`` error.  That check
+        was removed because the runner has always been fine with no End
+        (it falls back to the last finished node's output in
+        ``FlowResult``).  Single-node flows like
+        ``Graph("x").instruction("y").build()`` no longer need the
+        trailing ``.end()`` boilerplate.
+        """
         start = GraphNode(type=NodeType.START, name="Start")
         inst = GraphNode(type=NodeType.INSTRUCTION, name="Inst")
         edge = GraphEdge(source_id=start.id, target_id=inst.id)
@@ -98,7 +107,7 @@ class TestEndNodeValidation:
         )
         errors = validate_graph(version)
         codes = [e.code for e in errors]
-        assert "no_end" in codes
+        assert "no_end" not in codes
 
 
 class TestEdgeValidation:
