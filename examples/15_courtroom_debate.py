@@ -161,7 +161,7 @@ trial = (
         ),
     )
     .text("Adjournment", template="\n--- Court is adjourned ---")
-    .end(stop=True)
+    .end()
     # FALSE: loop back
     .on("false")
     .text("Next round", template="", show_output=False)
@@ -171,18 +171,22 @@ trial = (
 # -- Wire the loop back-edge -----------------------------------------------
 
 # The "Next round" branch loops back to "Round announce" (past the
-# one-time courtroom-opening setup).  The explicit back-edge is still
-# necessary here because we want to skip the case-setup nodes on each
-# iteration — if we relied on the v0.3.0 default End-to-Start loop,
-# the whole "Court opens" + "Init round" preamble would replay every
-# iteration.
+# one-time courtroom-opening setup).  We deliberately do NOT use
+# ``.back()`` here — ``.back()`` dispatches the graph's Start node,
+# which would replay the "Describe the case" prompt and the whole
+# "Court opens" / "Init round" preamble on every iteration.  Instead
+# we rely on the v0.3.1 reverted End semantics: the trailing
+# ``.end()`` after "Next round" stops that branch path cleanly, while
+# the ``.connect()`` below makes "Next round" dispatch "Round
+# announce" via its default SPAWN_ALL — so the loop lands on the
+# right node.
 trial.connect("Next round", "Round announce", label="next_round")
 
-# -- Build and run -- v0.3.0 validator treats user-wired cycles as a
+# -- Build and run -- v0.3.1 validator treats user-wired cycles as a
 # warning, so we no longer need ``validate=False`` here.  The TRUE
-# branch's ``.end(stop=True)`` (after "Adjournment") sets
-# ``traverse_out=SPAWN_NONE`` and guarantees the flow terminates
-# after MAX_ROUNDS rounds instead of looping forever.
+# branch's trailing ``.end()`` sets ``traverse_out=SPAWN_NONE`` and
+# guarantees the flow terminates after MAX_ROUNDS rounds instead of
+# looping forever.
 
 agent = trial.build()
 

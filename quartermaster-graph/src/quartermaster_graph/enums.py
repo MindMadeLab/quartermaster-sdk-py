@@ -7,6 +7,7 @@ class NodeType(str, Enum):
     """All available node types in the agent graph."""
 
     AGENT = "Agent1"
+    BACK = "Back1"
     BLANK = "Blank1"
     BREAK = "Break1"
     CODE = "Code1"
