@@ -2963,7 +2963,7 @@ wheels = [
 
 [[package]]
 name = "quartermaster-code-runner"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "quartermaster-code-runner" }
 dependencies = [
     { name = "docker" },
@@ -3005,7 +3005,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "quartermaster-engine"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "quartermaster-engine" }
 dependencies = [
     { name = "quartermaster-graph" },
@@ -3051,7 +3051,7 @@ provides-extras = ["sqlite", "redis", "all", "dev"]
 
 [[package]]
 name = "quartermaster-graph"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "quartermaster-graph" }
 dependencies = [
     { name = "pydantic" },
@@ -3079,7 +3079,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "quartermaster-mcp-client"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "quartermaster-mcp-client" }
 dependencies = [
     { name = "httpx" },
@@ -3109,7 +3109,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "quartermaster-nodes"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "quartermaster-nodes" }
 dependencies = [
     { name = "jinja2" },
@@ -3143,7 +3143,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "quartermaster-providers"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "quartermaster-providers" }
 dependencies = [
     { name = "httpx" },
@@ -3197,7 +3197,7 @@ provides-extras = ["openai", "anthropic", "google", "groq", "all", "dev"]
 
 [[package]]
 name = "quartermaster-sdk"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "quartermaster-sdk" }
 dependencies = [
     { name = "quartermaster-engine" },
@@ -3254,6 +3254,10 @@ privacy = [
 providers-all = [
     { name = "quartermaster-providers", extra = ["all"] },
 ]
+telemetry = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+]
 tools-all = [
     { name = "quartermaster-tools", extra = ["all"] },
 ]
@@ -3267,6 +3271,8 @@ web = [
 [package.metadata]
 requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
+    { name = "opentelemetry-api", marker = "extra == 'telemetry'", specifier = ">=1.41.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'telemetry'", specifier = ">=1.41.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
@@ -3292,11 +3298,11 @@ requires-dist = [
     { name = "quartermaster-tools", extras = ["web"], marker = "extra == 'web'", editable = "quartermaster-tools" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
 ]
-provides-extras = ["openai", "anthropic", "google", "groq", "providers-all", "web", "browser", "database", "vector", "privacy", "observability", "tools-all", "mcp", "code-runner", "all", "dev"]
+provides-extras = ["openai", "anthropic", "google", "groq", "providers-all", "web", "browser", "database", "vector", "privacy", "observability", "tools-all", "mcp", "code-runner", "all", "dev", "telemetry"]
 
 [[package]]
 name = "quartermaster-tools"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "quartermaster-tools" }
 dependencies = [
     { name = "simpleeval" },
@@ -3370,7 +3376,7 @@ provides-extras = ["web", "llm", "database", "vector", "privacy", "observability
 
 [[package]]
 name = "quartermaster-workspace"
-version = "0.2.0"
+version = "0.2.1"
 source = { virtual = "." }
 dependencies = [
     { name = "anthropic" },

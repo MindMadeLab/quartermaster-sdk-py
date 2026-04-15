@@ -13,6 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from ._trace import Trace
+
 if TYPE_CHECKING:
     from quartermaster_engine import FlowResult
     from quartermaster_engine.nodes import NodeResult
@@ -49,6 +51,14 @@ class Result:
         error: Concatenated error messages from any failed node, or
             ``None`` on success.
         duration_seconds: Wall-clock time the flow took to execute.
+        trace: Structured :class:`Trace` carrying every
+            :class:`FlowEvent` emitted during the run — tokens, tool
+            calls, progress, custom events, per-node buckets, and a
+            JSONL exporter.  Populated by the runner (both sync and
+            streaming paths install an ``on_event`` collector); defaults
+            to an empty :class:`Trace` when a :class:`Result` is built
+            from just a :class:`FlowResult` without runner-captured
+            events.
         raw: The underlying :class:`FlowResult` — escape hatch when you
             need UUID-keyed ``node_results`` or the full ``output_data``
             maps.
@@ -59,6 +69,7 @@ class Result:
     success: bool = True
     error: str | None = None
     duration_seconds: float = 0.0
+    trace: Trace = field(default_factory=Trace)
     raw: FlowResult | None = None
 
     def __getitem__(self, name: str) -> NodeResult:

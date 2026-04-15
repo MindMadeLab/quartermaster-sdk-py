@@ -90,6 +90,42 @@ class AwaitInputChunk:
 
 
 @dataclass
+class ProgressChunk:
+    """Application-emitted progress signal.
+
+    Fires whenever code inside a node or tool called
+    :meth:`ExecutionContext.emit_progress` — typically a long-running
+    tool (``web_search``, OCR, multi-step lookup) reporting status to
+    the UI alongside model tokens. ``percent`` is ``None`` for
+    indeterminate / spinner-style progress or a 0.0–1.0 float for a
+    determinate progress bar. ``data`` is a free-form dict for
+    structured payload fields.
+    """
+
+    message: str
+    percent: float | None = None
+    data: dict[str, Any] = field(default_factory=dict)
+    type: Literal["progress"] = "progress"
+
+
+@dataclass
+class CustomChunk:
+    """Application-defined structured event.
+
+    Fires when node/tool code calls
+    :meth:`ExecutionContext.emit_custom`. Use this over
+    :class:`ProgressChunk` when the signal is a discrete milestone
+    ("retrieved_docs", "cache_hit", "quota_warning") rather than a
+    percent-along-a-task signal. Consumers filter on ``name`` via
+    ``stream.custom(name=...)``.
+    """
+
+    name: str
+    payload: dict[str, Any] = field(default_factory=dict)
+    type: Literal["custom"] = "custom"
+
+
+@dataclass
 class DoneChunk:
     """The flow finished — carries the final :class:`Result`."""
 
@@ -113,6 +149,8 @@ Chunk = Union[
     ToolCallChunk,
     ToolResultChunk,
     AwaitInputChunk,
+    ProgressChunk,
+    CustomChunk,
     DoneChunk,
     ErrorChunk,
 ]
@@ -132,6 +170,8 @@ __all__ = [
     "ToolCallChunk",
     "ToolResultChunk",
     "AwaitInputChunk",
+    "ProgressChunk",
+    "CustomChunk",
     "DoneChunk",
     "ErrorChunk",
 ]

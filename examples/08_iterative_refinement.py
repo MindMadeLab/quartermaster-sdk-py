@@ -103,7 +103,7 @@ agent = (
             "Output ONLY the final, polished paragraph. Make every word count."
         ),
     )
-    .end()
+    .end(stop=True)
     # FALSE: loop back
     .on("false")
     .text("Next iteration", template="", show_output=False)
@@ -111,11 +111,20 @@ agent = (
 )
 
 # -- Wire the loop back-edge --
+# Under v0.3.0 the "Next iteration" branch's implicit End would loop
+# to the main graph's Start, which would re-run the one-time setup
+# (user prompt + topic capture + brief + iteration init) every time.
+# We want to skip the setup and jump straight back to "Iteration
+# header", so we keep the explicit back-edge here.  The resulting
+# cycle is now a validator WARNING instead of an error.
 agent.connect("Next iteration", "Iteration header", label="next_iteration")
 
-# -- Build and run -- .build(validate=False) kept here because we deliberately
-# form a cycle (loop-back edge) which the default validator rejects.
-graph = agent.build(validate=False)
+# -- Build and run -- v0.3.0 validator treats user-wired cycles as a
+# warning, so we no longer need ``validate=False`` here.  The TRUE
+# branch's ``.end(stop=True)`` (after "Final polish") sets
+# ``traverse_out=SPAWN_NONE`` and guarantees the flow terminates
+# after MAX_ITERATIONS rounds instead of looping forever.
+graph = agent.build()
 
 print(f"Graph: {len(graph.nodes)} nodes, {len(graph.edges)} edges")
 print()

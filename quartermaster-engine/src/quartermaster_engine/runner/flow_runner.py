@@ -19,6 +19,7 @@ The execution loop:
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import time
 from collections.abc import AsyncIterator, Callable
@@ -26,15 +27,18 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID, uuid4
 
+from quartermaster_engine.context.current_context import bind as bind_current_context
 from quartermaster_engine.context.execution_context import ExecutionContext
 from quartermaster_engine.context.node_execution import NodeExecution, NodeStatus
 from quartermaster_engine.dispatchers.sync_dispatcher import SyncDispatcher
 from quartermaster_engine.events import (
+    CustomEvent,
     FlowError,
     FlowEvent,
     FlowFinished,
     NodeFinished,
     NodeStarted,
+    ProgressEvent,
     TokenGenerated,
     ToolCallFinished,
     ToolCallStarted,
@@ -126,6 +130,7 @@ class FlowRunner:
         *,
         provider_registry: Any | None = None,
         tool_registry: Any | None = None,
+        parent_context: ExecutionContext | None = None,
     ) -> None:
         """Construct a runner.
 
@@ -146,6 +151,12 @@ class FlowRunner:
         this constructor.  When you build the node registry yourself the
         runner has no way to know which provider/tool registry sits
         behind it, so they will be ``None`` — that's expected, not a bug.
+
+        Pass *parent_context* when this runner is driving a sub-graph
+        invoked by a parent flow's ``SUB_ASSISTANT`` node; executors
+        inside the sub-graph read it to decide whether an End node
+        should loop back to Start (main graph — parent_context is
+        ``None``) or return control to the parent.
         """
         if node_registry is None:
             if provider_registry is None:
@@ -176,17 +187,44 @@ class FlowRunner:
         self.dispatcher = dispatcher or SyncDispatcher()
         self.context_manager = context_manager or ContextManager()
         self.on_event = on_event
+        # v0.3.0: pointer back at the parent flow's ExecutionContext when
+        # this runner is driving a sub-graph (spawned via SUB_ASSISTANT).
+        self.parent_context = parent_context
 
         self._traverse_in = TraverseInGate()
         self._traverse_out = TraverseOutGate()
         self._message_router = MessageRouter(self.store)
         self._stopped: set[UUID] = set()
+        # v0.3.0 End → Start loop safety cap.  Any reached End node
+        # dispatches Start again by default under Proposal A; an
+        # unconditionally-looping graph (Start → Inst → End with no
+        # break condition) would otherwise recurse forever.  The guard
+        # caps implicit loop-back dispatches at a conservative ceiling
+        # so tests and misconfigured graphs fail fast instead of
+        # hanging.  Conditional loops (If + .end(stop=True)) terminate
+        # long before hitting this cap.
+        self._loop_counter: dict[UUID, int] = {}
+        self.max_loop_iterations = 100
 
-    def run(self, input_message: str, flow_id: UUID | None = None) -> FlowResult:
+    def run(
+        self,
+        input_message: str,
+        *,
+        images: list[tuple[str, str]] | None = None,
+        flow_id: UUID | None = None,
+    ) -> FlowResult:
         """Execute the graph synchronously.
 
         Args:
             input_message: The user's input message.
+            images: Optional list of ``(base64_ascii, mime_type)`` pairs
+                attached to the initial user turn. Vision-capable
+                nodes (``Graph().vision(...)``) read this list from
+                flow memory via the ``__user_images__`` key and forward
+                it to the provider alongside the text prompt. Pass raw
+                image bytes in the SDK (``qm.run(..., image=bytes)``);
+                the SDK normalises them to the internal base64 tuple
+                shape before calling this method.
             flow_id: Optional flow ID (auto-generated if not provided).
 
         Returns:
@@ -202,6 +240,12 @@ class FlowRunner:
 
             # Store the initial user input in flow memory
             self.store.save_memory(fid, "__user_input__", input_message)
+            # Store any attached images so vision-capable nodes can pick
+            # them up via ``context.memory["__user_images__"]`` without
+            # the caller having to touch the store directly. Stored as
+            # a plain list[tuple[str, str]] — base64 ASCII + MIME type.
+            if images:
+                self.store.save_memory(fid, "__user_images__", list(images))
 
             # Execute the start node, which kicks off the traversal
             self._execute_node(fid, start_node.id, input_message)
@@ -418,11 +462,19 @@ class FlowRunner:
             return NodeResult(success=True, data={}, output_text=user_input)
 
         if node.type == NodeType.END:
-            # End node: collect the final output from predecessors
+            # End node: collect the final output from predecessors.
+            # v0.3.0: when this runner is driving a sub-graph
+            # (``parent_context`` is set), stamp
+            # ``__end_returns_to_parent__`` on the result so
+            # ``_dispatch_successors`` hands control back to the parent
+            # flow instead of looping to Start.
             messages = self._message_router.get_messages_for_node(flow_id, node, self.graph)
             final_output = messages[-1].content if messages else ""
             self._message_router.save_node_output(flow_id, node.id, messages)
-            return NodeResult(success=True, data={}, output_text=final_output)
+            data: dict[str, Any] = {}
+            if self.parent_context is not None:
+                data["__end_returns_to_parent__"] = True
+            return NodeResult(success=True, data=data, output_text=final_output)
 
         if node.type == NodeType.MERGE:
             # Merge node: combine outputs from all predecessors
@@ -467,6 +519,7 @@ class FlowRunner:
             messages=messages,
             memory=flow_memory,
             metadata=dict(node.metadata),
+            parent_context=self.parent_context,
             on_token=lambda t: self._emit(
                 TokenGenerated(flow_id=flow_id, node_id=node.id, token=t)
             ),
@@ -489,6 +542,23 @@ class FlowRunner:
                     raw=raw,
                     error=err,
                     iteration=it,
+                )
+            ),
+            on_progress=lambda msg, percent, data: self._emit(
+                ProgressEvent(
+                    flow_id=flow_id,
+                    node_id=node.id,
+                    message=msg,
+                    percent=percent,
+                    data=data,
+                )
+            ),
+            on_custom=lambda name, payload: self._emit(
+                CustomEvent(
+                    flow_id=flow_id,
+                    node_id=node.id,
+                    name=name,
+                    payload=payload,
                 )
             ),
         )
@@ -517,6 +587,20 @@ class FlowRunner:
     ) -> NodeResult:
         """Run a node executor, handling sync/async transparently.
 
+        Wraps the executor invocation in ``current_context.bind(context)``
+        so application code inside the executor (most importantly
+        ``@tool()`` callables) can reach the live :class:`ExecutionContext`
+        via :func:`quartermaster_sdk.current_context` and emit progress
+        or custom events back onto the stream.
+
+        Threading: when we're inside a running asyncio event loop we
+        dispatch to a ``ThreadPoolExecutor``. Python's ``contextvars``
+        do NOT propagate into pool workers automatically, so we submit
+        ``contextvars.copy_context().run(target)`` — the worker thread
+        inherits a snapshot of the caller's contextvars (including the
+        freshly-bound ``_current_ctx``) and tools running inside the
+        coroutine see ``current_context()`` return a non-None value.
+
         If the node has a ``timeout`` set (in seconds), execution is wrapped
         in ``asyncio.wait_for`` so that a ``TimeoutError`` is raised when the
         node exceeds its time budget.
@@ -532,14 +616,25 @@ class FlowRunner:
         except RuntimeError:
             loop = None
 
-        if loop and loop.is_running():
-            # We're inside an async context — create a new thread to run the coroutine
-            import concurrent.futures
+        # Bind the contextvar for the duration of this executor call so
+        # tools invoked during execution can emit progress/custom events.
+        # The ``with`` scope unwinds the var after the executor returns.
+        with bind_current_context(context):
+            if loop and loop.is_running():
+                # Inside an async context — spawn a worker thread for the
+                # coroutine. ``copy_context().run(...)`` carries the
+                # freshly-bound contextvar into the worker's stack so
+                # ``current_context()`` resolves correctly there too.
+                import concurrent.futures
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(asyncio.run, coro)
-                return future.result(timeout=node.timeout)
-        else:
+                ctx_snapshot = contextvars.copy_context()
+
+                def _worker() -> NodeResult:
+                    return asyncio.run(coro)
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(ctx_snapshot.run, _worker)
+                    return future.result(timeout=node.timeout)
             return asyncio.run(coro)
 
     def _handle_node_error(
@@ -586,11 +681,55 @@ class FlowRunner:
         result: NodeResult,
         user_input: str,
     ) -> None:
-        """Determine and dispatch successor nodes based on traverse_out strategy."""
-        # End nodes and failed nodes with Stop strategy don't dispatch
-        if node.type == NodeType.END:
-            return
+        """Determine and dispatch successor nodes based on traverse_out strategy.
+
+        End-node semantics (v0.3.0 / Proposal A):
+
+        * End in a sub-graph (the current flow's ``parent_context`` is
+          set) — the End executor stamped ``__end_returns_to_parent__``
+          on its NodeResult.  Don't dispatch anything here; control
+          returns to the parent's ``_dispatch_successors`` for the
+          SUB_ASSISTANT node automatically once the child runner
+          finishes.
+        * End in the main graph with ``traverse_out=SPAWN_NONE`` (the
+          explicit opt-out set by ``.end(stop=True)``) — stop.
+        * End in the main graph with any other ``traverse_out`` (the
+          new default is ``SPAWN_START``) — dispatch the graph's Start
+          node, subject to the ``max_loop_iterations`` safety cap.
+        """
+        # Failed nodes with STOP strategy always halt, regardless of type.
         if not result.success and node.error_handling == ErrorStrategy.STOP:
+            return
+
+        # End node: apply the v0.3.0 loop/return semantics.
+        if node.type == NodeType.END:
+            # Sub-graph End: return control to the parent flow.
+            if result.data.get("__end_returns_to_parent__"):
+                return
+            # Main-graph End with explicit stop opt-out.
+            if node.traverse_out == TraverseOut.SPAWN_NONE:
+                return
+            # Default: loop back to Start, subject to safety cap.
+            count = self._loop_counter.get(flow_id, 0) + 1
+            self._loop_counter[flow_id] = count
+            if count > self.max_loop_iterations:
+                logger.warning(
+                    "Flow %s exceeded max_loop_iterations=%d; stopping "
+                    "instead of looping back to Start.  Add an If/break "
+                    "condition or call .end(stop=True) to opt out of "
+                    "the v0.3.0 End-to-Start loop semantics.",
+                    flow_id,
+                    self.max_loop_iterations,
+                )
+                return
+            start_node = self.graph.get_start_node()
+            if start_node is None:
+                return
+            self.dispatcher.dispatch(
+                flow_id,
+                start_node.id,
+                lambda fid, nid: self._execute_node(fid, nid, user_input),
+            )
             return
 
         next_nodes = self._traverse_out.get_next_nodes(

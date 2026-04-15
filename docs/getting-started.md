@@ -132,27 +132,47 @@ graph = (
 
 ### Step 5: Stream Events
 
-For real-time feedback, use the async streaming API:
+For real-time feedback from the SDK, use the filtered stream iterators
+(v0.3.0):
 
 ```python
-import asyncio
+import quartermaster_sdk as qm
 
-async def main():
-    runner = FlowRunner(graph=graph, node_registry=node_registry)
+# Typewriter effect -- just the model tokens.
+for token in qm.run.stream(graph, "I just got promoted!").tokens():
+    print(token, end="", flush=True)
 
-    async for event in runner.run_async("I just got promoted!"):
-        match event:
-            case NodeStarted(node_name=name):
-                print(f"[started] {name}")
-            case TokenGenerated(token=tok):
-                print(tok, end="", flush=True)
-            case NodeFinished(result=res):
-                print(f"\n[finished] {res[:50]}...")
-            case FlowFinished(final_output=out):
-                print(f"\n\nFinal: {out}")
+# Or listen to tool calls / progress / custom events instead:
+for call in qm.run.stream(graph, "Research topic X").tool_calls():
+    print(f"[TOOL] {call.tool}({call.args})")
 
-asyncio.run(main())
+for prog in qm.run.stream(graph, "Crunch the dataset").progress():
+    print(f"[{prog.percent:.0%}] {prog.message}")
 ```
+
+Streams are single-pass -- pick one consumer per stream. See
+[engine.md](engine.md) for the low-level `FlowEvent` API that the SDK
+chunk filters are built on top of.
+
+### Step 5b: OpenTelemetry (optional)
+
+For production observability, install the telemetry extra and flip it
+on with a single call:
+
+```bash
+pip install 'quartermaster-sdk[telemetry]'
+```
+
+```python
+from quartermaster_sdk import telemetry
+
+telemetry.instrument()    # every subsequent run emits OTEL GenAI spans
+```
+
+Point your exporter at Jaeger, Tempo, Honeycomb, Logfire, Phoenix, or
+any OTLP collector. Spans follow the OpenTelemetry GenAI semantic
+conventions (`gen_ai.system`, `gen_ai.operation.name`,
+`gen_ai.tool.name`, `gen_ai.usage.input_tokens`, ...).
 
 ## Project Structure
 

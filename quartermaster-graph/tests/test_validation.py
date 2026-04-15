@@ -176,6 +176,13 @@ class TestOrphanDetection:
 
 class TestCycleDetection:
     def test_cycle_detected(self, agent):
+        """v0.3.0: cycle detection now emits a WARNING, not an error.
+
+        Intentional loops are supported at run time via the runner's
+        ``max_loop_iterations`` safety cap, and the default End-node
+        semantics loop back to Start implicitly — so explicit
+        edge-level cycles are a soft signal, not a validation failure.
+        """
         start = GraphNode(type=NodeType.START, name="Start")
         a = GraphNode(type=NodeType.INSTRUCTION, name="A")
         b = GraphNode(type=NodeType.INSTRUCTION, name="B")
@@ -195,6 +202,8 @@ class TestCycleDetection:
         errors = validate_graph(version)
         codes = [e.code for e in errors]
         assert "cycle_detected" in codes
+        warning_codes = {e.code for e in errors if e.severity == "warning"}
+        assert "cycle_detected" in warning_codes
 
 
 class TestDecisionEdgeLabels:

@@ -1017,15 +1017,37 @@ class _BranchBuilder:
     # Termination
     # ------------------------------------------------------------------
 
-    def end(self) -> Any:
+    def end(self, stop: bool = False) -> Any:
         """End this branch and return to the parent.
 
         Records the branch endpoint so that a subsequent ``.merge()``
         or auto-merge can connect all branches.
 
+        When ``stop=True`` (v0.3.0+) the branch receives an explicit
+        ``NodeType.END`` node with ``traverse_out=SPAWN_NONE`` right
+        now — so even under the new default loop semantics, *this*
+        branch stops cleanly.  Use it for the "we're done refining,
+        exit the loop" arm of an if/decision.
+
         Returns the parent — either a ``GraphBuilder`` or another
         ``_BranchBuilder`` for nested control flow.
         """
+        if stop:
+            end_node = GraphNode(
+                type=NodeType.END,
+                name="End",
+                traverse_out=TraverseOut.SPAWN_NONE,
+                thought_type=ThoughtType.SKIP,
+                message_type=MessageType.VARIABLE,
+                position=self._parent._advance_position(),
+            )
+            self._graph._nodes.append(end_node)
+            if self._last_node_id is not None:
+                self._graph._edges.append(
+                    GraphEdge(source_id=self._last_node_id, target_id=end_node.id)
+                )
+            # Don't register as a branch endpoint — this End is terminal.
+            return self._parent
         if self._last_node_id is not None:
             self._parent._branch_endpoints.append(self._last_node_id)
         return self._parent
@@ -1253,16 +1275,30 @@ class GraphBuilder:
         self._create_start_node()
         return self
 
-    def end(self) -> GraphBuilder:
+    def end(self, stop: bool = False) -> GraphBuilder:
         """Add an End node.
 
-        If there are pending branch endpoints, auto-merges them first so
-        the End node is reachable from all branches.
+        v0.3.0 semantics (Proposal A):
+
+        * In the **main graph**, reaching an End node loops control
+          back to the ``Start`` node by default, enabling recursive
+          agent loops.  Implemented by setting
+          ``traverse_out=SPAWN_START`` on the End node.
+        * In a **sub-graph** (spawned via a ``SUB_ASSISTANT`` node) the
+          same End node signals "return to parent" instead of looping;
+          the runner inspects ``ExecutionContext.parent_context`` at
+          run time to tell the two cases apart.
+        * Pass ``stop=True`` for the rare "stop here permanently"
+          opt-out — sets ``traverse_out=SPAWN_NONE`` so the runner
+          never dispatches anything after this node.
+
+        If there are pending branch endpoints, auto-merges them first
+        so the End node is reachable from all branches.
         """
         node = GraphNode(
             type=NodeType.END,
             name="End",
-            traverse_out=TraverseOut.SPAWN_NONE,
+            traverse_out=TraverseOut.SPAWN_NONE if stop else TraverseOut.SPAWN_START,
             thought_type=ThoughtType.SKIP,
             message_type=MessageType.VARIABLE,
         )

@@ -22,35 +22,45 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+import time
 from typing import TYPE_CHECKING, Any, Iterator
 from uuid import uuid4
 
 from quartermaster_engine import (
+    CustomEvent,
     FlowError,
     FlowEvent,
     FlowFinished,
     FlowRunner,
+    ImageInput,
     NodeFinished,
     NodeStarted,
+    ProgressEvent,
     TokenGenerated,
     ToolCallFinished,
     ToolCallStarted,
     UserInputRequired,
+    prepare_images,
 )
 
+from . import _listeners
 from ._chunks import (
     AwaitInputChunk,
     Chunk,
+    CustomChunk,
     DoneChunk,
     ErrorChunk,
     NodeFinishChunk,
     NodeStartChunk,
+    ProgressChunk,
     TokenChunk,
     ToolCallChunk,
     ToolResultChunk,
 )
 from ._config import get_default_registry
 from ._result import Result
+from ._stream_filters import _Stream
+from ._trace import Trace
 
 if TYPE_CHECKING:
     from quartermaster_graph import GraphBuilder, GraphSpec
@@ -78,6 +88,8 @@ class _RunCallable:
         graph: GraphBuilder | GraphSpec,
         user_input: str = "",
         *,
+        image: ImageInput | None = None,
+        images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
     ) -> Result:
@@ -87,6 +99,18 @@ class _RunCallable:
             graph: Either a :class:`GraphBuilder` (auto-finalised) or
                 a pre-built :class:`GraphSpec`.
             user_input: Primary user message injected into the graph.
+            image: Optional single image input for vision-capable graphs.
+                Accepts raw ``bytes``, a :class:`pathlib.Path`, or a
+                filesystem path string. When set, the graph's
+                ``.vision()`` node receives the image alongside
+                *user_input*. Mutually exclusive with *images*. On
+                graphs that don't declare a vision node this is a
+                no-op — the image is silently ignored so callers don't
+                need branch on "is this graph vision-enabled?".
+            images: Optional list of image inputs (same per-item types
+                as *image*). Use this when the graph's vision node
+                should see multiple images in a single turn. Mutually
+                exclusive with *image*.
             provider_registry: Override the configured default registry.
             tool_registry: Optional :class:`quartermaster_tools.ToolRegistry`
                 made available to ``agent()``-type nodes that specify
@@ -94,23 +118,65 @@ class _RunCallable:
         """
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
+        prepared_images = prepare_images(image=image, images=images)
+
+        # v0.3.0 trace: accumulate every FlowEvent into a local list
+        # so we can build a ``Trace`` and attach it to the returned
+        # ``Result``. Fires alongside the global listener dispatch so
+        # bolt-on instrumentation still sees the same stream.
+        trace_events: list[FlowEvent] = []
+
+        def _collect(event: FlowEvent) -> None:
+            trace_events.append(event)
+            _listeners.dispatch(event)
+
         runner = FlowRunner(
             graph=spec,
             provider_registry=registry,
             tool_registry=tool_registry,
+            # Forward every event to the global listener registry so
+            # bolt-on instrumentation (e.g. ``qm.telemetry.instrument()``)
+            # observes the same FlowEvent stream the streaming runner
+            # gets — even though there's no consumer queue here.
+            on_event=_collect,
         )
-        fr = runner.run(user_input)
-        return Result.from_flow_result(fr)
+        started = time.perf_counter()
+        fr = runner.run(user_input, images=prepared_images or None)
+        elapsed = time.perf_counter() - started
+
+        result = Result.from_flow_result(fr)
+        # FlowResult's ``duration_seconds`` is authoritative when
+        # populated; fall back to our wall-clock measurement for the
+        # trace if the engine left it at 0.
+        result.trace = Trace.from_events(
+            trace_events,
+            duration_seconds=fr.duration_seconds or elapsed,
+        )
+        return result
 
     def stream(
         self,
         graph: GraphBuilder | GraphSpec,
         user_input: str = "",
         *,
+        image: ImageInput | None = None,
+        images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
-    ) -> Iterator[Chunk]:
+    ) -> _Stream:
         """Run the graph and yield typed :class:`Chunk` events as they arrive.
+
+        Returns a :class:`_Stream` wrapper that is itself iterable (so
+        existing ``for chunk in qm.run.stream(...)`` loops work
+        unchanged) and exposes filter helpers — ``.tokens()``,
+        ``.tool_calls()``, ``.progress()``, ``.custom(name=...)`` —
+        for the common "pluck one chunk type out of the stream"
+        patterns.
+
+        Accepts the same *image* / *images* kwargs as :meth:`__call__` —
+        pass a single image (``bytes`` / :class:`pathlib.Path` / path
+        string) via *image*, or a list of images via *images*. They're
+        forwarded to the vision node's ``LLMExecutor`` via flow memory.
 
         Terminates with a :class:`DoneChunk` (on success) or
         :class:`ErrorChunk` (on unrecoverable failure).  The graph
@@ -126,8 +192,35 @@ class _RunCallable:
         nodes are dispatched, so long agent loops unwind within a
         bounded time instead of leaking API costs in the background.
         """
+        return _Stream(
+            self._iter_chunks(
+                graph=graph,
+                user_input=user_input,
+                image=image,
+                images=images,
+                provider_registry=provider_registry,
+                tool_registry=tool_registry,
+            )
+        )
+
+    def _iter_chunks(
+        self,
+        graph: GraphBuilder | GraphSpec,
+        user_input: str = "",
+        *,
+        image: ImageInput | None = None,
+        images: list[ImageInput] | None = None,
+        provider_registry: ProviderRegistry | None = None,
+        tool_registry: Any | None = None,
+    ) -> Iterator[Chunk]:
+        """Inner generator that powers :meth:`stream`.
+
+        Kept private: callers always go through ``stream()`` which
+        wraps the result in :class:`_Stream` for filter support.
+        """
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
+        prepared_images = prepare_images(image=image, images=images)
 
         q: queue.Queue[FlowEvent | None] = queue.Queue()
         holder_lock = threading.Lock()
@@ -140,7 +233,18 @@ class _RunCallable:
         # reaching into a private attribute.
         flow_id = uuid4()
 
+        # v0.3.0 trace: same collector the sync path uses, populated in
+        # arrival order on the runner thread. Safe to append from the
+        # event thread and read from the iterator thread because the
+        # final ``Trace`` is only built AFTER the runner thread joins.
+        trace_events: list[FlowEvent] = []
+
         def on_event(event: FlowEvent) -> None:
+            # Fan out to bolt-on instrumentation (telemetry, custom
+            # listeners, etc.) BEFORE queuing for the iterator — keeps
+            # the listener wall-clock close to the original event time.
+            _listeners.dispatch(event)
+            trace_events.append(event)
             q.put(event)
 
         runner = FlowRunner(
@@ -152,7 +256,11 @@ class _RunCallable:
 
         def _run_thread() -> None:
             try:
-                fr = runner.run(user_input, flow_id=flow_id)
+                fr = runner.run(
+                    user_input,
+                    images=prepared_images or None,
+                    flow_id=flow_id,
+                )
                 with holder_lock:
                     holder["result"] = fr
             except Exception as exc:  # pragma: no cover — defensive
@@ -166,6 +274,7 @@ class _RunCallable:
                 q.put(None)
 
         thread = threading.Thread(target=_run_thread, name="qm-run-stream", daemon=True)
+        started = time.perf_counter()
         thread.start()
 
         try:
@@ -206,7 +315,17 @@ class _RunCallable:
             yield ErrorChunk(error="run.stream: runner produced no result")
             return
 
-        yield DoneChunk(result=Result.from_flow_result(fr))
+        elapsed = time.perf_counter() - started
+        result = Result.from_flow_result(fr)
+        # v0.3.0: populate the structured trace from the accumulated
+        # event stream. The collector callback appended every FlowEvent
+        # as it fired; we build the bucketed/by-node view once and
+        # attach before handing the caller the DoneChunk.
+        result.trace = Trace.from_events(
+            trace_events,
+            duration_seconds=fr.duration_seconds or elapsed,
+        )
+        yield DoneChunk(result=result)
 
 
 def _event_to_chunk(event: FlowEvent) -> Chunk | None:
@@ -243,6 +362,24 @@ def _event_to_chunk(event: FlowEvent) -> Chunk | None:
             tool=event.tool,
             result=event.raw if event.raw is not None else event.result,
             error=event.error,
+        )
+    if isinstance(event, ProgressEvent):
+        # Application-emitted progress signal (e.g. from inside a
+        # long-running tool). Interleaves with TokenChunk on the
+        # consumer's iterator — UIs can render "searching…" /
+        # "parsing…" cards without interrupting the model tokens.
+        return ProgressChunk(
+            message=event.message,
+            percent=event.percent,
+            data=dict(event.data),
+        )
+    if isinstance(event, CustomEvent):
+        # Caller-tagged structured event — consumers filter via
+        # ``stream.custom(name="retrieved_docs")`` for the specific
+        # milestone they care about.
+        return CustomChunk(
+            name=event.name,
+            payload=dict(event.payload),
         )
     if isinstance(event, UserInputRequired):
         return AwaitInputChunk(

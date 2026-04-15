@@ -22,6 +22,7 @@ import logging
 import os
 import pathlib
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -235,6 +236,30 @@ def _coerce_bool(value: Any) -> bool:
     return bool(value)
 
 
+def _user_images(context: ExecutionContext) -> list[tuple[str, str]]:
+    """Return the user-supplied vision payload from flow memory.
+
+    The SDK's ``qm.run(..., image=bytes)`` / ``images=[...]`` path
+    normalises every supported shape (bytes / Path / str path) into a
+    list of ``(base64_ascii, mime_type)`` pairs and drops that list
+    into ``flow_memory["__user_images__"]``.
+
+    This helper hands the same list out to callers that actually want
+    to forward images to the provider — currently the vision node's
+    ``LLMExecutor`` via ``_build_llm_config``. Returns an empty list
+    when no images were attached (the common text-only case) so
+    callers can treat the return value as "always iterable" without
+    branching on None.
+
+    Non-list values in memory fall through as ``[]`` — defensive
+    against a misbehaving store, not an expected code path.
+    """
+    images = context.memory.get("__user_images__", [])
+    if not isinstance(images, list):
+        return []
+    return list(images)
+
+
 def _build_llm_config(
     context: ExecutionContext,
     *,
@@ -278,6 +303,15 @@ def _build_llm_config(
     else:
         temperature = context.get_meta("llm_temperature", temperature_default)
 
+    vision_enabled = _coerce_bool(context.get_meta("llm_vision", False))
+    # Forward user-supplied images ONLY into vision nodes. Non-vision
+    # nodes sharing the same flow memory must not accidentally drag the
+    # image payload into a text-only prompt — that's wasted tokens at
+    # best and an API error at worst (most providers reject image parts
+    # on a non-vision model id). The SDK's ``image=`` kwarg is thus a
+    # no-op on graphs that don't declare a ``.vision()`` node.
+    images = _user_images(context) if vision_enabled else []
+
     return LLMConfig(
         model=model,
         provider=provider_name,
@@ -286,7 +320,8 @@ def _build_llm_config(
         stream=stream,
         max_output_tokens=context.get_meta("llm_max_output_tokens", None),
         max_input_tokens=context.get_meta("llm_max_input_tokens", None),
-        vision=_coerce_bool(context.get_meta("llm_vision", False)),
+        vision=vision_enabled,
+        images=images,
         thinking_enabled=thinking_enabled,
         thinking_budget=thinking_budget,
     )
@@ -453,9 +488,7 @@ class _ToolInvocation:
     error: str | None
 
 
-def _execute_tool_call(
-    tool_registry: Any, tool_name: str, parameters: dict
-) -> _ToolInvocation:
+def _execute_tool_call(tool_registry: Any, tool_name: str, parameters: dict) -> _ToolInvocation:
     """Run one tool from the registry and return both the LLM-facing
     string and the structured payload for live streaming.
 
@@ -698,14 +731,16 @@ class AgentExecutor(NodeExecutor):
                 # ``qm.run(...)`` callers (non-streaming) can read exactly
                 # the same shape the streaming ToolCallFinished event
                 # carries.  Both surfaces stay in sync by construction.
-                tool_call_log.append({
-                    "tool": public_name,
-                    "arguments": dict(params),
-                    "result": invocation.prompt_text,
-                    "raw": invocation.raw,
-                    "error": invocation.error,
-                    "iteration": iteration,
-                })
+                tool_call_log.append(
+                    {
+                        "tool": public_name,
+                        "arguments": dict(params),
+                        "result": invocation.prompt_text,
+                        "raw": invocation.raw,
+                        "error": invocation.error,
+                        "iteration": iteration,
+                    }
+                )
 
                 # Wrap each tool result in an explicit untrusted-data block.
                 # Tool output frequently includes external content (web
@@ -1082,6 +1117,83 @@ class UserFormExecutor(NodeExecutor):
         )
 
 
+class SubAssistantExecutor(NodeExecutor):
+    """Spawn a child :class:`FlowRunner` to execute a sub-graph.
+
+    The sub-graph is looked up via a caller-supplied ``resolver(sub_id)``
+    callable (typically a dict lookup); the sub runner inherits the
+    parent's node registry (or a caller-supplied one) and is constructed
+    with ``parent_context=context`` so an End node inside the sub-graph
+    can tell it's running below a parent flow and return control upward
+    instead of looping to Start.
+
+    The sub-flow's final output is surfaced as the executor's
+    ``output_text`` so the SUB_ASSISTANT node's downstream edges see
+    the sub-flow's tail result on the wire.
+
+    Without a resolver (the default registry wiring) this executor
+    degrades gracefully to the pre-0.3.0 passthrough behaviour, so
+    graphs that declare SUB_ASSISTANT nodes but resolve at runtime
+    still traverse past without error.
+    """
+
+    def __init__(
+        self,
+        resolver: Callable[[str], Any] | None = None,
+        node_registry: Any | None = None,
+    ) -> None:
+        self._resolver = resolver
+        self._node_registry = node_registry
+
+    async def execute(self, context: ExecutionContext) -> NodeResult:
+        sub_id = context.get_meta("sub_assistant_id", "")
+        if not self._resolver or not sub_id:
+            # Degrade to passthrough — no sub-graph to invoke.
+            text = ""
+            for msg in reversed(context.messages):
+                if msg.content:
+                    text = msg.content
+                    break
+            return NodeResult(success=True, data={}, output_text=text)
+
+        sub_graph = self._resolver(sub_id)
+        if sub_graph is None:
+            return NodeResult(
+                success=False,
+                data={},
+                error=f"SubAssistant: no graph registered for id {sub_id!r}",
+            )
+
+        # Last user-visible message becomes the sub-flow's kickoff input.
+        user_input = ""
+        for msg in reversed(context.messages):
+            if msg.content:
+                user_input = msg.content
+                break
+
+        # Local import to avoid the example_runner ↔ flow_runner cycle
+        # at module import time.
+        from quartermaster_engine.runner.flow_runner import FlowRunner
+
+        sub_runner = FlowRunner(
+            graph=sub_graph,
+            node_registry=self._node_registry,
+            parent_context=context,
+        )
+        sub_result = sub_runner.run(user_input)
+        if not sub_result.success:
+            return NodeResult(
+                success=False,
+                data={"sub_flow_output": sub_result.final_output},
+                error=sub_result.error or "sub-flow failed",
+            )
+        return NodeResult(
+            success=True,
+            data={"sub_flow_output": sub_result.final_output},
+            output_text=sub_result.final_output,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Registry factory
 # ---------------------------------------------------------------------------
@@ -1170,7 +1282,16 @@ def build_default_registry(
     reg.register(NodeType.STATIC_MERGE.value, static_merge_exec)
     reg.register(NodeType.COMMENT.value, passthrough)
     reg.register(NodeType.BLANK.value, passthrough)
-    reg.register(NodeType.SUB_ASSISTANT.value, passthrough)
+    # SubAssistant: a node-type that can spawn a child FlowRunner
+    # against a separately-registered sub-graph.  Without a resolver
+    # wired in it behaves like the pre-0.3.0 passthrough — the v0.3.0
+    # return-to-parent semantics kick in automatically once a caller
+    # registers a real SubAssistantExecutor with their own sub-graph
+    # resolver.
+    reg.register(
+        NodeType.SUB_ASSISTANT.value,
+        SubAssistantExecutor(resolver=None, node_registry=reg),
+    )
     reg.register(NodeType.BREAK.value, passthrough)
     reg.register(NodeType.TEXT_TO_VARIABLE.value, var)
     if_exec = IfExecutor()
