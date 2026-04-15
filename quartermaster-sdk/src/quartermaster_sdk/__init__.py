@@ -18,14 +18,22 @@ Optional extras:
 - pip install quartermaster-sdk[all]           — Everything
 """
 
-__version__ = "0.1.6"
+__version__ = "0.2.0"
 
-# Re-export the most common entry points for convenience.  Pre-0.1.4 the SDK
-# re-exported only the graph-builder surface, forcing downstream callers to
-# `from quartermaster_engine import FlowRunner` and `from quartermaster_providers
-# import register_local` separately even though the SDK is the recommended
-# install.  These re-exports cover the v0.1.4 release-notes snippet so a single
-# `from quartermaster_sdk import …` line is enough to wire up the simplest graph.
+# ── v0.2.0 primary API ────────────────────────────────────────────────
+#
+# The recommended path is a four-import line for 90% of callsites:
+#
+#     from quartermaster_sdk import Graph, run, configure, instruction
+#
+# * ``Graph("x").user().agent().build()`` — auto-Start, optional End
+# * ``run(graph, user_input)`` / ``run.stream(...)`` — no ``FlowRunner``
+# * ``configure(provider="ollama", default_model=...)`` — boot once
+# * ``instruction(system=..., user=...)`` — single-shot prompt → text
+# * ``instruction_form(schema, system=..., user=...)`` — prompt → typed JSON
+#
+# Legacy v0.1.x exports (``FlowRunner``, ``build_default_registry``, …)
+# remain available for integrators who need the low-level surface.
 from quartermaster_engine import (  # noqa: F401
     AgentExecutor,
     FlowResult,
@@ -52,17 +60,54 @@ from quartermaster_providers import (  # noqa: F401
     register_local,
 )
 
+from ._chunks import (  # noqa: F401
+    AwaitInputChunk,
+    Chunk,
+    DoneChunk,
+    ErrorChunk,
+    NodeFinishChunk,
+    NodeStartChunk,
+    TokenChunk,
+    ToolCallChunk,
+    ToolResultChunk,
+)
+from ._config import (  # noqa: F401
+    configure,
+    get_default_model,
+    get_default_registry,
+    reset_config,
+)
+from ._helpers import instruction, instruction_form  # noqa: F401
+from ._result import Result  # noqa: F401
+from ._runner import run  # noqa: F401
+
 
 __all__ = [
     # Version
     "__version__",
+    # ── v0.2.0 primary surface ──
+    "configure",
+    "run",
+    "instruction",
+    "instruction_form",
+    "Result",
+    # Typed streaming chunks
+    "Chunk",
+    "TokenChunk",
+    "NodeStartChunk",
+    "NodeFinishChunk",
+    "ToolCallChunk",
+    "ToolResultChunk",
+    "AwaitInputChunk",
+    "DoneChunk",
+    "ErrorChunk",
     # Graph builder + spec
     "Graph",
     "GraphBuilder",
     "GraphSpec",
     "AgentGraph",  # deprecated
     "NodeType",
-    # Engine — runner + node-registry surface
+    # Engine — runner + node-registry surface (low-level)
     "FlowRunner",
     "FlowResult",
     "NodeRegistry",
@@ -78,4 +123,7 @@ __all__ = [
     "ChatResult",
     "ProviderRegistry",
     "register_local",
+    "get_default_registry",
+    "get_default_model",
+    "reset_config",
 ]
