@@ -33,6 +33,11 @@ dependencies = [
     # caused ``register_local("ollama")`` to fail for users who never asked for
     # cloud OpenAI access. See the 0.1.2 release notes for details.
     "openai>=1.0",
+    # ``httpx`` powers ``OllamaProvider.chat()`` — the synchronous
+    # native-``/api/chat`` shim downstream callers asked for so they can
+    # call Ollama from non-async stacks (Celery workers, Django views,
+    # CLI scripts) without ``asgiref.async_to_sync`` wrappers.
+    "httpx>=0.25",
 ]
 
 [project.optional-dependencies]
