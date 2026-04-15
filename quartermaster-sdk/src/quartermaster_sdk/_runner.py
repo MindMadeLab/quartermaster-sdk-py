@@ -32,6 +32,7 @@ from quartermaster_engine import (
     FlowEvent,
     FlowFinished,
     FlowRunner,
+    ImageInput,
     NodeFinished,
     NodeStarted,
     ProgressEvent,
@@ -39,6 +40,7 @@ from quartermaster_engine import (
     ToolCallFinished,
     ToolCallStarted,
     UserInputRequired,
+    prepare_images,
 )
 
 from . import _listeners
@@ -86,6 +88,8 @@ class _RunCallable:
         graph: GraphBuilder | GraphSpec,
         user_input: str = "",
         *,
+        image: ImageInput | None = None,
+        images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
     ) -> Result:
@@ -95,6 +99,18 @@ class _RunCallable:
             graph: Either a :class:`GraphBuilder` (auto-finalised) or
                 a pre-built :class:`GraphSpec`.
             user_input: Primary user message injected into the graph.
+            image: Optional single image input for vision-capable graphs.
+                Accepts raw ``bytes``, a :class:`pathlib.Path`, or a
+                filesystem path string. When set, the graph's
+                ``.vision()`` node receives the image alongside
+                *user_input*. Mutually exclusive with *images*. On
+                graphs that don't declare a vision node this is a
+                no-op — the image is silently ignored so callers don't
+                need branch on "is this graph vision-enabled?".
+            images: Optional list of image inputs (same per-item types
+                as *image*). Use this when the graph's vision node
+                should see multiple images in a single turn. Mutually
+                exclusive with *image*.
             provider_registry: Override the configured default registry.
             tool_registry: Optional :class:`quartermaster_tools.ToolRegistry`
                 made available to ``agent()``-type nodes that specify
@@ -102,6 +118,7 @@ class _RunCallable:
         """
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
+        prepared_images = prepare_images(image=image, images=images)
 
         # v0.3.0 trace: accumulate every FlowEvent into a local list
         # so we can build a ``Trace`` and attach it to the returned
@@ -124,7 +141,7 @@ class _RunCallable:
             on_event=_collect,
         )
         started = time.perf_counter()
-        fr = runner.run(user_input)
+        fr = runner.run(user_input, images=prepared_images or None)
         elapsed = time.perf_counter() - started
 
         result = Result.from_flow_result(fr)
@@ -142,6 +159,8 @@ class _RunCallable:
         graph: GraphBuilder | GraphSpec,
         user_input: str = "",
         *,
+        image: ImageInput | None = None,
+        images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
     ) -> _Stream:
@@ -153,6 +172,11 @@ class _RunCallable:
         ``.tool_calls()``, ``.progress()``, ``.custom(name=...)`` —
         for the common "pluck one chunk type out of the stream"
         patterns.
+
+        Accepts the same *image* / *images* kwargs as :meth:`__call__` —
+        pass a single image (``bytes`` / :class:`pathlib.Path` / path
+        string) via *image*, or a list of images via *images*. They're
+        forwarded to the vision node's ``LLMExecutor`` via flow memory.
 
         Terminates with a :class:`DoneChunk` (on success) or
         :class:`ErrorChunk` (on unrecoverable failure).  The graph
@@ -171,6 +195,8 @@ class _RunCallable:
         return _Stream(self._iter_chunks(
             graph=graph,
             user_input=user_input,
+            image=image,
+            images=images,
             provider_registry=provider_registry,
             tool_registry=tool_registry,
         ))
@@ -180,6 +206,8 @@ class _RunCallable:
         graph: GraphBuilder | GraphSpec,
         user_input: str = "",
         *,
+        image: ImageInput | None = None,
+        images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
     ) -> Iterator[Chunk]:
@@ -190,6 +218,7 @@ class _RunCallable:
         """
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
+        prepared_images = prepare_images(image=image, images=images)
 
         q: queue.Queue[FlowEvent | None] = queue.Queue()
         holder_lock = threading.Lock()
@@ -225,7 +254,11 @@ class _RunCallable:
 
         def _run_thread() -> None:
             try:
-                fr = runner.run(user_input, flow_id=flow_id)
+                fr = runner.run(
+                    user_input,
+                    images=prepared_images or None,
+                    flow_id=flow_id,
+                )
                 with holder_lock:
                     holder["result"] = fr
             except Exception as exc:  # pragma: no cover — defensive

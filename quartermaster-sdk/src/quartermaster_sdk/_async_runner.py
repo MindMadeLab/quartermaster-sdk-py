@@ -33,7 +33,7 @@ import time
 from typing import TYPE_CHECKING, Any, AsyncIterator
 from uuid import uuid4
 
-from quartermaster_engine import FlowEvent, FlowRunner
+from quartermaster_engine import FlowEvent, FlowRunner, ImageInput, prepare_images
 
 from . import _listeners
 from ._chunks import Chunk, DoneChunk, ErrorChunk
@@ -64,6 +64,8 @@ class _ARunCallable:
         graph: GraphBuilder | GraphSpec,
         user_input: str = "",
         *,
+        image: ImageInput | None = None,
+        images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
     ) -> Result:
@@ -73,6 +75,11 @@ class _ARunCallable:
             graph: Either a :class:`GraphBuilder` (auto-finalised) or
                 a pre-built :class:`GraphSpec`.
             user_input: Primary user message injected into the graph.
+            image: Optional single image input for vision-capable graphs.
+                Accepts raw ``bytes``, a :class:`pathlib.Path`, or a
+                filesystem path string. Mutually exclusive with *images*.
+            images: Optional list of image inputs. Mutually exclusive
+                with *image*.
             provider_registry: Override the configured default registry.
             tool_registry: Optional :class:`quartermaster_tools.ToolRegistry`
                 made available to ``agent()``-type nodes that specify
@@ -85,6 +92,7 @@ class _ARunCallable:
         """
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
+        prepared_images = prepare_images(image=image, images=images)
 
         # v0.3.0 trace: accumulate every FlowEvent on the worker
         # thread so we can build a ``Trace`` and attach it to the
@@ -114,7 +122,15 @@ class _ARunCallable:
 
         started = time.perf_counter()
         try:
-            fr = await asyncio.to_thread(runner.run, user_input, flow_id=flow_id)
+            # ``asyncio.to_thread`` forwards *args and **kwargs — keep
+            # the image payload as a kwarg so the engine picks it up
+            # via its named ``images=`` parameter.
+            fr = await asyncio.to_thread(
+                runner.run,
+                user_input,
+                images=prepared_images or None,
+                flow_id=flow_id,
+            )
         except asyncio.CancelledError:
             # ``asyncio.to_thread`` can't actually interrupt the worker
             # thread — the thread keeps executing until it voluntarily
@@ -142,6 +158,8 @@ class _ARunCallable:
         graph: GraphBuilder | GraphSpec,
         user_input: str = "",
         *,
+        image: ImageInput | None = None,
+        images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
     ) -> _AsyncStream:
@@ -172,6 +190,8 @@ class _ARunCallable:
         return _AsyncStream(self._aiter_chunks(
             graph=graph,
             user_input=user_input,
+            image=image,
+            images=images,
             provider_registry=provider_registry,
             tool_registry=tool_registry,
         ))
@@ -181,6 +201,8 @@ class _ARunCallable:
         graph: GraphBuilder | GraphSpec,
         user_input: str = "",
         *,
+        image: ImageInput | None = None,
+        images: list[ImageInput] | None = None,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
     ) -> AsyncIterator[Chunk]:
@@ -191,6 +213,7 @@ class _ARunCallable:
         """
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
+        prepared_images = prepare_images(image=image, images=images)
 
         # Capture the consumer's loop so the thread can marshal events
         # back to it via ``call_soon_threadsafe``.  ``run_coroutine_threadsafe``
@@ -228,7 +251,11 @@ class _ARunCallable:
         def _run_sync() -> None:
             """Runs on the ``to_thread`` worker — synchronous engine loop."""
             try:
-                fr = runner.run(user_input, flow_id=flow_id)
+                fr = runner.run(
+                    user_input,
+                    images=prepared_images or None,
+                    flow_id=flow_id,
+                )
                 holder["result"] = fr
             except Exception as exc:  # pragma: no cover — defensive
                 logger.exception("arun.stream: runner.run raised")

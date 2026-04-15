@@ -186,11 +186,25 @@ class FlowRunner:
         self._message_router = MessageRouter(self.store)
         self._stopped: set[UUID] = set()
 
-    def run(self, input_message: str, flow_id: UUID | None = None) -> FlowResult:
+    def run(
+        self,
+        input_message: str,
+        *,
+        images: list[tuple[str, str]] | None = None,
+        flow_id: UUID | None = None,
+    ) -> FlowResult:
         """Execute the graph synchronously.
 
         Args:
             input_message: The user's input message.
+            images: Optional list of ``(base64_ascii, mime_type)`` pairs
+                attached to the initial user turn. Vision-capable
+                nodes (``Graph().vision(...)``) read this list from
+                flow memory via the ``__user_images__`` key and forward
+                it to the provider alongside the text prompt. Pass raw
+                image bytes in the SDK (``qm.run(..., image=bytes)``);
+                the SDK normalises them to the internal base64 tuple
+                shape before calling this method.
             flow_id: Optional flow ID (auto-generated if not provided).
 
         Returns:
@@ -206,6 +220,12 @@ class FlowRunner:
 
             # Store the initial user input in flow memory
             self.store.save_memory(fid, "__user_input__", input_message)
+            # Store any attached images so vision-capable nodes can pick
+            # them up via ``context.memory["__user_images__"]`` without
+            # the caller having to touch the store directly. Stored as
+            # a plain list[tuple[str, str]] — base64 ASCII + MIME type.
+            if images:
+                self.store.save_memory(fid, "__user_images__", list(images))
 
             # Execute the start node, which kicks off the traversal
             self._execute_node(fid, start_node.id, input_message)

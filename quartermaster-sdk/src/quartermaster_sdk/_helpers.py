@@ -15,6 +15,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, TypeVar
 
+from quartermaster_engine import ImageInput
 from quartermaster_graph import Graph
 
 from ._config import get_default_model
@@ -61,6 +62,8 @@ def instruction(
     temperature: float = 0.7,
     max_output_tokens: int | None = None,
     thinking_level: str = "off",
+    image: ImageInput | None = None,
+    images: list[ImageInput] | None = None,
     provider_registry: ProviderRegistry | None = None,
 ) -> str:
     """Single-shot prompt → text.
@@ -80,6 +83,13 @@ def instruction(
         max_output_tokens: Hard cap on output tokens.
         thinking_level: ``off``/``low``/``medium``/``high`` — forwarded
             to reasoning-capable models.
+        image: Optional single image input (``bytes``,
+            :class:`pathlib.Path`, or path string). When set, the
+            one-node graph is built as a ``.vision()`` node so the
+            image is forwarded to the model alongside the text prompt.
+            Mutually exclusive with *images*.
+        images: Optional list of image inputs (same per-item types as
+            *image*). Mutually exclusive with *image*.
         provider_registry: Override the module-level default registry.
 
     Returns:
@@ -93,9 +103,26 @@ def instruction(
             "quartermaster_sdk.configure(default_model=...) at app boot."
         )
 
-    graph = (
-        Graph("instruction")
-        .instruction(
+    # Pick the right single-node graph based on whether the caller
+    # supplied any images. A ``.vision()`` node is identical to an
+    # ``.instruction()`` node except it sets ``vision=True`` in metadata,
+    # which is what the engine uses to decide whether to forward the
+    # flow-memory ``__user_images__`` list into the provider config.
+    has_image = image is not None or images is not None
+
+    builder = Graph("instruction")
+    if has_image:
+        builder = builder.vision(
+            "Vision",
+            model=resolved_model,
+            provider=provider,
+            temperature=temperature,
+            system_instruction=system,
+            max_output_tokens=max_output_tokens,
+            thinking_level=thinking_level,
+        )
+    else:
+        builder = builder.instruction(
             "Instruction",
             model=resolved_model,
             provider=provider,
@@ -104,10 +131,15 @@ def instruction(
             max_output_tokens=max_output_tokens,
             thinking_level=thinking_level,
         )
-        .build()
-    )
+    graph = builder.build()
 
-    result = run(graph, user, provider_registry=provider_registry)
+    result = run(
+        graph,
+        user,
+        image=image,
+        images=images,
+        provider_registry=provider_registry,
+    )
     if not result.success:
         raise RuntimeError(f"instruction() failed: {result.error}")
     return result.text
@@ -122,6 +154,8 @@ def instruction_form(
     provider: str = "",
     temperature: float = 0.1,
     max_output_tokens: int | None = None,
+    image: ImageInput | None = None,
+    images: list[ImageInput] | None = None,
     provider_registry: ProviderRegistry | None = None,
 ) -> T:
     """Single-shot prompt → Pydantic model.
@@ -205,6 +239,8 @@ def instruction_form(
         temperature=temperature,
         max_output_tokens=max_output_tokens,
         thinking_level="off",
+        image=image,
+        images=images,
         provider_registry=provider_registry,
     )
 

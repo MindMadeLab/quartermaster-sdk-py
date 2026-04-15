@@ -5,7 +5,7 @@ all LLM providers, allowing consistent parameter passing regardless of which
 provider is used.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -22,6 +22,14 @@ class LLMConfig:
         max_output_tokens: Maximum tokens in the response.
         max_messages: Maximum number of messages to include in conversation context.
         vision: Whether the request includes vision/image understanding.
+        images: Optional list of ``(base64_data, mime_type)`` pairs to send
+            alongside the prompt for vision-capable models. ``base64_data``
+            is the raw image bytes encoded as ASCII base64 (no ``data:``
+            URI prefix); ``mime_type`` is e.g. ``"image/jpeg"`` /
+            ``"image/png"`` / ``"image/webp"``. Populated by the v0.3.0
+            engine path that reads ``flow_memory["__user_images__"]``;
+            providers that support vision consume this list when building
+            the request payload. Empty/``None`` means a text-only request.
         thinking_enabled: Whether to enable extended thinking mode (e.g., Claude thinking).
         thinking_budget: Maximum tokens allowed for thinking/reasoning.
         top_p: Nucleus sampling parameter (alternative to temperature).
@@ -39,6 +47,7 @@ class LLMConfig:
     max_output_tokens: int | None = None
     max_messages: int | None = None
     vision: bool = False
+    images: list[tuple[str, str]] = field(default_factory=list)
     thinking_enabled: bool = False
     thinking_budget: int | None = None
     top_p: float | None = None
@@ -118,6 +127,7 @@ class LLMConfig:
             "max_output_tokens": self.max_output_tokens,
             "max_messages": self.max_messages,
             "vision": self.vision,
+            "images": list(self.images),
             "thinking_enabled": self.thinking_enabled,
             "thinking_budget": self.thinking_budget,
             "top_p": self.top_p,

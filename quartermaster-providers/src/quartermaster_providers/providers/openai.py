@@ -158,12 +158,41 @@ class OpenAIProvider(AbstractLLMProvider):
             raise ServiceUnavailableError(str(e), provider=self.PROVIDER_NAME) from e
         raise ProviderError(str(e), provider=self.PROVIDER_NAME) from e
 
+    def _build_user_content(
+        self, prompt: str, config: LLMConfig
+    ) -> str | list[dict[str, Any]]:
+        """Build the user-turn ``content`` field for the Chat Completions API.
+
+        Text-only requests keep the plain string shortcut so tokens /
+        payloads stay unchanged for 99% of callsites. When the caller
+        attached images via ``LLMConfig.images`` we emit the structured
+        content-part list the OpenAI SDK expects: each image becomes an
+        ``image_url`` part with a ``data:<mime>;base64,<data>`` URL, and
+        the original text prompt comes last.
+        """
+        if not config.images:
+            return prompt
+        parts: list[dict[str, Any]] = []
+        for b64_data, mime_type in config.images:
+            # Wrap as a data URI — cheapest path that works with every
+            # OpenAI-compatible server (including Ollama's /v1 proxy).
+            parts.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{mime_type or 'image/jpeg'};base64,{b64_data}",
+                    },
+                }
+            )
+        parts.append({"type": "text", "text": prompt})
+        return parts
+
     def _build_messages(self, prompt: str, config: LLMConfig) -> list[dict[str, Any]]:
         """Build OpenAI messages array from prompt and config."""
         messages: list[dict[str, Any]] = []
         if config.system_message and not _is_o_series(config.model):
             messages.append({"role": "system", "content": config.system_message})
-        messages.append({"role": "user", "content": prompt})
+        messages.append({"role": "user", "content": self._build_user_content(prompt, config)})
         return messages
 
     def _build_params(

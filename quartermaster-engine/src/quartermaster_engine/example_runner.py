@@ -235,6 +235,30 @@ def _coerce_bool(value: Any) -> bool:
     return bool(value)
 
 
+def _user_images(context: ExecutionContext) -> list[tuple[str, str]]:
+    """Return the user-supplied vision payload from flow memory.
+
+    The SDK's ``qm.run(..., image=bytes)`` / ``images=[...]`` path
+    normalises every supported shape (bytes / Path / str path) into a
+    list of ``(base64_ascii, mime_type)`` pairs and drops that list
+    into ``flow_memory["__user_images__"]``.
+
+    This helper hands the same list out to callers that actually want
+    to forward images to the provider — currently the vision node's
+    ``LLMExecutor`` via ``_build_llm_config``. Returns an empty list
+    when no images were attached (the common text-only case) so
+    callers can treat the return value as "always iterable" without
+    branching on None.
+
+    Non-list values in memory fall through as ``[]`` — defensive
+    against a misbehaving store, not an expected code path.
+    """
+    images = context.memory.get("__user_images__", [])
+    if not isinstance(images, list):
+        return []
+    return list(images)
+
+
 def _build_llm_config(
     context: ExecutionContext,
     *,
@@ -278,6 +302,15 @@ def _build_llm_config(
     else:
         temperature = context.get_meta("llm_temperature", temperature_default)
 
+    vision_enabled = _coerce_bool(context.get_meta("llm_vision", False))
+    # Forward user-supplied images ONLY into vision nodes. Non-vision
+    # nodes sharing the same flow memory must not accidentally drag the
+    # image payload into a text-only prompt — that's wasted tokens at
+    # best and an API error at worst (most providers reject image parts
+    # on a non-vision model id). The SDK's ``image=`` kwarg is thus a
+    # no-op on graphs that don't declare a ``.vision()`` node.
+    images = _user_images(context) if vision_enabled else []
+
     return LLMConfig(
         model=model,
         provider=provider_name,
@@ -286,7 +319,8 @@ def _build_llm_config(
         stream=stream,
         max_output_tokens=context.get_meta("llm_max_output_tokens", None),
         max_input_tokens=context.get_meta("llm_max_input_tokens", None),
-        vision=_coerce_bool(context.get_meta("llm_vision", False)),
+        vision=vision_enabled,
+        images=images,
         thinking_enabled=thinking_enabled,
         thinking_budget=thinking_budget,
     )

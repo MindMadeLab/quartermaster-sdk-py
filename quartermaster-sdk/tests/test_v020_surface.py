@@ -399,9 +399,9 @@ class TestStreamEarlyExitCancels:
 
         original_run = FlowRunner.run
 
-        def capture_run(self, input_message, flow_id=None):
+        def capture_run(self, input_message, *, images=None, flow_id=None):
             captured["flow_id_passed"] = flow_id
-            return original_run(self, input_message, flow_id=flow_id)
+            return original_run(self, input_message, images=images, flow_id=flow_id)
 
         monkeypatch.setattr(FlowRunner, "run", capture_run)
 
