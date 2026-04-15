@@ -56,6 +56,64 @@ def provider_registry_with_mock():
     return registry, mock
 
 
+class TestLLMConfigPropagation:
+    """v0.1.3: every DSL knob must reach the provider's ``LLMConfig``.
+
+    The 0.1.1 → 0.1.2 retest report flagged setting ``llm_max_output_tokens=50``
+    and watching the provider burn 2000 tokens.  Root cause: executors built
+    ``LLMConfig`` with only model/provider/system_message/temperature/stream
+    and silently dropped every other field.  v0.1.3 wires them all through.
+    """
+
+    def test_max_output_tokens_reaches_provider(self, provider_registry_with_mock):
+        registry, mock = provider_registry_with_mock
+        graph = Graph("chat").start().user().agent("Tight", max_output_tokens=50).end().build()
+        runner = FlowRunner(graph=graph, provider_registry=registry)
+        result = runner.run("ping")
+        assert result.success, result.error
+        assert mock.last_config is not None
+        assert mock.last_config.max_output_tokens == 50
+
+    def test_max_input_tokens_reaches_provider(self, provider_registry_with_mock):
+        registry, mock = provider_registry_with_mock
+        graph = Graph("chat").start().user().agent("Tight", max_input_tokens=8000).end().build()
+        runner = FlowRunner(graph=graph, provider_registry=registry)
+        runner.run("ping")
+        assert mock.last_config.max_input_tokens == 8000
+
+    def test_thinking_level_high_propagates_enabled_and_budget(self, provider_registry_with_mock):
+        registry, mock = provider_registry_with_mock
+        graph = Graph("chat").start().user().agent("Reasoning", thinking_level="high").end().build()
+        runner = FlowRunner(graph=graph, provider_registry=registry)
+        runner.run("ping")
+        assert mock.last_config.thinking_enabled is True
+        assert mock.last_config.thinking_budget == 16384
+
+    def test_thinking_level_off_disables(self, provider_registry_with_mock):
+        registry, mock = provider_registry_with_mock
+        graph = Graph("chat").start().user().agent("Plain", thinking_level="off").end().build()
+        runner = FlowRunner(graph=graph, provider_registry=registry)
+        runner.run("ping")
+        assert mock.last_config.thinking_enabled is False
+        assert mock.last_config.thinking_budget is None
+
+    def test_vision_flag_propagates(self, provider_registry_with_mock):
+        registry, mock = provider_registry_with_mock
+        graph = (
+            Graph("chat")
+            .start()
+            .user()
+            .vision("Look", model="gemma4:26b", provider="ollama")
+            .end()
+            .build()
+        )
+        runner = FlowRunner(graph=graph, provider_registry=registry)
+        runner.run("ping")
+        # vision() always sets vision=True via the builder regardless of
+        # caller args; either way the config should reflect it.
+        assert mock.last_config.vision is True
+
+
 class TestSimpleGraphSnippet:
     """Cover the full v0.1.2 release-note snippet end-to-end."""
 

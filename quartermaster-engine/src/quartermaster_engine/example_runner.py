@@ -205,6 +205,56 @@ def _resolve_provider_and_model(
     return provider_name, model
 
 
+# ── LLM config from node metadata ──────────────────────────────────────
+
+# The DSL stores every LLM-configuration knob under one of these keys —
+# see ``quartermaster_graph.builder._llm_meta``.  ``THINKING_LEVELS``
+# mirrors ``quartermaster_nodes.base.AbstractLLMAssistantNode``: the
+# canonical Quartermaster project's mapping from a friendly level name
+# to the (enabled, budget) pair the provider config understands.
+THINKING_LEVELS: dict[str, tuple[bool, int | None]] = {
+    "off": (False, None),
+    "low": (True, 1024),
+    "medium": (True, 4096),
+    "high": (True, 16384),
+}
+
+
+def _build_llm_config(
+    context: ExecutionContext,
+    *,
+    provider_name: str,
+    model: str,
+    stream: bool,
+    system_message: str | None = None,
+    temperature_default: float = 0.7,
+) -> LLMConfig:
+    """Build an :class:`LLMConfig` from the node's metadata.
+
+    Pre-0.1.3 the executors only forwarded model/provider/system_message/
+    temperature/stream — every other DSL knob (``llm_max_output_tokens``,
+    ``llm_max_input_tokens``, ``llm_thinking_level``, ``llm_vision``)
+    was silently dropped.  Setting ``max_output_tokens=50`` and watching
+    the provider burn 2 000 tokens was a real downstream blocker; this
+    helper plugs the gap.
+    """
+    thinking_level = context.get_meta("llm_thinking_level", "off")
+    thinking_enabled, thinking_budget = THINKING_LEVELS.get(thinking_level, (False, None))
+
+    return LLMConfig(
+        model=model,
+        provider=provider_name,
+        system_message=system_message,
+        temperature=context.get_meta("llm_temperature", temperature_default),
+        stream=stream,
+        max_output_tokens=context.get_meta("llm_max_output_tokens", None),
+        max_input_tokens=context.get_meta("llm_max_input_tokens", None),
+        vision=bool(context.get_meta("llm_vision", False)),
+        thinking_enabled=thinking_enabled,
+        thinking_budget=thinking_budget,
+    )
+
+
 class LLMExecutor(NodeExecutor):
     """Calls a real LLM for Instruction, Summarize, and Agent (no-tool) nodes.
 
@@ -244,12 +294,12 @@ class LLMExecutor(NodeExecutor):
         user_input = str(context.memory.get("__user_input__", "Hello"))
         prompt = _format_conversation(conversation, user_input)
 
-        config = LLMConfig(
+        config = _build_llm_config(
+            context,
+            provider_name=provider_name,
             model=model,
-            provider=provider_name,
-            system_message=system_instruction,
-            temperature=context.get_meta("llm_temperature", 0.7),
             stream=True,
+            system_message=system_instruction,
         )
 
         try:
@@ -271,7 +321,10 @@ class LLMExecutor(NodeExecutor):
                 output_text=text,
             )
         except Exception as e:
-            print(f"  [LLM ERROR] {provider_name}/{model}: {e}", flush=True)
+            # Log to module logger; the runner surfaces ``error`` into
+            # ``FlowResult.error`` so callers see the failure without us
+            # spraying stdout in library code.
+            logger.warning("LLMExecutor: %s/%s raised: %s", provider_name, model, e)
             return NodeResult(success=False, data={}, error=str(e))
 
 
@@ -441,21 +494,34 @@ class AgentExecutor(NodeExecutor):
         requires_another_call = True
         hit_iteration_cap = False
 
+        # Build the LLMConfig once: per-turn fields (system message, max
+        # tokens, thinking budget, vision) don't change between iterations
+        # of the same node.  Streaming stays off so the agent can read the
+        # full ``NativeResponse`` (text + tool_calls + stop_reason) atomically.
+        config = _build_llm_config(
+            context,
+            provider_name=provider_name,
+            model=model,
+            stream=False,
+            system_message=system_instruction,
+        )
+
         while requires_another_call and (max_iterations == 0 or iteration < max_iterations):
             iteration += 1
-
-            config = LLMConfig(
-                model=model,
-                provider=provider_name,
-                system_message=system_instruction,
-                temperature=context.get_meta("llm_temperature", 0.7),
-                stream=False,
-            )
 
             try:
                 response = await provider.generate_native_response(prompt, tools, config)
             except Exception as exc:
-                print(f"  [AGENT ERROR] {provider_name}/{model}: {exc}", flush=True)
+                # Bubble the failure into FlowResult.error via the runner's
+                # NodeResult-failure path; keep the verbose detail in logs
+                # so ops can diagnose without the LLM ever seeing it.
+                logger.warning(
+                    "AgentExecutor: %s/%s raised on iteration %d: %s",
+                    provider_name,
+                    model,
+                    iteration,
+                    exc,
+                )
                 return NodeResult(success=False, data={}, error=str(exc))
 
             text_chunk = getattr(response, "text_content", "") or ""
@@ -592,13 +658,19 @@ class DecisionExecutor(NodeExecutor):
         user_input = str(context.memory.get("__user_input__", "Choose"))
         prompt = _format_conversation(conversation, user_input)
 
-        config = LLMConfig(
+        # Decision nodes pin temperature=0 for determinism — the helper
+        # only takes a default for that field, the per-node ``llm_temperature``
+        # is intentionally ignored here.  Everything else (max tokens,
+        # thinking, vision) flows through the metadata.
+        config = _build_llm_config(
+            context,
+            provider_name=provider_name,
             model=model,
-            provider=provider_name,
-            system_message=decision_prompt,
-            temperature=0.0,
             stream=False,
+            system_message=decision_prompt,
+            temperature_default=0.0,
         )
+        config.temperature = 0.0
 
         try:
             response = await provider.generate_text_response(prompt, config)
