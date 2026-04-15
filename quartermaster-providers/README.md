@@ -58,12 +58,50 @@ pip install quartermaster-providers[all]
 | LocalAI | `LocalAIProvider` | OpenAI-compatible local server |
 | llama.cpp | `LlamaCppProvider` | llama.cpp HTTP server |
 
-Register local providers with one line:
+Register local providers with one line — the module-level helper builds a
+registry, normalises `base_url` (auto-appends `/v1` if missing), honours the
+`OLLAMA_HOST` env var, and remembers the default model so callers don't have
+to repeat it:
 
 ```python
-registry = ProviderRegistry()
-registry.register_local("ollama")  # Auto-discovers models
+from quartermaster_providers import register_local
+
+provider_registry = register_local(
+    "ollama",
+    base_url="http://localhost:11434",   # or set $OLLAMA_HOST
+    default_model="gemma4:26b",
+)
+provider = provider_registry.get("ollama")
 ```
+
+### Sync `OllamaProvider.chat()` shim
+
+For one-shot calls from sync code (Celery workers, Django views, CLI scripts)
+the `OllamaProvider` exposes a synchronous native `/api/chat` shim — no
+`asgiref.async_to_sync` wrapper required, and `thinking` / `reasoning` text is
+auto-promoted into `content` so reasoning models like `gemma4:26b` never
+return an empty result on short prompts:
+
+```python
+from quartermaster_providers.providers.local import OllamaProvider
+
+provider = OllamaProvider(default_model="gemma4:26b")  # honours $OLLAMA_HOST
+result = provider.chat(
+    messages=[
+        {"role": "system", "content": "Respond in Slovenian."},
+        {"role": "user", "content": "Pozdravljen!"},
+    ],
+    max_output_tokens=128,    # honoured — capped at Ollama's `num_predict`
+    thinking_level="off",     # off / low / medium / high
+)
+print(result.content)         # str — promoted from `reasoning` if `content` empty
+print(result.tool_calls)      # list[ToolCall]
+print(result.usage)           # {prompt_tokens, completion_tokens, total_tokens}
+```
+
+Connection errors raise `ServiceUnavailableError`; HTTP errors raise
+`ProviderError` with `status_code` attached. Neither swallows into a soft
+"no answer" result the way the OpenAI-compat path used to.
 
 ## Quick Start
 
