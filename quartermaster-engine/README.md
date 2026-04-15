@@ -28,7 +28,41 @@ pip install quartermaster-engine[sqlite]
 
 ## Quick Start
 
-### Run a Simple Graph
+### High-level path — `provider_registry`
+
+The simplest way to run a graph: hand `FlowRunner` a provider registry and let
+it build the default node registry (covering every node type the bundled DSL
+emits — including `AgentExecutor` for `agent()` nodes with the canonical
+Quartermaster tool loop):
+
+```python
+from quartermaster_engine import FlowRunner
+from quartermaster_graph import Graph
+from quartermaster_providers import register_local
+
+provider_registry = register_local(
+    "ollama",
+    base_url="http://localhost:11434",   # or set $OLLAMA_HOST
+    default_model="gemma4:26b",
+)
+
+graph = Graph("chat").start().user().agent().end().build()
+runner = FlowRunner(graph=graph, provider_registry=provider_registry)
+result = runner.run("Pozdravljen!")
+print(result.success, result.final_output)
+```
+
+If you have a `quartermaster_tools.ToolRegistry`, pass it as
+`tool_registry=` so `AgentExecutor` can actually execute the tools your
+graph's `.agent(tools=[...])` nodes request.
+
+### Low-level path — bring your own `node_registry`
+
+For full control over which executor handles each node type (custom
+executors, alternative storage, etc.) hand `FlowRunner` a
+`SimpleNodeRegistry` directly. Use the helper
+`build_default_registry(provider_registry)` if you only want to swap one
+executor; pass the result back into `FlowRunner(node_registry=...)`.
 
 ```python
 from uuid import uuid4
