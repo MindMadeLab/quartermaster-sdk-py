@@ -46,6 +46,9 @@ from quartermaster_engine import (  # noqa: F401
     build_default_registry,
     run_graph,
 )
+from quartermaster_engine.context.current_context import (  # noqa: F401
+    current_context,
+)
 from quartermaster_graph import (  # noqa: F401
     AgentGraph,  # deprecated alias for GraphSpec — kept for backward compat
     Graph,
@@ -63,10 +66,12 @@ from quartermaster_providers import (  # noqa: F401
 from ._chunks import (  # noqa: F401
     AwaitInputChunk,
     Chunk,
+    CustomChunk,
     DoneChunk,
     ErrorChunk,
     NodeFinishChunk,
     NodeStartChunk,
+    ProgressChunk,
     TokenChunk,
     ToolCallChunk,
     ToolResultChunk,
@@ -81,6 +86,7 @@ from ._async_runner import arun  # noqa: F401
 from ._helpers import instruction, instruction_form  # noqa: F401
 from ._result import Result  # noqa: F401
 from ._runner import run  # noqa: F401
+from ._trace import NodeTrace, Trace  # noqa: F401
 
 
 __all__ = [
@@ -93,6 +99,9 @@ __all__ = [
     "instruction",
     "instruction_form",
     "Result",
+    # Structured post-mortem trace — v0.3.0
+    "Trace",
+    "NodeTrace",
     # Typed streaming chunks
     "Chunk",
     "TokenChunk",
@@ -101,8 +110,12 @@ __all__ = [
     "ToolCallChunk",
     "ToolResultChunk",
     "AwaitInputChunk",
+    "ProgressChunk",
+    "CustomChunk",
     "DoneChunk",
     "ErrorChunk",
+    # Context reach — tools call current_context() to emit progress
+    "current_context",
     # Graph builder + spec
     "Graph",
     "GraphBuilder",

@@ -85,6 +85,19 @@ class _ARunCallable:
         """
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
+
+        # v0.3.0 trace: accumulate every FlowEvent on the worker
+        # thread so we can build a ``Trace`` and attach it to the
+        # returned ``Result``. The list is populated from inside the
+        # engine's worker thread and only READ after ``await
+        # asyncio.to_thread`` resolves, so no cross-thread sync is
+        # required.
+        trace_events: list[FlowEvent] = []
+
+        def _collect(event: FlowEvent) -> None:
+            trace_events.append(event)
+            _listeners.dispatch(event)
+
         runner = FlowRunner(
             graph=spec,
             provider_registry=registry,
@@ -93,12 +106,13 @@ class _ARunCallable:
             # bolt-on instrumentation (e.g. ``qm.telemetry.instrument()``)
             # observes the same FlowEvent stream the streaming runner
             # gets — even though there's no consumer queue here.
-            on_event=_listeners.dispatch,
+            on_event=_collect,
         )
         # Pre-generate so the async cancel handler has something to stop,
         # even if the to_thread() call hasn't entered ``runner.run`` yet.
         flow_id = uuid4()
 
+        started = time.perf_counter()
         try:
             fr = await asyncio.to_thread(runner.run, user_input, flow_id=flow_id)
         except asyncio.CancelledError:
@@ -114,8 +128,14 @@ class _ARunCallable:
             except Exception:  # pragma: no cover — defensive
                 logger.exception("arun: runner.stop(%s) raised", flow_id)
             raise
+        elapsed = time.perf_counter() - started
 
-        return Result.from_flow_result(fr)
+        result = Result.from_flow_result(fr)
+        result.trace = Trace.from_events(
+            trace_events,
+            duration_seconds=fr.duration_seconds or elapsed,
+        )
+        return result
 
     def stream(
         self,
@@ -181,11 +201,18 @@ class _ARunCallable:
         holder: dict[str, Any] = {}
         flow_id = uuid4()
 
+        # v0.3.0 trace: accumulate events as they fire (on the engine
+        # worker thread) so we can build a ``Trace`` before yielding
+        # the terminal ``DoneChunk``. Append-only from the engine
+        # thread, read-only once ``run_task`` has finished.
+        trace_events: list[FlowEvent] = []
+
         def on_event(event: FlowEvent) -> None:
             # Fan out to bolt-on instrumentation (telemetry, custom
             # listeners, etc.) on the engine's worker thread BEFORE
             # marshalling the event back to the consumer's loop.
             _listeners.dispatch(event)
+            trace_events.append(event)
             # Called from the engine's worker threads.  Hop back to the
             # consumer's loop so Queue.put() touches only loop-owned
             # state — ``asyncio.Queue`` is not thread-safe.
@@ -210,6 +237,7 @@ class _ARunCallable:
                 # Sentinel — unblocks the async iterator even on crash.
                 loop.call_soon_threadsafe(q.put_nowait, None)
 
+        started = time.perf_counter()
         run_task = asyncio.create_task(
             asyncio.to_thread(_run_sync), name="qm-arun-stream"
         )
@@ -267,7 +295,18 @@ class _ARunCallable:
             yield ErrorChunk(error="arun.stream: runner produced no result")
             return
 
-        yield DoneChunk(result=Result.from_flow_result(fr))
+        elapsed = time.perf_counter() - started
+        result = Result.from_flow_result(fr)
+        # v0.3.0: populate the structured trace from every FlowEvent
+        # the engine dispatched. The ``on_event`` hook on the engine
+        # thread appended each event as it fired; we build the
+        # bucketed view once the run has finished and hand it to the
+        # caller as part of the DoneChunk's Result.
+        result.trace = Trace.from_events(
+            trace_events,
+            duration_seconds=fr.duration_seconds or elapsed,
+        )
+        yield DoneChunk(result=result)
 
 
 #: Publicly exported async runner.  ``await qm.arun(graph, input)`` runs
