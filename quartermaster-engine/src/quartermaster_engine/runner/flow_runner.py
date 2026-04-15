@@ -130,6 +130,7 @@ class FlowRunner:
         *,
         provider_registry: Any | None = None,
         tool_registry: Any | None = None,
+        parent_context: ExecutionContext | None = None,
     ) -> None:
         """Construct a runner.
 
@@ -150,6 +151,12 @@ class FlowRunner:
         this constructor.  When you build the node registry yourself the
         runner has no way to know which provider/tool registry sits
         behind it, so they will be ``None`` — that's expected, not a bug.
+
+        Pass *parent_context* when this runner is driving a sub-graph
+        invoked by a parent flow's ``SUB_ASSISTANT`` node; executors
+        inside the sub-graph read it to decide whether an End node
+        should loop back to Start (main graph — parent_context is
+        ``None``) or return control to the parent.
         """
         if node_registry is None:
             if provider_registry is None:
@@ -180,11 +187,24 @@ class FlowRunner:
         self.dispatcher = dispatcher or SyncDispatcher()
         self.context_manager = context_manager or ContextManager()
         self.on_event = on_event
+        # v0.3.0: pointer back at the parent flow's ExecutionContext when
+        # this runner is driving a sub-graph (spawned via SUB_ASSISTANT).
+        self.parent_context = parent_context
 
         self._traverse_in = TraverseInGate()
         self._traverse_out = TraverseOutGate()
         self._message_router = MessageRouter(self.store)
         self._stopped: set[UUID] = set()
+        # v0.3.0 End → Start loop safety cap.  Any reached End node
+        # dispatches Start again by default under Proposal A; an
+        # unconditionally-looping graph (Start → Inst → End with no
+        # break condition) would otherwise recurse forever.  The guard
+        # caps implicit loop-back dispatches at a conservative ceiling
+        # so tests and misconfigured graphs fail fast instead of
+        # hanging.  Conditional loops (If + .end(stop=True)) terminate
+        # long before hitting this cap.
+        self._loop_counter: dict[UUID, int] = {}
+        self.max_loop_iterations = 100
 
     def run(
         self,
@@ -442,11 +462,19 @@ class FlowRunner:
             return NodeResult(success=True, data={}, output_text=user_input)
 
         if node.type == NodeType.END:
-            # End node: collect the final output from predecessors
+            # End node: collect the final output from predecessors.
+            # v0.3.0: when this runner is driving a sub-graph
+            # (``parent_context`` is set), stamp
+            # ``__end_returns_to_parent__`` on the result so
+            # ``_dispatch_successors`` hands control back to the parent
+            # flow instead of looping to Start.
             messages = self._message_router.get_messages_for_node(flow_id, node, self.graph)
             final_output = messages[-1].content if messages else ""
             self._message_router.save_node_output(flow_id, node.id, messages)
-            return NodeResult(success=True, data={}, output_text=final_output)
+            data: dict[str, Any] = {}
+            if self.parent_context is not None:
+                data["__end_returns_to_parent__"] = True
+            return NodeResult(success=True, data=data, output_text=final_output)
 
         if node.type == NodeType.MERGE:
             # Merge node: combine outputs from all predecessors
@@ -491,6 +519,7 @@ class FlowRunner:
             messages=messages,
             memory=flow_memory,
             metadata=dict(node.metadata),
+            parent_context=self.parent_context,
             on_token=lambda t: self._emit(
                 TokenGenerated(flow_id=flow_id, node_id=node.id, token=t)
             ),
@@ -652,11 +681,55 @@ class FlowRunner:
         result: NodeResult,
         user_input: str,
     ) -> None:
-        """Determine and dispatch successor nodes based on traverse_out strategy."""
-        # End nodes and failed nodes with Stop strategy don't dispatch
-        if node.type == NodeType.END:
-            return
+        """Determine and dispatch successor nodes based on traverse_out strategy.
+
+        End-node semantics (v0.3.0 / Proposal A):
+
+        * End in a sub-graph (the current flow's ``parent_context`` is
+          set) — the End executor stamped ``__end_returns_to_parent__``
+          on its NodeResult.  Don't dispatch anything here; control
+          returns to the parent's ``_dispatch_successors`` for the
+          SUB_ASSISTANT node automatically once the child runner
+          finishes.
+        * End in the main graph with ``traverse_out=SPAWN_NONE`` (the
+          explicit opt-out set by ``.end(stop=True)``) — stop.
+        * End in the main graph with any other ``traverse_out`` (the
+          new default is ``SPAWN_START``) — dispatch the graph's Start
+          node, subject to the ``max_loop_iterations`` safety cap.
+        """
+        # Failed nodes with STOP strategy always halt, regardless of type.
         if not result.success and node.error_handling == ErrorStrategy.STOP:
+            return
+
+        # End node: apply the v0.3.0 loop/return semantics.
+        if node.type == NodeType.END:
+            # Sub-graph End: return control to the parent flow.
+            if result.data.get("__end_returns_to_parent__"):
+                return
+            # Main-graph End with explicit stop opt-out.
+            if node.traverse_out == TraverseOut.SPAWN_NONE:
+                return
+            # Default: loop back to Start, subject to safety cap.
+            count = self._loop_counter.get(flow_id, 0) + 1
+            self._loop_counter[flow_id] = count
+            if count > self.max_loop_iterations:
+                logger.warning(
+                    "Flow %s exceeded max_loop_iterations=%d; stopping "
+                    "instead of looping back to Start.  Add an If/break "
+                    "condition or call .end(stop=True) to opt out of "
+                    "the v0.3.0 End-to-Start loop semantics.",
+                    flow_id,
+                    self.max_loop_iterations,
+                )
+                return
+            start_node = self.graph.get_start_node()
+            if start_node is None:
+                return
+            self.dispatcher.dispatch(
+                flow_id,
+                start_node.id,
+                lambda fid, nid: self._execute_node(fid, nid, user_input),
+            )
             return
 
         next_nodes = self._traverse_out.get_next_nodes(

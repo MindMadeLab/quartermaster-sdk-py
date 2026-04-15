@@ -22,6 +22,7 @@ import logging
 import os
 import pathlib
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -1116,6 +1117,83 @@ class UserFormExecutor(NodeExecutor):
         )
 
 
+class SubAssistantExecutor(NodeExecutor):
+    """Spawn a child :class:`FlowRunner` to execute a sub-graph.
+
+    The sub-graph is looked up via a caller-supplied ``resolver(sub_id)``
+    callable (typically a dict lookup); the sub runner inherits the
+    parent's node registry (or a caller-supplied one) and is constructed
+    with ``parent_context=context`` so an End node inside the sub-graph
+    can tell it's running below a parent flow and return control upward
+    instead of looping to Start.
+
+    The sub-flow's final output is surfaced as the executor's
+    ``output_text`` so the SUB_ASSISTANT node's downstream edges see
+    the sub-flow's tail result on the wire.
+
+    Without a resolver (the default registry wiring) this executor
+    degrades gracefully to the pre-0.3.0 passthrough behaviour, so
+    graphs that declare SUB_ASSISTANT nodes but resolve at runtime
+    still traverse past without error.
+    """
+
+    def __init__(
+        self,
+        resolver: Callable[[str], Any] | None = None,
+        node_registry: Any | None = None,
+    ) -> None:
+        self._resolver = resolver
+        self._node_registry = node_registry
+
+    async def execute(self, context: ExecutionContext) -> NodeResult:
+        sub_id = context.get_meta("sub_assistant_id", "")
+        if not self._resolver or not sub_id:
+            # Degrade to passthrough — no sub-graph to invoke.
+            text = ""
+            for msg in reversed(context.messages):
+                if msg.content:
+                    text = msg.content
+                    break
+            return NodeResult(success=True, data={}, output_text=text)
+
+        sub_graph = self._resolver(sub_id)
+        if sub_graph is None:
+            return NodeResult(
+                success=False,
+                data={},
+                error=f"SubAssistant: no graph registered for id {sub_id!r}",
+            )
+
+        # Last user-visible message becomes the sub-flow's kickoff input.
+        user_input = ""
+        for msg in reversed(context.messages):
+            if msg.content:
+                user_input = msg.content
+                break
+
+        # Local import to avoid the example_runner ↔ flow_runner cycle
+        # at module import time.
+        from quartermaster_engine.runner.flow_runner import FlowRunner
+
+        sub_runner = FlowRunner(
+            graph=sub_graph,
+            node_registry=self._node_registry,
+            parent_context=context,
+        )
+        sub_result = sub_runner.run(user_input)
+        if not sub_result.success:
+            return NodeResult(
+                success=False,
+                data={"sub_flow_output": sub_result.final_output},
+                error=sub_result.error or "sub-flow failed",
+            )
+        return NodeResult(
+            success=True,
+            data={"sub_flow_output": sub_result.final_output},
+            output_text=sub_result.final_output,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Registry factory
 # ---------------------------------------------------------------------------
@@ -1204,7 +1282,16 @@ def build_default_registry(
     reg.register(NodeType.STATIC_MERGE.value, static_merge_exec)
     reg.register(NodeType.COMMENT.value, passthrough)
     reg.register(NodeType.BLANK.value, passthrough)
-    reg.register(NodeType.SUB_ASSISTANT.value, passthrough)
+    # SubAssistant: a node-type that can spawn a child FlowRunner
+    # against a separately-registered sub-graph.  Without a resolver
+    # wired in it behaves like the pre-0.3.0 passthrough — the v0.3.0
+    # return-to-parent semantics kick in automatically once a caller
+    # registers a real SubAssistantExecutor with their own sub-graph
+    # resolver.
+    reg.register(
+        NodeType.SUB_ASSISTANT.value,
+        SubAssistantExecutor(resolver=None, node_registry=reg),
+    )
     reg.register(NodeType.BREAK.value, passthrough)
     reg.register(NodeType.TEXT_TO_VARIABLE.value, var)
     if_exec = IfExecutor()
