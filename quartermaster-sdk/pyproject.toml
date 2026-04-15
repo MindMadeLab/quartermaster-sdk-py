@@ -57,9 +57,15 @@ tools-all = ["quartermaster-tools[all]"]
 mcp = ["quartermaster-mcp-client>=0.2.1"]
 code-runner = ["quartermaster-code-runner>=0.2.1"]
 
+# OpenTelemetry instrumentation (qm.telemetry.instrument())
+telemetry = [
+    "opentelemetry-api>=1.25",
+    "opentelemetry-sdk>=1.25",
+]
+
 # Everything
 all = [
-    "quartermaster-sdk[providers-all,tools-all,mcp,code-runner]",
+    "quartermaster-sdk[providers-all,tools-all,mcp,code-runner,telemetry]",
 ]
 
 # Development
