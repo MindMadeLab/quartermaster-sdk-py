@@ -199,6 +199,58 @@ class FunctionTool(AbstractTool):
         return f"FunctionTool({self._name!r})"
 
 
+def is_quartermaster_tool(obj: Any) -> bool:
+    """Return ``True`` if *obj* is a Quartermaster tool instance.
+
+    This covers:
+
+    * :class:`FunctionTool` instances produced by :func:`tool`
+    * Any other :class:`AbstractTool` subclass instance
+
+    Used by the SDK runner (v0.4.0) to detect already-wrapped callables
+    in ``.agent(tools=[...])`` so they can be pulled through to the
+    run-time tool registry without a manual ``register()`` step.
+    """
+    return isinstance(obj, (FunctionTool, AbstractTool))
+
+
+def auto_decorate(func: Callable[..., Any]) -> FunctionTool:
+    """Wrap a plain callable as a :class:`FunctionTool` on the fly.
+
+    Used by the SDK runner (v0.4.0) when ``.agent(tools=[...])`` is
+    handed a bare ``def`` function that the caller forgot — or chose not
+    — to decorate with :func:`tool`.  The result has the same shape as
+    ``@tool()`` would have produced: the function's ``__name__`` becomes
+    the tool name, the signature becomes the parameter list, and the
+    docstring populates short/long descriptions.
+
+    Raises:
+        ValueError: If *func* can't be introspected as a tool
+            (unnamed lambda, missing signature, etc.).
+    """
+    if isinstance(func, FunctionTool):
+        return func
+    if not callable(func):
+        raise ValueError(f"auto_decorate: {func!r} is not callable")
+
+    fn_name = getattr(func, "__name__", None)
+    if not fn_name or fn_name == "<lambda>":
+        raise ValueError(
+            "auto_decorate: function has no usable __name__ "
+            "(lambdas and anonymous callables aren't supported). "
+            "Decorate the function with @tool() explicitly."
+        )
+
+    try:
+        inspect.signature(func)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"auto_decorate: cannot introspect signature of {fn_name!r}: {exc}"
+        ) from exc
+
+    return tool()(func)
+
+
 def tool(
     name: str | None = None,
     description: str | None = None,

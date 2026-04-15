@@ -39,7 +39,12 @@ from . import _listeners
 from ._chunks import Chunk, DoneChunk, ErrorChunk
 from ._config import get_default_registry
 from ._result import Result
-from ._runner import _event_to_chunk, _resolve_graph
+from ._runner import (
+    _event_to_chunk,
+    _extract_inline_tools,
+    _merge_inline_tools,
+    _resolve_graph,
+)
 from ._stream_filters import _AsyncStream
 from ._trace import Trace
 
@@ -90,9 +95,11 @@ class _ARunCallable:
         ``CancelledError`` propagates — nodes already dispatched finish
         their current LLM/tool call but no new work is scheduled.
         """
+        inline_tools = _extract_inline_tools(graph)
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
         prepared_images = prepare_images(image=image, images=images)
+        effective_tool_registry = _merge_inline_tools(tool_registry, inline_tools)
 
         # v0.3.0 trace: accumulate every FlowEvent on the worker
         # thread so we can build a ``Trace`` and attach it to the
@@ -109,7 +116,7 @@ class _ARunCallable:
         runner = FlowRunner(
             graph=spec,
             provider_registry=registry,
-            tool_registry=tool_registry,
+            tool_registry=effective_tool_registry,
             # Forward every event to the global listener registry so
             # bolt-on instrumentation (e.g. ``qm.telemetry.instrument()``)
             # observes the same FlowEvent stream the streaming runner
@@ -213,9 +220,11 @@ class _ARunCallable:
         Kept private: callers always go through ``stream()`` which
         wraps the result in :class:`_AsyncStream` for filter support.
         """
+        inline_tools = _extract_inline_tools(graph)
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
         prepared_images = prepare_images(image=image, images=images)
+        effective_tool_registry = _merge_inline_tools(tool_registry, inline_tools)
 
         # Capture the consumer's loop so the thread can marshal events
         # back to it via ``call_soon_threadsafe``.  ``run_coroutine_threadsafe``
@@ -246,7 +255,7 @@ class _ARunCallable:
         runner = FlowRunner(
             graph=spec,
             provider_registry=registry,
-            tool_registry=tool_registry,
+            tool_registry=effective_tool_registry,
             on_event=on_event,
         )
 
