@@ -13,7 +13,7 @@ from quartermaster_engine.stores.memory_store import InMemoryStore
 from quartermaster_engine.dispatchers.sync_dispatcher import SyncDispatcher
 
 runner = FlowRunner(
-    graph=graph,                          # Graph instance from Graph("name").start()...end()
+    graph=graph,                          # Graph instance from Graph("name").user()...end()
     node_registry=SimpleNodeRegistry(),   # Maps node types to executors
     store=InMemoryStore(),                # Execution state storage (optional)
     dispatcher=SyncDispatcher(),          # Execution strategy (optional)

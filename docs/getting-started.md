@@ -80,7 +80,6 @@ from quartermaster_graph import Graph
 
 graph = (
     Graph("My First Agent")
-    .start()
     .user("What would you like to know?")
     .instruction("Analyze input", model="gpt-4o", temperature=0.7)
     .end()
@@ -111,7 +110,6 @@ Make it more interesting with a decision node:
 ```python
 graph = (
     Graph("Sentiment Analyzer")
-    .start()
     .user("Enter text to analyze")
     .instruction(
         "Classify sentiment",

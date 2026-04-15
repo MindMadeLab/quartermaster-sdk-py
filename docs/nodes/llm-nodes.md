@@ -46,7 +46,6 @@ single-turn LLM generation.
 
 ```python
 Graph("Bot") \
-    .start() \
     .user("Enter text to summarize") \
     .instruction("Summarize input", model="gpt-4o",
                  system_instruction="Summarize the user's message.") \
@@ -96,7 +95,6 @@ The loop exits when the LLM produces no tool calls or the iteration cap is hit.
 
 ```python
 Graph("Research Agent") \
-    .start() \
     .user("What should I research?") \
     .agent("Researcher", model="gpt-4o",
            system_instruction="You are a research assistant.",
@@ -148,7 +146,6 @@ with the chosen edge ID.
 ```python
 graph = (
     Graph("Triage Bot")
-    .start()
     .user("Describe your issue")
     .instruction("Classify intent", model="gpt-4o")
     .decision("Route request", options=["Billing", "Technical", "Other"])

@@ -191,15 +191,14 @@ The `thought_type` on a node's `FlowNodeConf` controls how results are stored:
 ## Graph builder quick start
 
 The `Graph` builder from `quartermaster-graph` provides a fluent API for
-assembling graphs in code. Every graph should start with `.user()` after
-`.start()` to collect input:
+assembling graphs in code. Every graph should typically begin with `.user()`
+to collect input (the Start node is auto-inserted since v0.2.0):
 
 ```python
 from quartermaster_graph import Graph
 
 agent = (
     Graph("Support Bot")
-    .start()
     .user("What can I help you with?")
     .instruction("Answer", model="gpt-4o", system_instruction="You are a helpful assistant.")
     .end()

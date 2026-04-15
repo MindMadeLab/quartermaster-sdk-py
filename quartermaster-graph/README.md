@@ -34,7 +34,6 @@ from quartermaster_graph import Graph
 
 graph = (
     Graph("Customer Support Agent")
-    .start()
     .user("How can I help you?")
     .instruction("Classify intent", model="gpt-4o", system_instruction="Classify the user's intent.")
     .decision("Route by intent", options=["billing", "technical", "general"])
@@ -51,7 +50,7 @@ graph = (
 from quartermaster_graph import GraphBuilder
 
 builder = GraphBuilder("My Agent")
-builder.start().instruction("Process", model="gpt-4o").end()
+builder.instruction("Process", model="gpt-4o").end()
 
 spec = builder.build()       # returns GraphSpec
 spec = builder.to_graph()    # same thing
@@ -126,7 +125,7 @@ with open("agent.yaml") as f:
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `.start()` | `GraphBuilder` | Add a Start node |
+| `.start()` | `GraphBuilder` | Add a Start node (auto-inserted since v0.2.0 — rarely needed explicitly) |
 | `.end()` | `GraphBuilder` | Add an End node (or close a branch) |
 
 **LLM Nodes**
@@ -223,7 +222,6 @@ Use `connect()` to create back-edges for iterative flows:
 ```python
 agent = (
     Graph("Refiner")
-    .start()
     .user("Input")
     .var("Init", variable="round", expression="1")
     .text("Header", template="Round {{round}}", traverse_in=TraverseIn.AWAIT_FIRST)
@@ -303,7 +301,7 @@ path = get_path(agent_graph, start_id, end_id)
 # Build a graph (quartermaster-graph)
 from quartermaster_graph import Graph
 
-graph = Graph("Agent").start().user("Input").instruction("Process").end()
+graph = Graph("Agent").user("Input").instruction("Process").end()
 
 # Execute it (quartermaster-engine)
 from quartermaster_engine import FlowRunner
