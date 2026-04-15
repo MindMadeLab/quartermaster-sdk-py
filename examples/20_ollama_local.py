@@ -14,9 +14,8 @@ Usage:
 
 from __future__ import annotations
 
-from quartermaster_graph import Graph
+import quartermaster_sdk as qm
 from quartermaster_tools import ToolRegistry, tool
-from quartermaster_engine import run_graph
 
 
 MODEL = "gemma4:26b"
@@ -57,16 +56,28 @@ def search_knowledge(query: str) -> dict:
         query: Search query string.
     """
     kb = [
-        {"title": "Quartermaster", "fact": "AI agent orchestration framework by MindMade"},
-        {"title": "Gemma 4", "fact": "Google's open model with vision and tool calling"},
+        {
+            "title": "Quartermaster",
+            "fact": "AI agent orchestration framework by MindMade",
+        },
+        {
+            "title": "Gemma 4",
+            "fact": "Google's open model with vision and tool calling",
+        },
         {"title": "Slovenia", "fact": "Country in Central Europe, capital Ljubljana"},
     ]
-    results = [r for r in kb if query.lower() in r["title"].lower() or query.lower() in r["fact"].lower()]
+    results = [
+        r
+        for r in kb
+        if query.lower() in r["title"].lower() or query.lower() in r["fact"].lower()
+    ]
     return {"query": query, "results": results}
 
 
 # Build tool descriptions for the system prompt
-tool_list = "\n".join(f"- {s['name']}: {s.get('description', '')}" for s in registry.to_json_schema())
+tool_list = "\n".join(
+    f"- {s['name']}: {s.get('description', '')}" for s in registry.to_json_schema()
+)
 
 
 # ============================================================================
@@ -93,12 +104,12 @@ else:
     print("  (Sample image not found — using text description)")
 
 vision_agent = (
-    Graph("Gemma Vision")
-    .start()
+    qm.Graph("Gemma Vision")
     .user("Analyze this image")
     .vision(
         "Describe image",
-        model=MODEL, provider=PROVIDER,
+        model=MODEL,
+        provider=PROVIDER,
         system_instruction=(
             "You are an image analyst. Describe exactly what you see: "
             "the subject, colors, setting, mood, and any notable details. "
@@ -106,10 +117,9 @@ vision_agent = (
             "3-4 sentences."
         ),
     )
-    .end()
 )
 
-run_graph(vision_agent, user_input=image_prompt)
+qm.run_graph(vision_agent, user_input=image_prompt)
 
 
 # ============================================================================
@@ -119,12 +129,12 @@ run_graph(vision_agent, user_input=image_prompt)
 print("\n--- Demo 2: Tool Calling ---\n")
 
 tool_agent = (
-    Graph("Gemma Tools")
-    .start()
+    qm.Graph("Gemma Tools")
     .user("Ask anything")
     .instruction(
         "Think and call tools",
-        model=MODEL, provider=PROVIDER,
+        model=MODEL,
+        provider=PROVIDER,
         system_instruction=(
             "You are a helpful assistant with tools. When you need data, "
             "describe which tool you would call and why.\n\n"
@@ -132,13 +142,11 @@ tool_agent = (
             "Reason step-by-step about which tools to use, then answer."
         ),
     )
-    .end()
 )
 
-run_graph(
+qm.run_graph(
     tool_agent,
     user_input="What's the weather in Ljubljana and what do you know about Slovenia?",
-
 )
 
 
@@ -149,29 +157,28 @@ run_graph(
 print("\n--- Demo 3: Multi-step Pipeline ---\n")
 
 pipeline = (
-    Graph("Gemma Pipeline")
-    .start()
+    qm.Graph("Gemma Pipeline")
     .user("Topic")
     .instruction(
         "Research",
-        model=MODEL, provider=PROVIDER,
+        model=MODEL,
+        provider=PROVIDER,
         system_instruction="Write 3 key facts about the given topic. Be concise and specific.",
     )
     .instruction(
         "Summarize",
-        model=MODEL, provider=PROVIDER,
+        model=MODEL,
+        provider=PROVIDER,
         system_instruction=(
             "Take the research above and write a single compelling paragraph "
             "for a non-expert. Under 100 words."
         ),
     )
-    .end()
 )
 
-run_graph(
+qm.run_graph(
     pipeline,
     user_input="The history of artificial intelligence",
-
 )
 
 

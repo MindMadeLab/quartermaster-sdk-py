@@ -20,14 +20,12 @@ Usage:
     uv run examples/13_orchestrator.py
 """
 
-from quartermaster_graph import Graph
-from quartermaster_engine import run_graph
+import quartermaster_sdk as qm
 
 # -- Build the graph ----------------------------------------------------------
 graph = (
-    Graph("ParallelOrchestrator")
+    qm.Graph("ParallelOrchestrator")
     .allowed_agents("researcher", "writer", "reviewer")
-    .start()
     # 1. Collect the user's request
     .user("Describe the project you'd like researched, written, and reviewed.")
     # 2. Orchestrator -- an Agent node with session-management tools
@@ -62,8 +60,10 @@ graph = (
             "reviewer's feedback."
         ),
     )
-    .end()
 )
 
 # Execute with a real LLM
-run_graph(graph, user_input="Write a technical blog post about WebAssembly's role in server-side computing")
+qm.run_graph(
+    graph,
+    user_input="Write a technical blog post about WebAssembly's role in server-side computing",
+)

@@ -28,18 +28,29 @@ class TestBasicBuilder:
         assert len(version.nodes) == 5
         assert len(version.edges) == 4
 
-    def test_no_start_raises(self):
-        with pytest.raises(ValueError, match="start node"):
-            GraphBuilder("Test").instruction("X").end().build()
+    def test_auto_start_creates_start_node(self):
+        """v0.2.0+ — ``Graph(name)`` auto-creates a Start node."""
+        version = GraphBuilder("Test").instruction("X").end().build()
+        starts = [n for n in version.nodes if n.type.value.startswith("Start")]
+        assert len(starts) == 1, "exactly one Start node should exist"
 
-    def test_validation_on_build(self):
-        # No end node should produce validation warnings/errors (but build still returns)
-        version = GraphBuilder("Test").start().instruction("X").build()
+    def test_auto_start_opt_out(self):
+        """``auto_start=False`` reverts to manual .start() call (legacy path)."""
+        with pytest.raises(ValueError, match="start node"):
+            # No auto-start AND no manual .start() → no start node → .build() rejects.
+            GraphBuilder("Test", auto_start=False).instruction("X").end().build()
+
+    def test_no_end_is_now_allowed(self):
+        """v0.2.0+ — graphs without an explicit End node are valid."""
+        version = GraphBuilder("Test").instruction("X").build()
         from quartermaster_graph.validation import validate_graph
 
         errors = validate_graph(version)
         real_errors = [e for e in errors if e.severity == "error"]
-        assert len(real_errors) > 0
+        assert real_errors == [], (
+            "No-End-node is intentional post-v0.2.0; runner falls back to the "
+            f"last finished node's output.  Got errors: {real_errors}"
+        )
 
     def test_skip_validation(self):
         version = GraphBuilder("Test").start().instruction("X").build(validate=False)

@@ -27,8 +27,16 @@ _FLOW_CONFIG_KEYS = {
     "error_handling",
 }
 
-# Metadata-level config keys (stored in node.metadata, not as node attributes)
-_META_CONFIG_KEYS = {"show_output"}
+# Metadata-level config keys (stored in node.metadata, not as node attributes).
+# ``capture_as`` (v0.2.0) lets callers name a node's output so
+# ``Result.captures["name"]`` can retrieve it post-run without fishing through
+# UUID-keyed ``node_results``.
+_META_CONFIG_KEYS = {"show_output", "capture_as"}
+
+# Node-metadata key under which ``capture_as`` is stored.  Kept as a named
+# constant so the engine side can import it rather than hard-coding the
+# string (see ``quartermaster_engine.runner.flow_runner``).
+CAPTURE_AS_METADATA_KEY = "capture_as"
 
 # Combined set for extraction from kwargs
 _ALL_CONFIG_KEYS = _FLOW_CONFIG_KEYS | _META_CONFIG_KEYS
@@ -41,7 +49,9 @@ def _apply_flow_config(node: GraphNode, kwargs: dict[str, Any]) -> None:
             setattr(node, key, kwargs.pop(key))
     for key in _META_CONFIG_KEYS:
         if key in kwargs:
-            node.metadata[key] = kwargs.pop(key)
+            value = kwargs.pop(key)
+            if value is not None:
+                node.metadata[key] = value
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -1062,7 +1072,18 @@ class GraphBuilder:
         )
     """
 
-    def __init__(self, name: str, description: str = "") -> None:
+    def __init__(self, name: str, description: str = "", *, auto_start: bool = True) -> None:
+        """Build a new graph.
+
+        Args:
+            name: Human-readable graph name.
+            description: Optional description stored on the spec.
+            auto_start: When ``True`` (the default, v0.2.0+) a ``Start``
+                node is added automatically so chains can open with
+                ``Graph("x").user()...`` instead of ``.start().user()...``.
+                Set to ``False`` only if you want to construct the start
+                yourself (rare — legacy compatibility path).
+        """
         self._name = name
         self._description = description
         self._nodes: list[GraphNode] = []
@@ -1075,6 +1096,24 @@ class GraphBuilder:
         self._position_x = 0
         self._position_y = 0
         self._allowed_agents: list[str] = []
+        if auto_start:
+            self._create_start_node()
+
+    def _create_start_node(self) -> None:
+        """Append the graph's ``Start`` node and mark it as the entry point.
+
+        Internal helper used by ``__init__`` (via ``auto_start=True``) and
+        by the now-idempotent :meth:`start` method so explicit callers
+        don't accidentally create two Start nodes.
+        """
+        node = GraphNode(
+            type=NodeType.START,
+            name="Start",
+            thought_type=ThoughtType.SKIP,
+            message_type=MessageType.VARIABLE,
+        )
+        self._start_node_id = node.id
+        self._add_node(node)
 
     # ------------------------------------------------------------------
     # Agent control
@@ -1199,15 +1238,20 @@ class GraphBuilder:
     # ------------------------------------------------------------------
 
     def start(self) -> GraphBuilder:
-        """Add a Start node."""
-        node = GraphNode(
-            type=NodeType.START,
-            name="Start",
-            thought_type=ThoughtType.SKIP,
-            message_type=MessageType.VARIABLE,
-        )
-        self._start_node_id = node.id
-        return self._add_node(node)
+        """Add a Start node (idempotent since v0.2.0).
+
+        ``Graph(name)`` auto-creates the Start node, so chained calls to
+        ``.start()`` are no-ops — the method is kept only for readability
+        of legacy snippets.  Explicitly creating a second Start via
+        ``auto_start=False`` + a manual ``.start()`` call is still
+        supported.
+        """
+        if self._start_node_id is not None:
+            # Auto-start already happened (or the caller previously
+            # called .start()) — don't create a duplicate.
+            return self
+        self._create_start_node()
+        return self
 
     def end(self) -> GraphBuilder:
         """Add an End node.

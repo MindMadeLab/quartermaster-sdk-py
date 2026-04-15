@@ -1,26 +1,46 @@
 """The simplest possible agent: user asks, LLM responds.
 
-Demonstrates the minimal Graph API -- three nodes chained together
-with the fluent builder, then executed with a real LLM.
+Canonical v0.2.0 ergonomic demo — four imports, four lines, no
+``.start()`` / ``.end()`` / ``.build()`` / ``FlowRunner`` boilerplate.
 
 Usage:
-    export ANTHROPIC_API_KEY="sk-ant-..."   # or OPENAI_API_KEY
+    # Either set an API key...
+    export ANTHROPIC_API_KEY="sk-ant-..."      # or OPENAI_API_KEY
+    uv run examples/01_hello_agent.py
+
+    # ...or run against a local Ollama:
+    ollama serve && ollama pull gemma4:26b
+    export OLLAMA_HOST=http://localhost:11434
+    export QM_DEFAULT_MODEL=gemma4:26b
     uv run examples/01_hello_agent.py
 """
 
 from __future__ import annotations
 
-from quartermaster_graph import Graph
-from quartermaster_engine import run_graph
+import quartermaster_sdk as qm
 
-# The simplest agent: ask user -> LLM responds
-agent = (
-    Graph("Hello Agent")
-    .start()
-    .user("Ask me anything")
-    .instruction("Respond", model="claude-haiku-4-5-20251001", system_instruction="You are a helpful assistant. Be concise.")
-    .end()
+# Single-shot: no graph visible.  `qm.instruction(...)` builds a
+# one-node graph internally, runs it, and returns the assistant text.
+# Uses the default provider from `qm.configure(...)` or $OLLAMA_HOST /
+# $QM_DEFAULT_MODEL — no boilerplate.
+reply = qm.instruction(
+    system="You are a helpful assistant. Be concise.",
+    user="What is the capital of Slovenia?",
+    model="claude-haiku-4-5-20251001",
 )
+print("Single-shot:", reply)
 
-# Execute with a real LLM
-run_graph(agent, user_input="What is the capital of Slovenia?")
+# Full graph path: same semantics as the cloud-auto-detecting v0.1.x
+# `run_graph()`, but now without the `.start().end().build()` dance.
+# `qm.run_graph()` finalises the builder internally and prints as it
+# streams.
+agent = (
+    qm.Graph("Hello Agent")
+    .user("Ask me anything")
+    .instruction(
+        "Respond",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="You are a helpful assistant. Be concise.",
+    )
+)
+qm.run_graph(agent, user_input="What is the capital of Slovenia?")

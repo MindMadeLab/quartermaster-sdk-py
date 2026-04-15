@@ -18,19 +18,23 @@ from __future__ import annotations
 
 import argparse
 
-from quartermaster_graph import Graph
-from quartermaster_engine import run_graph
+import quartermaster_sdk as qm
 
 
 def main():
     parser = argparse.ArgumentParser(description="Interactive Quartermaster agent")
-    parser.add_argument("--model", default="claude-haiku-4-5-20251001", help="Model to use")
-    parser.add_argument("--provider", default="anthropic", help="Provider (anthropic, openai, groq, xai, ollama)")
+    parser.add_argument(
+        "--model", default="claude-haiku-4-5-20251001", help="Model to use"
+    )
+    parser.add_argument(
+        "--provider",
+        default="anthropic",
+        help="Provider (anthropic, openai, groq, xai, ollama)",
+    )
     args = parser.parse_args()
 
     agent = (
-        Graph("Interactive Assistant")
-        .start()
+        qm.Graph("Interactive Assistant")
         .user("You")
         .instruction(
             "Respond",
@@ -41,7 +45,6 @@ def main():
                 "Respond in the same language the user writes in."
             ),
         )
-        .end()
     )
 
     print(f"Interactive Assistant ({args.model} via {args.provider})")
@@ -49,7 +52,7 @@ def main():
 
     while True:
         try:
-            result = run_graph(agent)
+            result = qm.run_graph(agent)
             if result is None:
                 break
         except (KeyboardInterrupt, EOFError):

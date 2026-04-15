@@ -32,6 +32,7 @@ for topic in topics:
 
     def make_task(t: str):
         """Create a closure over the topic string."""
+
         def task(s):
             # Simulate research work with a small delay
             time.sleep(0.1)
@@ -39,6 +40,7 @@ for topic in topics:
                 AgentMessage(role="assistant", content=f"Researching: {t}")
             )
             return {"topic": t, "findings": f"Key findings about {t}"}
+
         return task
 
     manager.start_session(session.id, make_task(topic))

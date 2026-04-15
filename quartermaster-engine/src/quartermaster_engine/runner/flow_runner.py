@@ -60,7 +60,14 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class FlowResult:
-    """The final result of a flow execution."""
+    """The final result of a flow execution.
+
+    The UUID-keyed ``node_results`` is the authoritative per-node record
+    and is mostly useful for debugging tooling (visualisers, trace
+    dumps).  The name-keyed ``captures`` dict (v0.2.0+) is what
+    application code should reach for — populated from the
+    ``capture_as="..."`` kwarg users pass on node builder methods.
+    """
 
     flow_id: UUID
     success: bool
@@ -68,7 +75,34 @@ class FlowResult:
     output_data: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
     node_results: dict[UUID, NodeResult] = field(default_factory=dict)
+    #: Name → NodeResult mapping for nodes that set ``capture_as="..."``.
+    #: Lets callers write ``result.captures["research"].output_text`` instead
+    #: of fishing through ``node_results`` with UUID keys and node-type
+    #: pattern matching.
+    captures: dict[str, NodeResult] = field(default_factory=dict)
     duration_seconds: float = 0.0
+
+    def __getitem__(self, name: str) -> NodeResult:
+        """Syntactic sugar: ``result["research"]`` → the captured node result.
+
+        Raises ``KeyError`` with a helpful message listing available
+        capture names when *name* is unknown.  The SDK's ``Result`` type
+        uses the same message format (see ``quartermaster_sdk._result.
+        format_missing_capture_error``) so switching between the two is
+        seamless.
+        """
+        try:
+            return self.captures[name]
+        except KeyError:
+            raise KeyError(_format_missing_capture(name, self.captures)) from None
+
+
+def _format_missing_capture(name: str, captures: dict[str, NodeResult]) -> str:
+    """Shared format for "no capture named X" errors — matches the SDK's
+    ``format_missing_capture_error``.  Kept as a module-private helper here
+    so the engine doesn't depend on the SDK package."""
+    available = ", ".join(sorted(captures)) or "(no captures registered)"
+    return f"No capture named {name!r}. Available captures: {available}"
 
 
 class FlowRunner:
@@ -551,6 +585,7 @@ class FlowRunner:
         """Collect the final result after all nodes have completed."""
         executions = self.store.get_all_node_executions(flow_id)
         node_results: dict[UUID, NodeResult] = {}
+        captures: dict[str, NodeResult] = {}
         final_output = ""
         all_success = True
         errors: list[str] = []
@@ -564,12 +599,21 @@ class FlowRunner:
                     errors.append(execution.error)
 
             if execution.result:
-                node_results[nid] = NodeResult(
+                nr = NodeResult(
                     success=execution.status == NodeStatus.FINISHED,
                     data=execution.output_data,
                     output_text=execution.result,
                     error=execution.error,
                 )
+                node_results[nid] = nr
+                # Populate name-keyed captures if the builder set
+                # ``capture_as="..."`` on this node.  We look up via the
+                # shared constant from ``quartermaster_graph`` so rename
+                # drift is caught at import time.
+                if node is not None:
+                    capture_name = node.metadata.get("capture_as")
+                    if isinstance(capture_name, str) and capture_name:
+                        captures[capture_name] = nr
 
             # The final output comes from End nodes
             if node and node.type == NodeType.END and execution.result:
@@ -589,6 +633,7 @@ class FlowRunner:
             success=all_success,
             final_output=final_output,
             node_results=node_results,
+            captures=captures,
             error="; ".join(errors) if errors else None,
         )
 

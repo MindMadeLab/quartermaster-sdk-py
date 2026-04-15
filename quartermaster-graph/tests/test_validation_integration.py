@@ -24,11 +24,17 @@ def agent() -> Agent:
 
 
 class TestMissingStartNode:
-    """Validation must reject graphs without a Start node."""
+    """Validation must reject graphs without a Start node.
+
+    Post-v0.2.0 this is only reachable when the caller opts out of the
+    auto-start convenience via ``auto_start=False`` and then forgets to
+    call ``.start()`` themselves — still a valid error path, just a
+    harder one to hit by accident.
+    """
 
     def test_builder_requires_start(self) -> None:
-        """GraphBuilder.build() raises if .start() was never called."""
-        builder = GraphBuilder("No Start")
+        """GraphBuilder(auto_start=False).build() raises if .start() was never called."""
+        builder = GraphBuilder("No Start", auto_start=False)
         builder._nodes.append(GraphNode(type=NodeType.END, name="End"))
         with pytest.raises(ValueError, match="start node"):
             builder.build()
@@ -80,10 +86,12 @@ class TestMissingStartNode:
 
 
 class TestMissingEndNode:
-    """Validation must reject graphs without an End node."""
+    """Graphs without an End node are allowed since v0.2.0."""
 
-    def test_no_end_node(self, agent: Agent) -> None:
-        """Graph with Start and Instruction but no End produces no_end error."""
+    def test_no_end_node_validates_clean(self, agent: Agent) -> None:
+        """Pre-0.2.0 the validator emitted ``no_end``.  Now it's legal —
+        the runner falls back to the last finished node's output so
+        single-node flows don't need trailing ``.end()`` boilerplate."""
         start = GraphNode(type=NodeType.START, name="Start")
         inst = GraphNode(type=NodeType.INSTRUCTION, name="Process")
         edge = GraphEdge(source_id=start.id, target_id=inst.id)
@@ -95,7 +103,7 @@ class TestMissingEndNode:
         )
         errors = validate_graph(version)
         codes = {e.code for e in errors if e.severity == "error"}
-        assert "no_end" in codes
+        assert "no_end" not in codes
 
 
 class TestOrphanNodes:
@@ -327,7 +335,12 @@ class TestMultipleValidationErrors:
     """Validation returns all errors at once, not just the first."""
 
     def test_multiple_errors_reported(self, agent: Agent) -> None:
-        """A graph with multiple issues reports all of them."""
+        """A graph with multiple issues reports all of them.
+
+        Note: ``no_end`` was removed from the validator in v0.2.0 (End
+        nodes are optional now), so only ``no_start`` and
+        ``invalid_edge_target`` survive in this fixture.
+        """
         # No start node, no end node, invalid edge
         inst = GraphNode(type=NodeType.INSTRUCTION, name="Lonely")
         bad_edge = GraphEdge(source_id=inst.id, target_id=uuid4())
@@ -340,7 +353,6 @@ class TestMultipleValidationErrors:
         errors = validate_graph(version)
         codes = {e.code for e in errors}
         assert "no_start" in codes
-        assert "no_end" in codes
         assert "invalid_edge_target" in codes
 
 
@@ -348,12 +360,12 @@ class TestBuilderValidation:
     """The builder's validate=True flag rejects invalid graphs."""
 
     def test_builder_rejects_invalid_graph(self) -> None:
-        """Builder returns version but validation finds errors (no end node)."""
-        builder = GraphBuilder("Invalid")
-        builder.start()
+        """Builder still surfaces genuinely invalid graphs (dangling edge target)."""
+        builder = GraphBuilder("Invalid")  # auto-start creates a Start node
         builder.instruction("Process")
-        # No .end() call -- build still returns but validation finds errors
-        version = builder.build(validate=True)
+        # Dangling edge to a uuid that doesn't resolve — still an error.
+        builder._edges.append(GraphEdge(source_id=uuid4(), target_id=uuid4()))
+        version = builder.build(validate=False)  # bypass builder-side raise
         errors = validate_graph(version)
         real_errors = [e for e in errors if e.severity == "error"]
         assert len(real_errors) > 0
