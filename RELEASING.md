@@ -73,4 +73,6 @@ gh pr create --base master --title "Hotfix: ..." --body "..."
 # merge, then Step 3 (Publish), then Step 4 (sync develop)
 ```
 
+**Hotfix PRs still need at least one review approval before merge** — the Publish workflow has no minimum-approval gate of its own (`RELEASE_PAT` bypasses the admin ruleset), so the PR review is the only thing standing between an unreviewed commit and a public PyPI release. Don't self-approve hotfixes; ping a co-maintainer.
+
 Same Step 4 caveat — sync develop back from master so the hotfix isn't lost on the next regular release.

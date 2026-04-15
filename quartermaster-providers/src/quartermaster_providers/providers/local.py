@@ -50,6 +50,47 @@ def _normalize_openai_compat_url(base_url: str) -> str:
     return f"{stripped}/v1"
 
 
+# Hostnames / IPs that point at cloud-metadata or link-local services —
+# legitimate Ollama deployments never live here.  Operators *could* set
+# these intentionally for niche tunneling setups, so we warn rather than
+# block, but the warning makes it visible in logs when a misconfiguration
+# (or, in multi-tenant settings, a hostile end-user-supplied base_url)
+# would point an HTTP request at IMDS / link-local space.
+_SSRF_SUSPICIOUS_HOSTS: frozenset[str] = frozenset(
+    {
+        "169.254.169.254",  # AWS / GCP / Azure / Oracle Cloud IMDS
+        "metadata.google.internal",
+        "metadata",
+        "fd00:ec2::254",  # AWS IPv6 IMDS
+        "100.100.100.200",  # Alibaba Cloud metadata
+    }
+)
+
+
+def _warn_if_suspicious_url(base_url: str) -> None:
+    """Log a warning when *base_url* points at a known SSRF-magnet host.
+
+    Operators set ``base_url`` at registration time, so this is at most
+    a misconfiguration alarm in single-tenant deployments.  In multi-
+    tenant setups where end users can supply their own provider URL it
+    becomes a soft SSRF gate — the warning lands in operator logs even
+    if the hostile request still goes through.
+    """
+    if not base_url:
+        return
+    from urllib.parse import urlparse
+
+    host = (urlparse(base_url).hostname or "").lower()
+    if host in _SSRF_SUSPICIOUS_HOSTS:
+        logger.warning(
+            "OllamaProvider base_url targets %r — this is a known cloud-"
+            "metadata / link-local address, not an Ollama instance. If you "
+            "intentionally tunnel Ollama through that host you can ignore "
+            "this; otherwise check your configuration.",
+            host,
+        )
+
+
 def _strip_v1(base_url: str) -> str:
     """Drop the ``/v1`` segment that ``_normalize_openai_compat_url`` adds.
 
@@ -59,12 +100,19 @@ def _strip_v1(base_url: str) -> str:
     sync ``chat()`` shim has to peel ``/v1`` back off before talking to
     ``/api/chat``.
 
-    We only strip when ``/v1`` sits directly under the host root —
+    Only strips when ``/v1`` sits directly under the host root —
     ``http://host:port/v1``.  A URL like ``http://gateway/api/v1`` is
     likely a corporate proxy with its own path prefix (where stripping
     would silently produce ``http://gateway/api`` and route ``/api/chat``
-    requests to ``/api/api/chat``).  In that case we leave the URL alone
-    and let the caller hit whatever they configured.
+    requests to ``/api/api/chat``).  In that case we leave the URL alone.
+
+    When stripping, the result is reconstructed from scheme + host (+
+    port) only — userinfo, query, and fragment from the input are
+    intentionally dropped.  This blunts the attack class where a
+    base_url like ``http://user:pass@host/v1`` would otherwise leak the
+    credentials into the outbound ``/api/chat`` request, and where a
+    ``http://host/v1?injected=...`` query string would silently mangle
+    the final URL.
     """
     if not base_url:
         return base_url
@@ -73,8 +121,15 @@ def _strip_v1(base_url: str) -> str:
     parsed = urlparse(base_url)
     path = parsed.path.rstrip("/")
     if path == "/v1":
-        # Bare host + /v1 — strip it.
-        return urlunparse(parsed._replace(path=""))
+        # Reconstruct from trusted components only — drop userinfo,
+        # query, and fragment so they can't ride along into the
+        # request URL.  hostname + port is what we actually need.
+        host = parsed.hostname or ""
+        if parsed.port is not None:
+            netloc = f"{host}:{parsed.port}"
+        else:
+            netloc = host
+        return urlunparse((parsed.scheme, netloc, "", "", "", ""))
     # Anything else (deeper path, or no /v1 at all) is left untouched.
     return base_url.rstrip("/")
 
@@ -124,6 +179,11 @@ class OllamaProvider(OpenAICompatibleProvider):
         **kwargs,
     ):
         resolved = base_url or os.environ.get("OLLAMA_HOST") or self.DEFAULT_BASE_URL
+        # Surface a warning if the configured URL points at a known
+        # cloud-metadata / link-local host.  Operators can ignore it for
+        # legitimate tunnels; in multi-tenant setups it makes hostile
+        # SSRF attempts visible in logs even if we don't outright block.
+        _warn_if_suspicious_url(resolved)
         super().__init__(
             base_url=_normalize_openai_compat_url(resolved),
             api_key=api_key,

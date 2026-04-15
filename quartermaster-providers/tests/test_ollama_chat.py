@@ -89,6 +89,51 @@ class TestStripV1:
     def test_preserves_path_segment_named_v1(self):
         assert _strip_v1("http://h/v1/inner") == "http://h/v1/inner"
 
+    def test_drops_userinfo_when_stripping(self):
+        """Security regression — credentials embedded in base_url must
+        NOT ride along into the stripped output (which becomes the prefix
+        for /api/chat requests)."""
+        assert _strip_v1("http://user:pass@localhost:11434/v1") == "http://localhost:11434"
+
+    def test_drops_query_string_when_stripping(self):
+        """A query string on base_url cannot mangle the final URL."""
+        assert _strip_v1("http://localhost:11434/v1?injected=evil") == "http://localhost:11434"
+
+    def test_drops_fragment_when_stripping(self):
+        assert _strip_v1("http://localhost:11434/v1#section") == "http://localhost:11434"
+
+
+class TestSSRFWarning:
+    """``OllamaProvider.__init__`` must log a warning when base_url
+    points at a known cloud-metadata / link-local host — operators see
+    misconfigured URLs immediately, multi-tenant deployments get a
+    visible SSRF-attempt audit trail."""
+
+    @pytest.mark.parametrize(
+        "host",
+        [
+            "169.254.169.254",
+            "metadata.google.internal",
+            "100.100.100.200",
+        ],
+    )
+    def test_warns_on_metadata_host(self, host, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="quartermaster_providers.providers.local"):
+            OllamaProvider(base_url=f"http://{host}/v1")
+        assert any(
+            "cloud-metadata" in rec.message and host in rec.message for rec in caplog.records
+        ), f"expected SSRF warning for {host}, got: {[r.message for r in caplog.records]}"
+
+    def test_no_warning_for_normal_host(self, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="quartermaster_providers.providers.local"):
+            OllamaProvider(base_url="http://localhost:11434/v1")
+            OllamaProvider(base_url="http://host.docker.internal:11434/v1")
+        assert not any("cloud-metadata" in rec.message for rec in caplog.records)
+
 
 # ── chat() happy path ──────────────────────────────────────────────────
 
