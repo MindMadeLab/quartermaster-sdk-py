@@ -50,6 +50,12 @@ def _normalize_openai_compat_url(base_url: str) -> str:
     return f"{stripped}/v1"
 
 
+# Same set the engine's ``_build_llm_config`` validates against — kept
+# in sync by name (defining it here too rather than importing across
+# the engine→providers boundary, which would invert the dep direction).
+_VALID_THINKING_LEVELS: frozenset[str] = frozenset({"off", "low", "medium", "high"})
+
+
 # Hostnames / IPs that point at cloud-metadata or link-local services —
 # legitimate Ollama deployments never live here.  Operators *could* set
 # these intentionally for niche tunneling setups, so we warn rather than
@@ -176,6 +182,7 @@ class OllamaProvider(OpenAICompatibleProvider):
         self,
         base_url: str | None = None,
         api_key: str = "ollama",
+        default_model: str | None = None,
         **kwargs,
     ):
         resolved = base_url or os.environ.get("OLLAMA_HOST") or self.DEFAULT_BASE_URL
@@ -184,6 +191,12 @@ class OllamaProvider(OpenAICompatibleProvider):
         # legitimate tunnels; in multi-tenant setups it makes hostile
         # SSRF attempts visible in logs even if we don't outright block.
         _warn_if_suspicious_url(resolved)
+        # Stash the registration-time default model so ``chat()`` can use
+        # it when callers omit the per-call ``model=`` kwarg — without
+        # this the docstring's "Defaults to the provider's bound default
+        # model" claim was vacuously broken (the registry's default_model
+        # was stored on the registry, never reached the provider).
+        self._chat_default_model = default_model
         super().__init__(
             base_url=_normalize_openai_compat_url(resolved),
             api_key=api_key,
@@ -204,6 +217,12 @@ class OllamaProvider(OpenAICompatibleProvider):
     # ``reasoning`` text when ``message.content`` comes back empty, and
     # raises connection errors instead of swallowing them into a
     # ``success=True`` ``FlowResult``.
+    #
+    # NOTE for future maintainers: ``chat()`` is INTENTIONALLY synchronous
+    # alongside the inherited async ``generate_*`` methods.  Do not add a
+    # ``chat_async()`` cousin — if you need async on this provider, call
+    # ``generate_native_response`` (the OpenAI-compat path).  Two flavours
+    # of the same call are easier to maintain than three.
 
     def chat(
         self,
@@ -222,9 +241,10 @@ class OllamaProvider(OpenAICompatibleProvider):
             messages: OpenAI-style ``[{"role": "user", "content": "..."}]``
                 list.  ``system``/``user``/``assistant``/``tool`` roles
                 pass through verbatim.
-            model: Model id (e.g. ``"gemma4:26b"``).  Defaults to the
-                provider's bound default model.  Required when no default
-                is configured.
+            model: Model id (e.g. ``"gemma4:26b"``).  When omitted, the
+                provider's registration-time ``default_model`` is used
+                (set via ``register_local("ollama", default_model=...)``).
+                If neither is supplied the call raises ``ProviderError``.
             tools: Optional tool definitions in OpenAI function-calling
                 shape; passed through to Ollama unchanged.
             temperature: Sampling temperature (Ollama maps it to
@@ -235,8 +255,9 @@ class OllamaProvider(OpenAICompatibleProvider):
                 the default 2 048-token budget on internal thinking
                 before producing visible output.
             thinking_level: One of ``off``/``low``/``medium``/``high``,
-                or ``None`` to leave it to the model.  Forwarded as
-                Ollama's ``think`` parameter.
+                or ``None`` to leave it to the model.  Anything else
+                logs a warning and is treated as ``off``.  Forwarded as
+                Ollama's ``think`` boolean.
             timeout: HTTP timeout in seconds.  Connection / read errors
                 bubble up as :class:`ServiceUnavailableError`.
 
@@ -272,10 +293,21 @@ class OllamaProvider(OpenAICompatibleProvider):
         if tools:
             payload["tools"] = list(tools)
         if thinking_level is not None:
-            # Ollama's native parameter name is ``think`` (bool/string);
-            # we accept the higher-level enum so callers don't have to
-            # know which version of Ollama they're talking to.
-            payload["think"] = thinking_level not in ("off", False, None)
+            # Ollama's native parameter name is ``think`` (bool); we
+            # accept the higher-level enum so callers don't have to
+            # know which version of Ollama they're talking to.  Validate
+            # against the same set the engine's ``_build_llm_config``
+            # uses so a typo here can't silently flip ``think`` on.
+            if thinking_level not in _VALID_THINKING_LEVELS:
+                logger.warning(
+                    "Unknown thinking_level=%r for OllamaProvider.chat() "
+                    "(expected one of %s); falling back to 'off'.",
+                    thinking_level,
+                    sorted(_VALID_THINKING_LEVELS),
+                )
+                payload["think"] = False
+            else:
+                payload["think"] = thinking_level != "off"
 
         url = f"{_strip_v1(self.base_url)}/api/chat"
 
@@ -319,16 +351,16 @@ class OllamaProvider(OpenAICompatibleProvider):
         return _parse_native_chat(body)
 
     def _default_model_for_chat(self) -> str | None:
-        """Best-effort default model lookup for the sync chat shim.
+        """Default model for the sync ``chat()`` shim.
 
-        Ollama doesn't carry a default model on the connection itself —
-        the registry holds the engine-level default set via
-        ``register_local("ollama", default_model=...)``.  We don't have a
-        back-pointer to the registry from inside the provider, so this
-        hook just returns ``None`` and lets the caller pass ``model=``.
-        Subclasses (or registry-aware factories) may override it.
+        Set by :meth:`__init__` from the ``default_model`` constructor
+        kwarg, which :meth:`ProviderRegistry.register_local` forwards
+        through whenever ``register_local("ollama", default_model=...)``
+        was used.  Returns ``None`` for instances constructed by hand
+        without a default — in which case ``chat()`` will require an
+        explicit ``model=`` per call.
         """
-        return getattr(self, "_chat_default_model", None)
+        return self._chat_default_model
 
 
 def _parse_native_chat(body: dict[str, Any]) -> ChatResult:

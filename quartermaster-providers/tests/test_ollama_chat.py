@@ -378,3 +378,64 @@ class TestArgValidation:
             thinking_level="high",
         )
         assert mock.last_payload["think"] is True
+
+    def test_unknown_thinking_level_warns_and_disables(self, patch_httpx_client, caplog):
+        """Regression for the v0.1.3 code-review HIGH #2: a typo'd
+        thinking_level (e.g. ``"meidum"``) used to silently flip
+        ``think=True`` because the old check was just
+        ``thinking_level not in ("off", False, None)``.  Now it warns
+        and falls back to ``off`` to match the engine-side validation."""
+        import logging
+
+        mock = patch_httpx_client(
+            lambda _r: httpx.Response(200, json={"message": {"content": "x"}, "done": True})
+        )
+        provider = OllamaProvider(base_url="http://localhost:11434/v1")
+        with caplog.at_level(logging.WARNING, logger="quartermaster_providers.providers.local"):
+            provider.chat(
+                messages=[{"role": "user", "content": "?"}],
+                model="gemma4:26b",
+                thinking_level="meidum",  # typo
+            )
+        assert mock.last_payload["think"] is False
+        assert any("Unknown thinking_level" in rec.message for rec in caplog.records)
+
+
+class TestDefaultModelFromConstructor:
+    """Regression for the v0.1.3 code-review HIGH #1: the registry's
+    ``default_model`` must reach ``OllamaProvider.chat()`` so callers
+    don't have to repeat the model name on every call."""
+
+    def test_constructor_default_model_used_when_call_omits_model(self, patch_httpx_client):
+        mock = patch_httpx_client(
+            lambda _r: httpx.Response(200, json={"message": {"content": "ok"}, "done": True})
+        )
+        provider = OllamaProvider(
+            base_url="http://localhost:11434/v1",
+            default_model="gemma4:26b",
+        )
+        result = provider.chat(messages=[{"role": "user", "content": "?"}])
+        assert result.content == "ok"
+        assert mock.last_payload["model"] == "gemma4:26b"
+
+    def test_call_model_overrides_default(self, patch_httpx_client):
+        mock = patch_httpx_client(
+            lambda _r: httpx.Response(200, json={"message": {"content": "ok"}, "done": True})
+        )
+        provider = OllamaProvider(
+            base_url="http://localhost:11434/v1",
+            default_model="gemma4:26b",
+        )
+        provider.chat(messages=[{"role": "user", "content": "?"}], model="other-model")
+        assert mock.last_payload["model"] == "other-model"
+
+    def test_register_local_threads_default_model_to_provider(self):
+        """End-to-end: register_local(default_model=...) must populate
+        OllamaProvider's _chat_default_model so chat() can use it."""
+        from quartermaster_providers import ProviderRegistry
+
+        reg = ProviderRegistry(auto_configure=False)
+        reg.register_local("ollama", default_model="gemma4:26b")
+        provider = reg.get("ollama")
+        assert isinstance(provider, OllamaProvider)
+        assert provider._default_model_for_chat() == "gemma4:26b"
