@@ -158,9 +158,7 @@ class OpenAIProvider(AbstractLLMProvider):
             raise ServiceUnavailableError(str(e), provider=self.PROVIDER_NAME) from e
         raise ProviderError(str(e), provider=self.PROVIDER_NAME) from e
 
-    def _build_user_content(
-        self, prompt: str, config: LLMConfig
-    ) -> str | list[dict[str, Any]]:
+    def _build_user_content(self, prompt: str, config: LLMConfig) -> str | list[dict[str, Any]]:
         """Build the user-turn ``content`` field for the Chat Completions API.
 
         Text-only requests keep the plain string shortcut so tokens /

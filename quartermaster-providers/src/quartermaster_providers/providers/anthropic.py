@@ -164,9 +164,7 @@ class AnthropicProvider(AbstractLLMProvider):
         """Build Anthropic API request parameters."""
         params: dict[str, Any] = {
             "model": config.model,
-            "messages": [
-                {"role": "user", "content": self._build_user_content(prompt, config)}
-            ],
+            "messages": [{"role": "user", "content": self._build_user_content(prompt, config)}],
             "max_tokens": config.max_output_tokens or DEFAULT_MAX_TOKENS,
         }
 
