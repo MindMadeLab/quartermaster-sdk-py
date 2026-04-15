@@ -103,6 +103,20 @@ class GoogleProvider(AbstractLLMProvider):
             system_instruction=system_instruction,
         )
 
+    def _request_options_kwargs(self, config: LLMConfig) -> dict[str, Any]:
+        """Return kwargs for ``generate_content_async`` that carry timeouts.
+
+        Added in v0.4.0. Google's SDK honours a ``request_options`` kwarg
+        on the async generation calls; the underlying gRPC channel reads
+        ``timeout`` from it. We map ``read_timeout`` (or fall back to
+        ``connect_timeout`` if that's the only one set) into that
+        field. Returns an empty dict when no timeout is configured.
+        """
+        timeout = config.read_timeout or config.connect_timeout
+        if timeout is None:
+            return {}
+        return {"request_options": {"timeout": float(timeout)}}
+
     def _build_content_parts(self, prompt: str, config: LLMConfig) -> str | list[Any]:
         """Build the user-turn content for Google's ``generate_content_async``.
 
@@ -203,11 +217,12 @@ class GoogleProvider(AbstractLLMProvider):
         model = self._get_model(config)
 
         content = self._build_content_parts(prompt, config)
+        request_opts = self._request_options_kwargs(config)
         try:
             if config.stream:
-                return self._stream_text(model, content)
+                return self._stream_text(model, content, request_opts)
             else:
-                response = await model.generate_content_async(content)
+                response = await model.generate_content_async(content, **request_opts)
                 text = response.text if response.text else ""
                 return TokenResponse(
                     content=text,
@@ -219,10 +234,15 @@ class GoogleProvider(AbstractLLMProvider):
             self._handle_api_error(e)
 
     async def _stream_text(
-        self, model: Any, content: str | list[Any]
+        self,
+        model: Any,
+        content: str | list[Any],
+        request_opts: dict[str, Any] | None = None,
     ) -> AsyncIterator[TokenResponse]:
         try:
-            response = await model.generate_content_async(content, stream=True)
+            response = await model.generate_content_async(
+                content, stream=True, **(request_opts or {})
+            )
             async for chunk in response:
                 if chunk.text:
                     yield TokenResponse(content=chunk.text)
@@ -245,11 +265,13 @@ class GoogleProvider(AbstractLLMProvider):
 
         google_tools = [genai.types.Tool(function_declarations=prepared)]
         content = self._build_content_parts(prompt, config)
+        request_opts = self._request_options_kwargs(config)
 
         try:
             response = await model.generate_content_async(
                 content,
                 tools=google_tools,
+                **request_opts,
             )
 
             text_parts = []
@@ -297,6 +319,7 @@ class GoogleProvider(AbstractLLMProvider):
         if tools:
             prepared = [self.prepare_tool(t) for t in tools]
             kwargs["tools"] = [genai.types.Tool(function_declarations=prepared)]
+        kwargs.update(self._request_options_kwargs(config))
 
         content = self._build_content_parts(prompt, config)
         try:
