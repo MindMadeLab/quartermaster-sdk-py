@@ -18,9 +18,8 @@ from __future__ import annotations
 
 import json
 
-from quartermaster_graph import Graph
+import quartermaster_sdk as qm
 from quartermaster_tools import ToolRegistry
-from quartermaster_engine import run_graph
 
 # ---------------------------------------------------------------------------
 # 1. Define custom tools with @tool()
@@ -127,8 +126,7 @@ print(f"\nAnthropic format: {len(anthropic_tools)} tools exported")
 tool_descriptions = json.dumps(schemas, indent=2)
 
 agent = (
-    Graph("Tool Agent")
-    .start()
+    qm.Graph("Tool Agent")
     .user("Ask something that needs a tool")
     .instruction(
         "Reason about tools",
@@ -154,11 +152,12 @@ agent = (
             "the direct answer. Be concise -- one or two sentences."
         ),
     )
-    .end()
 )
 
 # ---------------------------------------------------------------------------
 # 5. Run the graph
 # ---------------------------------------------------------------------------
 
-run_graph(agent, user_input="What is the capital of Japan and what's the weather there?")
+qm.run_graph(
+    agent, user_input="What is the capital of Japan and what's the weather there?"
+)

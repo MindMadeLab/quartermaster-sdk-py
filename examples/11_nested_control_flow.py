@@ -14,48 +14,58 @@ Usage:
 
 from __future__ import annotations
 
-from quartermaster_graph import Graph
-from quartermaster_engine import run_graph
+import quartermaster_sdk as qm
 
 agent = (
-    Graph("Whiteboard Agent")
-    .start()
+    qm.Graph("Whiteboard Agent")
     .user("Describe your task")
-    .instruction("Analyse input", model="claude-haiku-4-5-20251001", system_instruction="Break the task into components for parallel processing")
-
+    .instruction(
+        "Analyse input",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Break the task into components for parallel processing",
+    )
     # --- Parallel fan-out: 3 branches with nested control flow ----------------
     .parallel("Fan out")
-
     # Branch A: deep analysis pipeline
     .branch()
-        .text("Prepare context", template="Task context: {{user_input}}")
-        .instruction("Deep analysis", model="claude-haiku-4-5-20251001", system_instruction="Perform thorough analysis of the task")
+    .text("Prepare context", template="Task context: {{user_input}}")
+    .instruction(
+        "Deep analysis",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Perform thorough analysis of the task",
+    )
     .end()
-
     # Branch B: independent lightweight check (pass-through)
     .branch()
-        .instruction("Quick check", model="claude-haiku-4-5-20251001", system_instruction="Perform a fast independent assessment")
+    .instruction(
+        "Quick check",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Perform a fast independent assessment",
+    )
     .end()
-
     # Branch C: conditional quality gate (IF picks one path — no merge needed)
     .branch()
-        .if_node("Confidence high?", expression="confidence > 0.7")
-        .on("true")
-            .text("Accept result", template="Result meets confidence threshold -- approved")
-        .end()
-        .on("false")
-            .text("Flag for review", template="Low confidence -- manual review recommended")
-        .end()
-        # IF branches converge on this static node, which becomes the branch endpoint
-        .static("Quality gate result", text="Quality gate complete")
+    .if_node("Confidence high?", expression="confidence > 0.7")
+    .on("true")
+    .text("Accept result", template="Result meets confidence threshold -- approved")
     .end()
-
+    .on("false")
+    .text("Flag for review", template="Low confidence -- manual review recommended")
+    .end()
+    # IF branches converge on this static node, which becomes the branch endpoint
+    .static("Quality gate result", text="Quality gate complete")
+    .end()
     .static_merge("Combine all branches")
-
     # --- Final synthesis -------------------------------------------------------
-    .summarize("Final synthesis", model="claude-haiku-4-5-20251001", system_instruction="Combine all branch results into a coherent response")
-    .end()
+    .summarize(
+        "Final synthesis",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Combine all branch results into a coherent response",
+    )
 )
 
 # Execute with a real LLM
-run_graph(agent, user_input="Design a Python microservice that handles user authentication with JWT tokens and rate limiting")
+qm.run_graph(
+    agent,
+    user_input="Design a Python microservice that handles user authentication with JWT tokens and rate limiting",
+)

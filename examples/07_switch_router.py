@@ -11,23 +11,54 @@ Usage:
 
 from __future__ import annotations
 
-from quartermaster_graph import Graph
-from quartermaster_engine import run_graph
+import quartermaster_sdk as qm
 
 # Multi-language support agent with switch-style routing
 agent = (
-    Graph("Multi-Language Agent")
-    .start()
+    qm.Graph("Multi-Language Agent")
     .user("Enter your message")
-    .instruction("Detect language", model="claude-haiku-4-5-20251001", system_instruction="Detect the language. Output: en/es/fr/de/other")
+    .instruction(
+        "Detect language",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Detect the language. Output: en/es/fr/de/other",
+    )
     .decision("Language?", options=["en", "es", "fr", "de", "other"])
-    .on("en").instruction("English handler", model="claude-haiku-4-5-20251001", system_instruction="Respond in English").end()
-    .on("es").instruction("Spanish handler", model="claude-haiku-4-5-20251001", system_instruction="Responde en espanol").end()
-    .on("fr").instruction("French handler", model="claude-haiku-4-5-20251001", system_instruction="Repondez en francais").end()
-    .on("de").instruction("German handler", model="claude-haiku-4-5-20251001", system_instruction="Antworten Sie auf Deutsch").end()
-    .on("other").instruction("Fallback", model="claude-haiku-4-5-20251001", system_instruction="Respond in English, note language").end()
-    # No merge -- decision picks one language branch, they converge on End.
+    .on("en")
+    .instruction(
+        "English handler",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Respond in English",
+    )
     .end()
+    .on("es")
+    .instruction(
+        "Spanish handler",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Responde en espanol",
+    )
+    .end()
+    .on("fr")
+    .instruction(
+        "French handler",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Repondez en francais",
+    )
+    .end()
+    .on("de")
+    .instruction(
+        "German handler",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Antworten Sie auf Deutsch",
+    )
+    .end()
+    .on("other")
+    .instruction(
+        "Fallback",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Respond in English, note language",
+    )
+    .end()
+    # No merge -- decision picks one language branch, they converge on the (implicit) end.
 )
 
-run_graph(agent, user_input="Bonjour, comment allez-vous aujourd'hui?")
+qm.run_graph(agent, user_input="Bonjour, comment allez-vous aujourd'hui?")

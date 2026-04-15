@@ -412,6 +412,28 @@ def _tool_definitions(tool_registry: Any) -> list[dict[str, Any]] | None:
     return None
 
 
+#: Provider-specific tool-namespace prefixes that should be stripped before
+#: looking the tool up in the registry.  Gemma-family models go through
+#: Ollama's OpenAI-compat proxy and emit ``default_api:list_orders``; the
+#: OpenAI native wire format uses ``functions:list_orders``; the MCP bridge
+#: emits ``mcp:foo``.  All three resolve to the same registered tool name.
+_TOOL_NAME_PREFIXES: tuple[str, ...] = (
+    "default_api:",
+    "default_api.",
+    "functions:",
+    "functions.",
+    "mcp:",
+)
+
+
+def _normalise_tool_name(tool_name: str) -> str:
+    """Strip provider-specific namespace prefixes from a tool call's name."""
+    for prefix in _TOOL_NAME_PREFIXES:
+        if tool_name.startswith(prefix):
+            return tool_name[len(prefix) :]
+    return tool_name
+
+
 def _execute_tool_call(tool_registry: Any, tool_name: str, parameters: dict) -> str:
     """Run one tool from the registry and serialise its result for the LLM.
 
@@ -423,26 +445,31 @@ def _execute_tool_call(tool_registry: Any, tool_name: str, parameters: dict) -> 
     """
     if tool_registry is None:
         return f"[ERROR: no tool registry available to execute '{tool_name}']"
+    # Strip ``default_api:`` / ``functions:`` / ``mcp:`` prefixes that
+    # different providers attach to the function name.  Without this the
+    # registry lookup would miss a tool that's registered under the bare
+    # name — a recurring integrator complaint before v0.2.0.
+    normalised = _normalise_tool_name(tool_name)
     try:
-        tool = tool_registry.get(tool_name)
+        tool = tool_registry.get(normalised)
     except Exception as exc:
-        logger.warning("Tool lookup failed for %r: %s", tool_name, exc)
-        return f"[ERROR: tool '{tool_name}' not found]"
+        logger.warning("Tool lookup failed for %r: %s", normalised, exc)
+        return f"[ERROR: tool '{normalised}' not found]"
     safe_run = getattr(tool, "safe_run", None) or getattr(tool, "run", None)
     if safe_run is None:
-        return f"[ERROR: tool '{tool_name}' has no run() method]"
+        return f"[ERROR: tool '{normalised}' has no run() method]"
     try:
         result = safe_run(**parameters)
     except Exception as exc:
-        logger.warning("Tool %r raised during execution: %s", tool_name, exc)
-        return f"[ERROR: tool '{tool_name}' execution failed]"
+        logger.warning("Tool %r raised during execution: %s", normalised, exc)
+        return f"[ERROR: tool '{normalised}' execution failed]"
     # ToolResult duck-typing: prefer .data, fall back to str().
     if hasattr(result, "success") and not result.success:
         # Tool itself returned a structured failure — these errors come from
         # the tool's own validation/business logic and are safe to surface,
         # but log them too for ops visibility.
         err = getattr(result, "error", "tool failed")
-        logger.info("Tool %r returned error result: %s", tool_name, err)
+        logger.info("Tool %r returned error result: %s", normalised, err)
         return f"[ERROR: {err}]"
     if hasattr(result, "data"):
         return str(result.data)

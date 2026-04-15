@@ -18,30 +18,32 @@ Usage:
 
 from __future__ import annotations
 
-from quartermaster_graph import Graph
-from quartermaster_engine import run_graph
+import quartermaster_sdk as qm
 
 agent = (
-    Graph("Customer Service Agent")
-    .start()
-
+    qm.Graph("Customer Service Agent")
     # --- Step 1: Collect customer name ----------------------------------------
     .user("What is your name?")
     .var("Capture name", variable="customer_name")
     .write_memory("Remember customer", memory_name="customer_name")
-
     # --- Step 2: Personalised greeting using a text template ------------------
-    .text("Greeting", template="Hello {{customer_name}}, welcome to support! How can I help?")
-
+    .text(
+        "Greeting",
+        template="Hello {{customer_name}}, welcome to support! How can I help?",
+    )
     # --- Step 3: Collect and store the issue -----------------------------------
     .user("Describe your issue")
     .var("Capture issue", variable="issue_description")
     .write_memory(
         "Create ticket",
         memory_name="support_ticket",
-        variables=[{"name": "issue_description", "value": "status:open | issue:{{issue_description}}"}],
+        variables=[
+            {
+                "name": "issue_description",
+                "value": "status:open | issue:{{issue_description}}",
+            }
+        ],
     )
-
     # --- Step 4: Read back customer name for personalised resolution ----------
     .read_memory("Recall customer", memory_name="customer_name")
     .instruction(
@@ -52,21 +54,23 @@ agent = (
             "Their issue: {{issue_description}}. Provide a clear, empathetic resolution."
         ),
     )
-
     # --- Step 5: Update ticket and log interaction ----------------------------
     .update_memory("Close ticket", memory_name="support_ticket")
     .write_memory(
         "Log interaction",
         memory_name="interaction_log",
-        variables=[{"name": "interaction", "value": "resolved | customer:{{customer_name}} | issue:{{issue_description}}"}],
+        variables=[
+            {
+                "name": "interaction",
+                "value": "resolved | customer:{{customer_name}} | issue:{{issue_description}}",
+            }
+        ],
     )
-
     # --- Step 6: Farewell -----------------------------------------------------
     .text(
         "Farewell",
         template="Thank you {{customer_name}}! Your ticket has been resolved.",
     )
-    .end()
 )
 
-run_graph(agent, user_input="Alice")
+qm.run_graph(agent, user_input="Alice")

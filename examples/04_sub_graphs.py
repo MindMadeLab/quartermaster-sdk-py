@@ -12,42 +12,66 @@ Usage:
 
 from __future__ import annotations
 
-from quartermaster_graph import Graph
-from quartermaster_engine import run_graph
+import quartermaster_sdk as qm
 
 # --- Reusable sub-graphs ---------------------------------------------------
 
 research_flow = (
-    Graph("Research")
-    .start()
-    .instruction("Search web", model="claude-haiku-4-5-20251001", system_instruction="Find relevant information")
-    .instruction("Summarize findings", model="claude-haiku-4-5-20251001", system_instruction="Create a concise summary")
-    .end()
+    qm.Graph("Research")
+    .instruction(
+        "Search web",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Find relevant information",
+    )
+    .instruction(
+        "Summarize findings",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Create a concise summary",
+    )
 )
 
 code_review_flow = (
-    Graph("Code Review")
-    .start()
-    .instruction("Analyze code", model="claude-haiku-4-5-20251001", system_instruction="Review code for bugs and style")
-    .instruction("Generate suggestions", model="claude-haiku-4-5-20251001", system_instruction="Suggest improvements")
-    .end()
+    qm.Graph("Code Review")
+    .instruction(
+        "Analyze code",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Review code for bugs and style",
+    )
+    .instruction(
+        "Generate suggestions",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Suggest improvements",
+    )
 )
 
 # --- Compose into a main agent ---------------------------------------------
 
 agent = (
-    Graph("Dev Assistant")
-    .start()
+    qm.Graph("Dev Assistant")
     .user("What do you need help with?")
     .decision("Task type?", options=["research", "code_review", "chat"])
-    .on("research").use(research_flow).end()
-    .on("code_review").use(code_review_flow).end()
+    .on("research")
+    .use(research_flow)
+    .end()
+    .on("code_review")
+    .use(code_review_flow)
+    .end()
     .on("chat")
-        .instruction("Chat", model="claude-haiku-4-5-20251001", system_instruction="Have a helpful conversation")
+    .instruction(
+        "Chat",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Have a helpful conversation",
+    )
     .end()
     # No merge -- decision picks ONE branch.
-    .instruction("Deliver answer", model="claude-haiku-4-5-20251001", system_instruction="Present the final result clearly")
-    .end()
+    .instruction(
+        "Deliver answer",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Present the final result clearly",
+    )
 )
 
-run_graph(agent, user_input="Research the latest trends in WebAssembly for server-side applications")
+qm.run_graph(
+    agent,
+    user_input="Research the latest trends in WebAssembly for server-side applications",
+)

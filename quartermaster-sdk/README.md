@@ -24,32 +24,67 @@ ollama pull gemma4:26b      # or any model you've pulled
 ```
 
 ```python
-from quartermaster_sdk import Graph, FlowRunner, register_local
+import quartermaster_sdk as qm
 
-provider_registry = register_local(
-    "ollama",
+qm.configure(
+    provider="ollama",
     base_url="http://localhost:11434",   # or set $OLLAMA_HOST
     default_model="gemma4:26b",
 )
 
-graph = Graph("chat").start().user().agent().end().build()
-runner = FlowRunner(graph=graph, provider_registry=provider_registry)
-result = runner.run("Pozdravljen, koliko je ura?")
-print(result.final_output)
+# Graph() auto-creates Start; .end() / .build() are both optional when running via qm.run().
+result = qm.run(qm.Graph("chat").user().agent(), "Pozdravljen, koliko je ura?")
+print(result.text)
+```
+
+## Single-shot helpers (no graph visible)
+
+```python
+# prompt → str
+reply = qm.instruction(system="Respond in Slovenian.", user="Pozdravljen!")
+
+# prompt → Pydantic model (typed JSON extraction)
+from pydantic import BaseModel
+
+class Classification(BaseModel):
+    category: str
+    priority: str
+
+data = qm.instruction_form(Classification, system="Classify.", user=email_body)
+```
+
+## Reading specific node outputs with `capture_as=`
+
+```python
+graph = (
+    qm.Graph("enrich")
+    .agent("Research", tools=[...], capture_as="notes")
+    .instruction_form(CustomerData, system="Extract.", capture_as="data")
+)
+result = qm.run(graph, "VT-Treyd Slovenija")
+result["notes"].output_text    # agent's free-text research
+result["data"].output_text     # extracted JSON
+```
+
+## Streaming
+
+```python
+for chunk in qm.run.stream(qm.Graph("chat").user().agent(), "Tell me a story"):
+    if chunk.type == "token":
+        print(chunk.content, end="", flush=True)
+    elif chunk.type == "done":
+        final = chunk.result    # qm.Result
 ```
 
 ## Quick Start (cloud provider)
 
 ```python
-from quartermaster_sdk import Graph
-
 agent = (
-    Graph("My Agent")
-    .start()
+    qm.Graph("My Agent")
     .user("What can I help you with?")
     .instruction("Respond", model="gpt-4o", system_instruction="You are a helpful assistant.")
-    .end()
 )
+result = qm.run(agent, "How does photosynthesis work?")
 ```
 
 ## Sync chat shim (no graph needed)
