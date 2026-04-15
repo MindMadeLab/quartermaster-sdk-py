@@ -7,7 +7,7 @@ from the simplest agent to a full enterprise-grade multi-department assistant.
 
 ```bash
 # Clone the repo
-git clone git@github.com:MindMadeLab/quartermaster-sdk-py.git
+git clone https://github.com/MindMadeLab/quartermaster-sdk-py.git
 cd quartermaster-sdk-py
 
 # Install uv (if you don't have it)
@@ -20,8 +20,21 @@ uv sync
 uv run examples/01_hello_agent.py
 ```
 
-All examples (except `run_interactive.py`) build and validate graphs offline
--- no API keys or LLM calls needed.
+### Which examples need API keys?
+
+Most examples hardcode a cloud provider in their node metadata, so they need a
+real API key to actually demonstrate anything end-to-end. The exceptions:
+
+| Example | Why it runs without an API key |
+|---|---|
+| `06_tool_decorator.py` | Tool registry + JSON schema export — no LLM call |
+| `09_parallel_agents.py` | `SessionManager` simulation, no LLM call |
+| `17_streaming_events.py` | Uses a mock executor for the LLM node |
+| `20_ollama_local.py` | Hits a local Ollama instance (start `ollama serve` and pull `gemma4:26b`) |
+
+The remaining 16 examples need at least one of `ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY`, `GROQ_API_KEY`, or `XAI_API_KEY` set — without keys, the
+graph still builds and validates but the LLM nodes return failures.
 
 ### API Keys
 
