@@ -46,8 +46,8 @@ pip install quartermaster-code-runner
 ### From Source
 
 ```bash
-git clone https://github.com/MindMade/quartermaster-opensource.git
-cd quartermaster-opensource
+git clone https://github.com/MindMadeLab/quartermaster-sdk-py.git
+cd quartermaster-sdk-py
 
 # Install a specific package in development mode
 pip install -e ./quartermaster-graph

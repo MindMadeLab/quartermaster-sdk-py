@@ -1,12 +1,13 @@
 # Quartermaster
 
-[![CI](https://github.com/MindMade/quartermaster/actions/workflows/ci.yml/badge.svg)](https://github.com/MindMade/quartermaster/actions/workflows/ci.yml)
+[![CI](https://github.com/MindMadeLab/quartermaster-sdk-py/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/MindMadeLab/quartermaster-sdk-py/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/quartermaster-sdk.svg)](https://pypi.org/project/quartermaster-sdk/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
 Modular AI agent orchestration framework. Build agent workflows as directed graphs, wire them with a fluent Python API, and run them with any LLM provider.
 
-Built by [MindMade](https://mindmade.si) in Slovenia.
+Built by [MindMade](https://mindmade.io) in Slovenia.
 
 ## Install
 
@@ -26,9 +27,27 @@ uv sync
 
 ## Quick Start
 
-```python
-from quartermaster_sdk import Graph
+The simplest possible graph — `start → user → agent → end` — running against a
+local Ollama in three lines:
 
+```python
+from quartermaster_sdk import Graph, FlowRunner, register_local
+
+provider_registry = register_local(
+    "ollama",
+    base_url="http://localhost:11434",   # or set $OLLAMA_HOST
+    default_model="gemma4:26b",
+)
+
+graph = Graph("chat").start().user().agent().end().build()
+runner = FlowRunner(graph=graph, provider_registry=provider_registry)
+result = runner.run("Pozdravljen, koliko je ura?")
+print(result.final_output)
+```
+
+For richer flows you keep the explicit per-node configuration:
+
+```python
 agent = (
     Graph("My Agent")
     .start()
@@ -37,6 +56,33 @@ agent = (
     .end()
 )
 ```
+
+### Sync `OllamaProvider.chat()` for non-graph callers
+
+For email classification, OCR pipelines, Celery workers, Django views — anything
+where you'd rather call an LLM than build a graph — use the synchronous native
+shim. Talks Ollama's `/api/chat` directly via `httpx`, no `async_to_sync` wrapper:
+
+```python
+from quartermaster_providers.providers.local import OllamaProvider
+
+provider = OllamaProvider(default_model="gemma4:26b")  # honours $OLLAMA_HOST
+result = provider.chat(
+    messages=[
+        {"role": "system", "content": "Respond in Slovenian. Keep it short."},
+        {"role": "user", "content": "Pozdravljen, koliko je ura?"},
+    ],
+    max_output_tokens=128,        # honoured — capped at Ollama's `num_predict`
+    thinking_level="off",         # off / low / medium / high
+)
+print(result.content)             # promoted from `reasoning` if `content` is empty
+print(result.tool_calls)          # list[ToolCall]
+print(result.usage)               # {prompt_tokens, completion_tokens, total_tokens}
+```
+
+`ServiceUnavailableError` raises on connection failures (instead of silently
+returning an empty result), and `ProviderError` on HTTP errors with status code
+attached.
 
 ### Decision Routing
 
@@ -252,4 +298,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full development guide.
 
 ## License
 
-[Apache 2.0](./LICENSE) -- Built by [MindMade](https://mindmade.si) in Slovenia.
+[Apache 2.0](./LICENSE) -- Built by [MindMade](https://mindmade.io) in Slovenia.
