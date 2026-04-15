@@ -41,6 +41,12 @@ logger = logging.getLogger(__name__)
 # are not serialised — call it once at startup, not from worker threads.
 _default_registry: ProviderRegistry | None = None
 _default_model: str | None = None
+# v0.4.0 application-level LLM timeouts. ``None`` means "leave the
+# provider SDK's default behaviour untouched" — per-call overrides on
+# ``qm.run(..., read_timeout=...)`` still win via the runner's
+# resolution path.
+_default_connect_timeout: float | None = None
+_default_read_timeout: float | None = None
 
 
 def configure(
@@ -50,6 +56,10 @@ def configure(
     api_key: str | None = None,
     default_model: str | None = None,
     registry: ProviderRegistry | None = None,
+    ollama_tool_protocol: str = "auto",
+    timeout: float | None = None,
+    connect_timeout: float | None = None,
+    read_timeout: float | None = None,
 ) -> ProviderRegistry:
     """Bind a default provider registry for subsequent ``qm.*`` calls.
 
@@ -67,12 +77,34 @@ def configure(
         registry: Hand in a fully-built registry instead of having
             ``configure`` build one.  Mutually exclusive with
             ``base_url`` / ``api_key``.
+        ollama_tool_protocol: v0.4.0 Ollama-only transport knob for
+            tool-calling requests — only consulted when
+            ``provider="ollama"``.  ``"auto"`` (default) probes
+            ``/api/tags`` and picks native ``/api/chat`` for models
+            that advertise tool support, falling back to the OpenAI-
+            compat shim for older models.  ``"native"`` forces every
+            request through ``/api/chat``.  ``"openai_compat"``
+            forces the pre-v0.4.0 behaviour (always
+            ``/v1/chat/completions``).  Introduced to kill the
+            Gemma-4 ``list_orders_v2`` / ``default_api:`` tool-name
+            hallucinations the compat shim produces.
 
     Returns:
         The bound :class:`ProviderRegistry` — useful for tests that
         want to introspect it.
     """
     global _default_registry, _default_model
+
+    # Validate the Ollama tool-protocol knob here — we want a clear
+    # ``ValueError`` at boot rather than a cryptic ``TypeError`` when
+    # ``OllamaNativeProvider.__init__`` sees an unknown value.
+    from quartermaster_providers.providers.ollama import VALID_TOOL_PROTOCOLS
+
+    if ollama_tool_protocol not in VALID_TOOL_PROTOCOLS:
+        raise ValueError(
+            f"configure(): ollama_tool_protocol={ollama_tool_protocol!r} is invalid. "
+            f"Expected one of {sorted(VALID_TOOL_PROTOCOLS)}."
+        )
 
     resolved_default_model = default_model or os.environ.get("QM_DEFAULT_MODEL")
 
@@ -85,18 +117,23 @@ def configure(
     else:
         # Let OllamaProvider pick up $OLLAMA_HOST when base_url is unset —
         # that's already the provider's documented behaviour.
-        _default_registry = register_local(
-            provider,
-            base_url=base_url,
-            api_key=api_key,
-            default_model=resolved_default_model,
-        )
+        register_kwargs: dict[str, object] = {
+            "base_url": base_url,
+            "api_key": api_key,
+            "default_model": resolved_default_model,
+        }
+        # Forward ``tool_protocol`` only to Ollama — other local
+        # engines don't know the kwarg and would reject it.
+        if provider == "ollama":
+            register_kwargs["tool_protocol"] = ollama_tool_protocol
+        _default_registry = register_local(provider, **register_kwargs)
 
     _default_model = resolved_default_model
     logger.info(
-        "quartermaster_sdk configured: provider=%s default_model=%s",
+        "quartermaster_sdk configured: provider=%s default_model=%s ollama_tool_protocol=%s",
         provider,
         resolved_default_model,
+        ollama_tool_protocol if provider == "ollama" else "n/a",
     )
     return _default_registry
 
@@ -143,16 +180,35 @@ def get_default_model() -> str | None:
     return None
 
 
+def get_default_timeouts() -> dict[str, float | None]:
+    """Return the configure-time LLM call timeout defaults.
+
+    v0.4.0 plumbing — ``_runner.py`` calls this to merge
+    configure-time defaults with per-call overrides. Both keys
+    default to ``None`` meaning "leave the provider SDK default
+    untouched"; :func:`configure` populates them when the caller
+    passed ``timeout=`` / ``connect_timeout=`` / ``read_timeout=``.
+    """
+    return {
+        "connect_timeout": _default_connect_timeout,
+        "read_timeout": _default_read_timeout,
+    }
+
+
 def reset_config() -> None:
     """Clear the configured registry — used by tests to start fresh."""
     global _default_registry, _default_model
+    global _default_connect_timeout, _default_read_timeout
     _default_registry = None
     _default_model = None
+    _default_connect_timeout = None
+    _default_read_timeout = None
 
 
 __all__ = [
     "configure",
     "get_default_registry",
     "get_default_model",
+    "get_default_timeouts",
     "reset_config",
 ]
