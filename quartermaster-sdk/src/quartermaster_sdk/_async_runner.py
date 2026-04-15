@@ -29,15 +29,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING, Any, AsyncIterator
 from uuid import uuid4
 
 from quartermaster_engine import FlowEvent, FlowRunner
 
+from . import _listeners
 from ._chunks import Chunk, DoneChunk, ErrorChunk
 from ._config import get_default_registry
 from ._result import Result
 from ._runner import _event_to_chunk, _resolve_graph
+from ._stream_filters import _AsyncStream
+from ._trace import Trace
 
 if TYPE_CHECKING:
     from quartermaster_graph import GraphBuilder, GraphSpec
@@ -85,6 +89,11 @@ class _ARunCallable:
             graph=spec,
             provider_registry=registry,
             tool_registry=tool_registry,
+            # Forward every event to the global listener registry so
+            # bolt-on instrumentation (e.g. ``qm.telemetry.instrument()``)
+            # observes the same FlowEvent stream the streaming runner
+            # gets — even though there's no consumer queue here.
+            on_event=_listeners.dispatch,
         )
         # Pre-generate so the async cancel handler has something to stop,
         # even if the to_thread() call hasn't entered ``runner.run`` yet.
@@ -108,15 +117,22 @@ class _ARunCallable:
 
         return Result.from_flow_result(fr)
 
-    async def stream(
+    def stream(
         self,
         graph: GraphBuilder | GraphSpec,
         user_input: str = "",
         *,
         provider_registry: ProviderRegistry | None = None,
         tool_registry: Any | None = None,
-    ) -> AsyncIterator[Chunk]:
+    ) -> _AsyncStream:
         """Run the graph and yield typed :class:`Chunk` events as they arrive.
+
+        Returns an :class:`_AsyncStream` wrapper that is itself
+        async-iterable (so existing ``async for chunk in
+        qm.arun.stream(...)`` loops work unchanged) and exposes filter
+        helpers — ``.tokens()``, ``.tool_calls()``, ``.progress()``,
+        ``.custom(name=...)`` — for the common "pluck one chunk type
+        out of the stream" patterns.
 
         Terminates with a :class:`DoneChunk` (on success) or
         :class:`ErrorChunk` (on unrecoverable failure).  The graph
@@ -133,6 +149,26 @@ class _ARunCallable:
         loops unwind within a bounded time instead of leaking API costs
         after the consumer goes away.
         """
+        return _AsyncStream(self._aiter_chunks(
+            graph=graph,
+            user_input=user_input,
+            provider_registry=provider_registry,
+            tool_registry=tool_registry,
+        ))
+
+    async def _aiter_chunks(
+        self,
+        graph: GraphBuilder | GraphSpec,
+        user_input: str = "",
+        *,
+        provider_registry: ProviderRegistry | None = None,
+        tool_registry: Any | None = None,
+    ) -> AsyncIterator[Chunk]:
+        """Inner async generator that powers :meth:`stream`.
+
+        Kept private: callers always go through ``stream()`` which
+        wraps the result in :class:`_AsyncStream` for filter support.
+        """
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
 
@@ -146,6 +182,10 @@ class _ARunCallable:
         flow_id = uuid4()
 
         def on_event(event: FlowEvent) -> None:
+            # Fan out to bolt-on instrumentation (telemetry, custom
+            # listeners, etc.) on the engine's worker thread BEFORE
+            # marshalling the event back to the consumer's loop.
+            _listeners.dispatch(event)
             # Called from the engine's worker threads.  Hop back to the
             # consumer's loop so Queue.put() touches only loop-owned
             # state — ``asyncio.Queue`` is not thread-safe.
