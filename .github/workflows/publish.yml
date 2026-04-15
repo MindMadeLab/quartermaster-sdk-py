@@ -124,9 +124,33 @@ jobs:
             fi
           done
 
-          # Update SDK __init__.py
-          sed -i "s/^__version__ = \".*\"/__version__ = \"$NEW_VERSION\"/" \
+          # Update the workspace root pyproject.toml too — it's not in
+          # the publishable package list but it carries its own version
+          # field that drifts otherwise (caught in the v0.1.4 audit).
+          sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" pyproject.toml
+          echo "  Updated pyproject.toml -> $NEW_VERSION"
+
+          # Update every package's __init__.py __version__ string.  The
+          # publish workflow used to update only the SDK's, leaving the
+          # other 7 packages stale at the previous release — caught in
+          # the v0.1.4 audit (see PR #9).  This keeps ``import quartermaster_X;
+          # quartermaster_X.__version__`` honest for every sub-package.
+          INIT_PATHS=(
+            quartermaster-providers/src/quartermaster_providers/__init__.py
+            quartermaster-graph/src/quartermaster_graph/__init__.py
+            quartermaster-tools/src/quartermaster_tools/__init__.py
+            quartermaster-nodes/quartermaster_nodes/__init__.py
+            quartermaster-engine/src/quartermaster_engine/__init__.py
+            quartermaster-mcp-client/src/quartermaster_mcp_client/__init__.py
+            quartermaster-code-runner/src/quartermaster_code_runner/__init__.py
             quartermaster-sdk/src/quartermaster_sdk/__init__.py
+          )
+          for INIT in "${INIT_PATHS[@]}"; do
+            if [ -f "$INIT" ]; then
+              sed -i "s/^__version__ = \".*\"/__version__ = \"$NEW_VERSION\"/" "$INIT"
+              echo "  Updated $INIT -> $NEW_VERSION"
+            fi
+          done
 
           # Update cross-package dependency pins (>=X.Y.Z)
           for pkg in "${PACKAGES[@]}"; do

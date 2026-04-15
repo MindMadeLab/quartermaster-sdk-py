@@ -14,8 +14,8 @@ Thank you for considering a contribution to Quartermaster! This document explain
 ### Clone the repository
 
 ```bash
-git clone https://github.com/MindMade/quartermaster.git
-cd quartermaster
+git clone https://github.com/MindMadeLab/quartermaster-sdk-py.git
+cd quartermaster-sdk-py
 ```
 
 ### Install with uv (recommended)

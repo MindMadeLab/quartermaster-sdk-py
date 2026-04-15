@@ -78,3 +78,7 @@ Issues = "https://github.com/MindMadeLab/quartermaster-sdk-py/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quartermaster_sdk"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
