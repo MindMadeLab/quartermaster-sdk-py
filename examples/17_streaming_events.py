@@ -1,4 +1,4 @@
-"""Example 18 -- FlowRunner with event streaming.
+"""Example 17 -- FlowRunner with event streaming.
 
 Demonstrates using FlowRunner directly (not run_graph()) with custom event
 handling, showing the production-grade API. Uses a mock executor so no API
@@ -11,37 +11,41 @@ Event types shown:
   - FlowFinished  -- the entire flow completes
 
 Usage:
-    uv run examples/18_streaming_events.py
+    uv run examples/17_streaming_events.py
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime
 
 from quartermaster_engine import (
+    ExecutionContext,
     FlowEvent,
     FlowFinished,
+    FlowRunner,
     InMemoryStore,
     NodeFinished,
+    NodeResult,
     NodeStarted,
+    SimpleNodeRegistry,
     TokenGenerated,
 )
-from quartermaster_engine.nodes import NodeResult, SimpleNodeRegistry
-from quartermaster_engine.context.execution_context import ExecutionContext
-from quartermaster_engine.runner.flow_runner import FlowRunner
 from quartermaster_graph import Graph
+from quartermaster_graph.enums import NodeType
 
 
 # ---------------------------------------------------------------------------
 # 1. Mock executor -- no LLM needed
 # ---------------------------------------------------------------------------
 
+
 class MockLLMExecutor:
     """A mock node executor that simulates streaming token output."""
 
-    def __init__(self, response: str = "This is a mock response showing event streaming.") -> None:
+    def __init__(
+        self, response: str = "This is a mock response showing event streaming."
+    ) -> None:
         self._response = response
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
@@ -87,11 +91,17 @@ registry = SimpleNodeRegistry()
 passthrough = PassthroughExecutor()
 mock_llm = MockLLMExecutor()
 
-# Register executors for each node type the graph uses
-registry.register("Start", passthrough)
-registry.register("End", passthrough)
-registry.register("UserInput", passthrough)
-registry.register("Instruction1", mock_llm)
+# Register executors for each node type the graph uses.  Use NodeType
+# enum values rather than magic strings — the actual enum values are
+# "User1" / "Instruction1" / etc. (the magic-string version below used
+# to ship "UserInput" / "Start" / "End" which silently never matched,
+# producing a "No executor registered for node type: User1" error at
+# runtime).  Start/End are handled by the runner internally so we don't
+# strictly need to register them, but doing so is harmless.
+registry.register(NodeType.START.value, passthrough)
+registry.register(NodeType.END.value, passthrough)
+registry.register(NodeType.USER.value, passthrough)
+registry.register(NodeType.INSTRUCTION.value, mock_llm)
 
 # ---------------------------------------------------------------------------
 # 4. Custom event handler with timestamps
@@ -116,7 +126,11 @@ def on_event(event: FlowEvent) -> None:
         output = event.result[:60] + "..." if len(event.result) > 60 else event.result
         print(f"{ts}  NODE FINISHED  | output={output!r}")
     elif isinstance(event, FlowFinished):
-        output = event.final_output[:60] + "..." if len(event.final_output) > 60 else event.final_output
+        output = (
+            event.final_output[:60] + "..."
+            if len(event.final_output) > 60
+            else event.final_output
+        )
         print(f"{ts}  FLOW FINISHED  | final={output!r}")
 
 
