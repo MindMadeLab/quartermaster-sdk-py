@@ -697,6 +697,27 @@ class TestIfExecutor:
         assert result.output_text == "true"
         assert result.success
 
+    def test_dunder_escape_blocked(self):
+        """Regression for the v0.1.2 security review: an attacker who can
+        write a node's ``if_expression`` cannot reach arbitrary code via
+        the well-known ``().__class__.__bases__[0].__subclasses__()``
+        escape — safe_eval (simpleeval) blocks dunder attribute access."""
+        payload = "().__class__.__bases__[0].__subclasses__()"
+        ctx = _make_context(node_metadata={"if_expression": payload}, memory={})
+        result = _run(IfExecutor().execute(ctx))
+        # The expression must be rejected, not executed. We pick the
+        # "false" branch on rejection, exactly like a divide-by-zero.
+        assert result.picked_node == "false"
+
+    def test_import_call_blocked(self):
+        """Calling ``__import__('os')`` (or any import) must be rejected."""
+        ctx = _make_context(
+            node_metadata={"if_expression": "__import__('os').system('echo pwn')"},
+            memory={},
+        )
+        result = _run(IfExecutor().execute(ctx))
+        assert result.picked_node == "false"
+
     def test_zero_is_falsy(self):
         ctx = _make_context(
             node_metadata={"if_expression": "0"},
@@ -720,6 +741,32 @@ class TestIfExecutor:
         )
         result = _run(IfExecutor().execute(ctx))
         assert result.picked_node == "false"
+
+
+class TestVarExecutorSandbox:
+    """Security regression tests for VarExecutor's safe_eval swap."""
+
+    def test_dunder_escape_falls_back_to_literal(self):
+        """The classic ``__class__.__bases__`` escape must be rejected;
+        the variable falls back to the literal expression string (the
+        documented behaviour when safe_eval refuses the input)."""
+        payload = "().__class__.__bases__[0].__subclasses__()"
+        ctx = _make_context(
+            node_metadata={"name": "v", "expression": payload},
+            memory={},
+        )
+        result = _run(VarExecutor().execute(ctx))
+        assert result.success
+        assert result.data["memory_updates"]["v"] == payload
+
+    def test_import_call_falls_back_to_literal(self):
+        ctx = _make_context(
+            node_metadata={"name": "v", "expression": "__import__('os')"},
+            memory={},
+        )
+        result = _run(VarExecutor().execute(ctx))
+        assert result.success
+        assert result.data["memory_updates"]["v"] == "__import__('os')"
 
 
 # ===================================================================

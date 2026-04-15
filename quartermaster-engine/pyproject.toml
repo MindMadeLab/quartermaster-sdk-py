@@ -26,6 +26,12 @@ classifiers = [
 ]
 dependencies = [
     "quartermaster-graph>=0.1.2",
+    "quartermaster-providers>=0.1.2",
+    # ``quartermaster-nodes`` ships ``safe_eval`` (a simpleeval sandbox)
+    # which the example runner uses for ``Var``/``If``/``Switch`` node
+    # expression evaluation.  Pre-0.1.2 this was an implicit workspace
+    # dep — it would ImportError when installed standalone.
+    "quartermaster-nodes>=0.1.2",
 ]
 
 [project.optional-dependencies]
