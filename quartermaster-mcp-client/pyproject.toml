@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quartermaster-mcp-client"
-version = "0.1.6"
+version = "0.2.0"
 description = "Lightweight MCP (Model Context Protocol) client with async/sync support, SSE and Streamable HTTP transports"
 readme = "README.md"
 license = "Apache-2.0"

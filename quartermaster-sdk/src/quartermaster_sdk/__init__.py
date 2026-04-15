@@ -18,7 +18,7 @@ Optional extras:
 - pip install quartermaster-sdk[all]           — Everything
 """
 
-__version__ = "0.1.6"
+__version__ = "0.2.0"
 
 # Re-export the most common entry points for convenience.  Pre-0.1.4 the SDK
 # re-exported only the graph-builder surface, forcing downstream callers to
