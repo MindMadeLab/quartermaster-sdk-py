@@ -187,14 +187,16 @@ class _ARunCallable:
         loops unwind within a bounded time instead of leaking API costs
         after the consumer goes away.
         """
-        return _AsyncStream(self._aiter_chunks(
-            graph=graph,
-            user_input=user_input,
-            image=image,
-            images=images,
-            provider_registry=provider_registry,
-            tool_registry=tool_registry,
-        ))
+        return _AsyncStream(
+            self._aiter_chunks(
+                graph=graph,
+                user_input=user_input,
+                image=image,
+                images=images,
+                provider_registry=provider_registry,
+                tool_registry=tool_registry,
+            )
+        )
 
     async def _aiter_chunks(
         self,
@@ -288,21 +290,15 @@ class _ARunCallable:
                 try:
                     runner.stop(flow_id)
                 except Exception:  # pragma: no cover — defensive
-                    logger.exception(
-                        "arun.stream: runner.stop(%s) raised", flow_id
-                    )
+                    logger.exception("arun.stream: runner.stop(%s) raised", flow_id)
                 # Wait (bounded) for the worker thread to observe the
                 # ``_stopped`` flag and return.  If it overshoots we let
                 # the task leak rather than blocking the event loop
                 # indefinitely — matches the 5s join() on the sync side.
                 try:
-                    await asyncio.wait_for(
-                        asyncio.shield(run_task), timeout=5.0
-                    )
+                    await asyncio.wait_for(asyncio.shield(run_task), timeout=5.0)
                 except asyncio.TimeoutError:  # pragma: no cover — defensive
-                    logger.warning(
-                        "arun.stream: runner thread did not exit within 5s"
-                    )
+                    logger.warning("arun.stream: runner thread did not exit within 5s")
                 except asyncio.CancelledError:
                     # Expected when the outer task was cancelled — let
                     # the shielded run_task keep going in the background

@@ -274,7 +274,9 @@ def _finish_tool_span(event: ToolCallFinished) -> None:
     span.end()
 
 
-def _record_event_on_active_span(event: FlowEvent, name: str, attrs: dict[str, Any]) -> None:
+def _record_event_on_active_span(
+    event: FlowEvent, name: str, attrs: dict[str, Any]
+) -> None:
     """Add an OTEL event to the active node span (preferred) or flow span."""
     with _state_lock:
         node_id = getattr(event, "node_id", None)

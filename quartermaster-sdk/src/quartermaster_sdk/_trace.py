@@ -147,8 +147,7 @@ class NodeTrace:
         return [
             event
             for event in self.events
-            if isinstance(event, CustomEvent)
-            and (name is None or event.name == name)
+            if isinstance(event, CustomEvent) and (name is None or event.name == name)
         ]
 
 
@@ -220,8 +219,7 @@ class Trace:
         return [
             event
             for event in self.events
-            if isinstance(event, CustomEvent)
-            and (name is None or event.name == name)
+            if isinstance(event, CustomEvent) and (name is None or event.name == name)
         ]
 
     def as_jsonl(self) -> str:

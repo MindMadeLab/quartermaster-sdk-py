@@ -175,7 +175,9 @@ class _ProgressEmittingTool:
         ctx = qm.current_context()
         if ctx is not None:
             if self._progress_message is not None:
-                ctx.emit_progress(self._progress_message, percent=self._progress_percent)
+                ctx.emit_progress(
+                    self._progress_message, percent=self._progress_percent
+                )
             for name, payload in self._customs:
                 ctx.emit_custom(name, payload)
 
@@ -215,10 +217,7 @@ class _ToolRegistry:
 
 def _graph_with_agent() -> Any:
     return (
-        qm.Graph("chat")
-        .user()
-        .agent("Tooled", tools=["x"], capture_as="agent")
-        .build()
+        qm.Graph("chat").user().agent("Tooled", tools=["x"], capture_as="agent").build()
     )
 
 
@@ -239,13 +238,7 @@ def test_tokens_filter_yields_strings_only():
     reg, _ = _multi_token_registry(["a", "b", "c"])
     qm.configure(registry=reg)
     # Three instruction nodes — one streamed TokenResponse per node.
-    graph = (
-        qm.Graph("x")
-        .instruction("A")
-        .instruction("B")
-        .instruction("C")
-        .build()
-    )
+    graph = qm.Graph("x").instruction("A").instruction("B").instruction("C").build()
 
     stream = qm.run.stream(graph, "hi")
     tokens = list(stream.tokens())
@@ -289,9 +282,7 @@ def test_progress_filter():
     """
     reg, _ = _tool_aware_registry(tool_name="x", tool_args={"q": "hi"})
     qm.configure(registry=reg)
-    tool = _ProgressEmittingTool(
-        progress_message="searching", progress_percent=0.5
-    )
+    tool = _ProgressEmittingTool(progress_message="searching", progress_percent=0.5)
     tool_reg = _ToolRegistry({"x": tool})
     graph = _graph_with_agent()
 
@@ -316,9 +307,7 @@ def test_custom_filter_by_name():
     """
     reg, _ = _tool_aware_registry(tool_name="x", tool_args={"q": "hi"})
     qm.configure(registry=reg)
-    tool = _ProgressEmittingTool(
-        customs=[("a", {"v": 1}), ("b", {"v": 2})]
-    )
+    tool = _ProgressEmittingTool(customs=[("a", {"v": 1}), ("b", {"v": 2})])
     tool_reg = _ToolRegistry({"x": tool})
     graph = _graph_with_agent()
 
@@ -335,9 +324,7 @@ def test_custom_filter_without_name_yields_all():
     """``.custom()`` with no ``name=`` yields every custom chunk."""
     reg, _ = _tool_aware_registry(tool_name="x", tool_args={"q": "hi"})
     qm.configure(registry=reg)
-    tool = _ProgressEmittingTool(
-        customs=[("a", {"v": 1}), ("b", {"v": 2})]
-    )
+    tool = _ProgressEmittingTool(customs=[("a", {"v": 1}), ("b", {"v": 2})])
     tool_reg = _ToolRegistry({"x": tool})
     graph = _graph_with_agent()
 
@@ -432,13 +419,7 @@ async def test_async_tokens_filter():
     ``async for token in qm.arun.stream(...).tokens()`` yields ``str``."""
     reg, _ = _multi_token_registry(["a", "b", "c"])
     qm.configure(registry=reg)
-    graph = (
-        qm.Graph("x")
-        .instruction("A")
-        .instruction("B")
-        .instruction("C")
-        .build()
-    )
+    graph = qm.Graph("x").instruction("A").instruction("B").instruction("C").build()
 
     stream = qm.arun.stream(graph, "hi")
     tokens = [t async for t in stream.tokens()]

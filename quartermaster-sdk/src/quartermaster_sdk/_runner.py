@@ -192,14 +192,16 @@ class _RunCallable:
         nodes are dispatched, so long agent loops unwind within a
         bounded time instead of leaking API costs in the background.
         """
-        return _Stream(self._iter_chunks(
-            graph=graph,
-            user_input=user_input,
-            image=image,
-            images=images,
-            provider_registry=provider_registry,
-            tool_registry=tool_registry,
-        ))
+        return _Stream(
+            self._iter_chunks(
+                graph=graph,
+                user_input=user_input,
+                image=image,
+                images=images,
+                provider_registry=provider_registry,
+                tool_registry=tool_registry,
+            )
+        )
 
     def _iter_chunks(
         self,
