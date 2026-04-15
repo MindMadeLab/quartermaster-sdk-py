@@ -18,6 +18,7 @@ Example:
 
 from quartermaster_providers.base import AbstractLLMProvider
 from quartermaster_providers.config import LLMConfig
+from quartermaster_providers.providers.local import ChatResult
 from quartermaster_providers.exceptions import (
     AuthenticationError,
     ContentFilterError,
@@ -47,7 +48,7 @@ from quartermaster_providers.types import (
     ToolDefinition,
 )
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 __author__ = "MindMade"
 
 __all__ = [
@@ -80,4 +81,6 @@ __all__ = [
     "infer_provider",
     "get_default_registry",
     "register_local",
+    # Sync chat shim result type
+    "ChatResult",
 ]

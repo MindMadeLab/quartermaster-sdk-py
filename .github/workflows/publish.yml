@@ -1,5 +1,20 @@
 name: Publish to PyPI
 
+# ⚠️ READ RELEASING.md BEFORE CLICKING "Run workflow".
+#
+# This workflow runs on whatever branch you trigger it from — usually
+# master. It does NOT merge develop into master. If develop holds the
+# real changes and master only has the previous release's version-bump
+# commits, clicking Publish ships **empty packages** (just another
+# version bump). v0.1.2 went out empty for exactly this reason.
+#
+# Required ordering for every release:
+#   1. Merge feature PRs to develop.
+#   2. Open + merge a release PR `develop -> master`.
+#   3. Click Run workflow here, branch=master, bump=patch/minor/major.
+#   4. After publish, merge `master` back into `develop` to pick up the
+#      auto-generated `Release vX.Y.Z` commit.
+#
 # Publishing is manual-only: click "Run workflow" in the Actions tab when you
 # want to cut a release. Auto-publish on every push to master was intentionally
 # removed so routine commits (docs, README tweaks, refactors) do not burn through

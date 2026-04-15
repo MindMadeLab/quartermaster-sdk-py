@@ -205,6 +205,92 @@ def _resolve_provider_and_model(
     return provider_name, model
 
 
+# ── LLM config from node metadata ──────────────────────────────────────
+
+# The DSL stores every LLM-configuration knob under one of these keys —
+# see ``quartermaster_graph.builder._llm_meta``.  ``THINKING_LEVELS``
+# mirrors ``quartermaster_nodes.base.AbstractLLMAssistantNode``: the
+# canonical Quartermaster project's mapping from a friendly level name
+# to the (enabled, budget) pair the provider config understands.
+THINKING_LEVELS: dict[str, tuple[bool, int | None]] = {
+    "off": (False, None),
+    "low": (True, 1024),
+    "medium": (True, 4096),
+    "high": (True, 16384),
+}
+
+
+def _coerce_bool(value: Any) -> bool:
+    """Coerce a metadata value to ``bool``, treating string ``"false"`` as False.
+
+    Node metadata round-trips through YAML / JSON in some pipelines and
+    can come back as the string ``"false"`` — and ``bool("false")`` is
+    truthy in Python.  Treat the common falsy-string spellings as
+    ``False`` so a typo in the wire format doesn't silently flip a
+    feature on.
+    """
+    if isinstance(value, str):
+        return value.strip().lower() not in ("", "false", "0", "no", "off")
+    return bool(value)
+
+
+def _build_llm_config(
+    context: ExecutionContext,
+    *,
+    provider_name: str,
+    model: str,
+    stream: bool,
+    system_message: str | None = None,
+    temperature_default: float = 0.7,
+    temperature_override: float | None = None,
+) -> LLMConfig:
+    """Build an :class:`LLMConfig` from the node's metadata.
+
+    Pre-0.1.3 the executors only forwarded model/provider/system_message/
+    temperature/stream — every other DSL knob (``llm_max_output_tokens``,
+    ``llm_max_input_tokens``, ``llm_thinking_level``, ``llm_vision``)
+    was silently dropped.  Setting ``max_output_tokens=50`` and watching
+    the provider burn 2 000 tokens was a real downstream blocker; this
+    helper plugs the gap.
+
+    Args:
+        temperature_default: Used when the node leaves ``llm_temperature``
+            unset.
+        temperature_override: When given, takes precedence over both the
+            node metadata and the default.  Decision nodes use this to
+            pin temperature=0 regardless of what the YAML says.
+    """
+    thinking_level = context.get_meta("llm_thinking_level", "off")
+    if thinking_level not in THINKING_LEVELS:
+        # Unknown level — fall back to "off" but log so the misconfiguration
+        # is visible.  Silently swallowing was the same class of failure as
+        # the pre-0.1.3 max_output_tokens drop.
+        logger.warning(
+            "Unknown llm_thinking_level=%r (expected one of %s); falling back to 'off'.",
+            thinking_level,
+            sorted(THINKING_LEVELS),
+        )
+    thinking_enabled, thinking_budget = THINKING_LEVELS.get(thinking_level, (False, None))
+
+    if temperature_override is not None:
+        temperature = temperature_override
+    else:
+        temperature = context.get_meta("llm_temperature", temperature_default)
+
+    return LLMConfig(
+        model=model,
+        provider=provider_name,
+        system_message=system_message,
+        temperature=temperature,
+        stream=stream,
+        max_output_tokens=context.get_meta("llm_max_output_tokens", None),
+        max_input_tokens=context.get_meta("llm_max_input_tokens", None),
+        vision=_coerce_bool(context.get_meta("llm_vision", False)),
+        thinking_enabled=thinking_enabled,
+        thinking_budget=thinking_budget,
+    )
+
+
 class LLMExecutor(NodeExecutor):
     """Calls a real LLM for Instruction, Summarize, and Agent (no-tool) nodes.
 
@@ -244,12 +330,12 @@ class LLMExecutor(NodeExecutor):
         user_input = str(context.memory.get("__user_input__", "Hello"))
         prompt = _format_conversation(conversation, user_input)
 
-        config = LLMConfig(
+        config = _build_llm_config(
+            context,
+            provider_name=provider_name,
             model=model,
-            provider=provider_name,
-            system_message=system_instruction,
-            temperature=context.get_meta("llm_temperature", 0.7),
             stream=True,
+            system_message=system_instruction,
         )
 
         try:
@@ -271,7 +357,10 @@ class LLMExecutor(NodeExecutor):
                 output_text=text,
             )
         except Exception as e:
-            print(f"  [LLM ERROR] {provider_name}/{model}: {e}", flush=True)
+            # Log to module logger; the runner surfaces ``error`` into
+            # ``FlowResult.error`` so callers see the failure without us
+            # spraying stdout in library code.
+            logger.warning("LLMExecutor: %s/%s raised: %s", provider_name, model, e)
             return NodeResult(success=False, data={}, error=str(e))
 
 
@@ -441,21 +530,34 @@ class AgentExecutor(NodeExecutor):
         requires_another_call = True
         hit_iteration_cap = False
 
+        # Build the LLMConfig once: per-turn fields (system message, max
+        # tokens, thinking budget, vision) don't change between iterations
+        # of the same node.  Streaming stays off so the agent can read the
+        # full ``NativeResponse`` (text + tool_calls + stop_reason) atomically.
+        config = _build_llm_config(
+            context,
+            provider_name=provider_name,
+            model=model,
+            stream=False,
+            system_message=system_instruction,
+        )
+
         while requires_another_call and (max_iterations == 0 or iteration < max_iterations):
             iteration += 1
-
-            config = LLMConfig(
-                model=model,
-                provider=provider_name,
-                system_message=system_instruction,
-                temperature=context.get_meta("llm_temperature", 0.7),
-                stream=False,
-            )
 
             try:
                 response = await provider.generate_native_response(prompt, tools, config)
             except Exception as exc:
-                print(f"  [AGENT ERROR] {provider_name}/{model}: {exc}", flush=True)
+                # Bubble the failure into FlowResult.error via the runner's
+                # NodeResult-failure path; keep the verbose detail in logs
+                # so ops can diagnose without the LLM ever seeing it.
+                logger.warning(
+                    "AgentExecutor: %s/%s raised on iteration %d: %s",
+                    provider_name,
+                    model,
+                    iteration,
+                    exc,
+                )
                 return NodeResult(success=False, data={}, error=str(exc))
 
             text_chunk = getattr(response, "text_content", "") or ""
@@ -592,12 +694,19 @@ class DecisionExecutor(NodeExecutor):
         user_input = str(context.memory.get("__user_input__", "Choose"))
         prompt = _format_conversation(conversation, user_input)
 
-        config = LLMConfig(
+        # Decision nodes pin temperature=0 for determinism regardless of
+        # what the per-node ``llm_temperature`` says.  Use the helper's
+        # explicit override so the contract is enforced at the call site
+        # (vs. mutating the returned config — which only worked because
+        # ``LLMConfig`` is mutable, a fragile guarantee).  Every other
+        # field (max tokens, thinking, vision) still flows through.
+        config = _build_llm_config(
+            context,
+            provider_name=provider_name,
             model=model,
-            provider=provider_name,
-            system_message=decision_prompt,
-            temperature=0.0,
             stream=False,
+            system_message=decision_prompt,
+            temperature_override=0.0,
         )
 
         try:
@@ -609,7 +718,16 @@ class DecisionExecutor(NodeExecutor):
                     picked = opt
                     break
             return NodeResult(success=True, data={}, output_text="", picked_node=picked)
-        except Exception as e:
+        except Exception as exc:
+            # Decision LLM call failed — pick the first available option so
+            # the flow keeps going.  Log the failure so ops can see it
+            # rather than silently swallowing.
+            logger.warning(
+                "DecisionExecutor: %s/%s raised, defaulting to first option: %s",
+                provider_name,
+                model,
+                exc,
+            )
             picked = options[0] if options else ""
             return NodeResult(success=True, data={}, output_text="", picked_node=picked)
 

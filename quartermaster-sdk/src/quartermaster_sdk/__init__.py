@@ -18,7 +18,7 @@ Optional extras:
 - pip install quartermaster-sdk[all]           — Everything
 """
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 # Re-export the most common entry points for convenience
 from quartermaster_graph import (  # noqa: F401
