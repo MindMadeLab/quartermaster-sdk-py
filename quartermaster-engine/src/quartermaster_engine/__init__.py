@@ -3,12 +3,16 @@
 from quartermaster_engine.context.execution_context import ExecutionContext
 from quartermaster_engine.context.node_execution import NodeExecution, NodeStatus
 from quartermaster_engine.events import (
+    CustomEvent,
     FlowError,
     FlowEvent,
     FlowFinished,
     NodeFinished,
     NodeStarted,
+    ProgressEvent,
     TokenGenerated,
+    ToolCallFinished,
+    ToolCallStarted,
     UserInputRequired,
 )
 from quartermaster_engine.example_runner import (
@@ -67,6 +71,10 @@ __all__ = [
     "FlowFinished",
     "UserInputRequired",
     "FlowError",
+    "ToolCallStarted",
+    "ToolCallFinished",
+    "ProgressEvent",
+    "CustomEvent",
     # Stores
     "ExecutionStore",
     "InMemoryStore",
@@ -92,4 +100,4 @@ __all__ = [
     "AgentExecutor",
 ]
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
