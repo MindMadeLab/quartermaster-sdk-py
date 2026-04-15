@@ -9,6 +9,14 @@ Modular AI agent orchestration framework. Build agent workflows as directed grap
 
 Built by [MindMade](https://mindmade.io) in Slovenia.
 
+## What's new in v0.3.0
+
+- **Filtered stream iterators** -- `qm.run.stream(...).tokens()` / `.tool_calls()` / `.progress()` / `.custom(name=...)` replace the old `chunk.type`-matching boilerplate.
+- **Live progress signals** -- tools reach `qm.current_context()` and call `ctx.emit_progress(message, percent, **data)` or `ctx.emit_custom(name, payload)`. UIs render "Searching... 3/5" cards alongside streamed tokens.
+- **Structured post-mortem `Trace`** -- every `Result` carries `result.trace` with `.text`, `.tool_calls`, `.progress`, `.custom(name)`, `.as_jsonl()`, plus per-node breakdowns via `result.trace.by_node["name"]`.
+- **One-line OpenTelemetry** -- `qm.telemetry.instrument()` emits OTEL GenAI-semconv spans for every flow, node, and tool call. Install with `pip install 'quartermaster-sdk[telemetry]'`.
+- **New engine events** -- `ProgressEvent` and `CustomEvent` exported from `quartermaster_engine`, in addition to the existing `NodeStarted` / `TokenGenerated` / `ToolCallStarted` set.
+
 ## Install
 
 ```bash
@@ -85,6 +93,44 @@ graph = (
 result = qm.run(graph, "VT-Treyd Slovenija")
 result["notes"].output_text    # agent's free-text research
 result["data"].output_text     # form-parsed JSON
+```
+
+### Streaming with filtered iterators
+
+```python
+# Typewriter effect -- just the model tokens as they arrive
+for token in qm.run.stream(graph, "Hello!").tokens():
+    print(token, end="", flush=True)
+
+# Dashboard view -- only the tool-call events
+for call in qm.run.stream(graph, "Research Slovenia").tool_calls():
+    print(f"[TOOL] {call.tool}({call.args})")
+
+# Live progress cards -- filter by custom event name
+for evt in qm.run.stream(graph, "Run the pipeline").custom(name="source_found"):
+    ui.add_source(evt.payload["url"])
+```
+
+The raw `for chunk in qm.run.stream(...)` loop still works unchanged when
+you want every chunk type in one place. Streams are single-pass -- pick
+one consumer (`.tokens()`, `.tool_calls()`, `.progress()`, `.custom()`,
+or raw iteration) per stream.
+
+### Post-mortem `Result.trace`
+
+After a synchronous run (or after draining a stream to its `DoneChunk`),
+`result.trace` exposes a structured view of every `FlowEvent` the engine
+emitted:
+
+```python
+result = qm.run(graph, "Hello!")
+
+result.trace.text                       # concatenated model output
+result.trace.tool_calls                 # list[dict] across every agent node
+result.trace.progress                   # list[ProgressEvent]
+result.trace.custom(name="source_found")  # filtered CustomEvent list
+result.trace.by_node["Researcher"].text   # tokens for a single node
+print(result.trace.as_jsonl())           # JSONL export for logs / fixtures
 ```
 
 ### Sync `OllamaProvider.chat()` for non-graph callers

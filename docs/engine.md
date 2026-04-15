@@ -33,12 +33,18 @@ print(result.error)              # Error message if failed, else None
 print(result.node_results)       # Dict[UUID, NodeResult] for each node
 ```
 
-### Async Streaming Execution
+### Async Streaming Execution (low-level events)
+
+`run_async(...)` yields the engine's raw `FlowEvent` objects. This is
+the primitive layer — application code usually uses the SDK's chunk
+filters (next section) on top of it.
 
 ```python
 import asyncio
 from quartermaster_engine.events import (
     NodeStarted, NodeFinished, TokenGenerated,
+    ToolCallStarted, ToolCallFinished,
+    ProgressEvent, CustomEvent,
     FlowFinished, FlowError, UserInputRequired,
 )
 
@@ -48,6 +54,14 @@ async def main():
             print(f"Node started: {event.node_name}")
         elif isinstance(event, TokenGenerated):
             print(event.token, end="", flush=True)
+        elif isinstance(event, ToolCallStarted):
+            print(f"\nTool -> {event.tool}({event.arguments})")
+        elif isinstance(event, ToolCallFinished):
+            print(f"Tool <- {event.tool}: {event.result!r}")
+        elif isinstance(event, ProgressEvent):        # v0.3.0
+            print(f"Progress: {event.message} ({event.percent})")
+        elif isinstance(event, CustomEvent):          # v0.3.0
+            print(f"Custom[{event.name}]: {event.payload}")
         elif isinstance(event, NodeFinished):
             print(f"\nNode finished: {event.result[:80]}")
         elif isinstance(event, FlowError):
@@ -59,6 +73,56 @@ async def main():
 
 asyncio.run(main())
 ```
+
+### SDK chunk filters (high-level)
+
+The `quartermaster_sdk` package layers a typed `Chunk` translation
+(`_event_to_chunk`) on top of `on_event` and wraps the iterator so
+consumers can filter by chunk family instead of writing the
+`isinstance` ladder above:
+
+```python
+import quartermaster_sdk as qm
+
+# Four ready-made filters; pick one per stream (streams are single-pass).
+for token in qm.run.stream(graph, "hi").tokens():              # TokenGenerated
+    print(token, end="")
+
+for call in qm.run.stream(graph, "research x").tool_calls():  # ToolCallStarted
+    ui.tool_card(call.tool, call.args)
+
+for prog in qm.run.stream(graph, "crunch").progress():        # ProgressEvent
+    ui.status(prog.message, prog.percent)
+
+for evt in qm.run.stream(graph, "research").custom(name="src"):  # CustomEvent
+    ui.add_source(evt.payload)
+```
+
+The raw `for chunk in qm.run.stream(...)` loop still works when you
+need every chunk type together. `qm.arun.stream(...)` is the async
+analogue.
+
+### Post-mortem `Result.trace`
+
+`qm.run(...)` (and the terminal `DoneChunk.result` of `run.stream`)
+attach a structured `Trace` to the `Result` — built from the same
+`FlowEvent` list the runner observed, but accessible after the fact
+without pattern-matching events yourself:
+
+```python
+result = qm.run(graph, "Hello!")
+
+result.trace.text                         # every TokenGenerated.token, glued
+result.trace.tool_calls                   # every ToolCallFinished, as dicts
+result.trace.progress                     # every ProgressEvent
+result.trace.custom(name="source_found")  # filtered CustomEvent list
+result.trace.by_node["Researcher"].text   # per-node slice, same accessors
+result.trace.duration_seconds             # wall-clock
+print(result.trace.as_jsonl())            # JSONL export for log shipping
+```
+
+`Trace` is the post-mortem inspection surface; `run.stream(...)` is the
+live surface. Both derive from the identical `FlowEvent` stream.
 
 ### Resuming After User Input
 
@@ -101,10 +165,33 @@ Events are emitted during execution via the `on_event` callback or the async ite
 |-------|--------|------|
 | `NodeStarted` | `flow_id`, `node_id`, `node_type`, `node_name` | A node begins execution |
 | `TokenGenerated` | `flow_id`, `node_id`, `token` | A streaming token arrives from an LLM |
+| `ToolCallStarted` | `flow_id`, `node_id`, `tool`, `arguments`, `iteration` | Agent loop dispatches a tool call |
+| `ToolCallFinished` | `flow_id`, `node_id`, `tool`, `arguments`, `result`, `raw`, `error`, `iteration` | Tool call completed (or errored) |
+| `ProgressEvent` (v0.3.0) | `flow_id`, `node_id`, `message`, `percent`, `data` | Application code called `ctx.emit_progress(...)` |
+| `CustomEvent` (v0.3.0) | `flow_id`, `node_id`, `name`, `payload` | Application code called `ctx.emit_custom(...)` |
 | `NodeFinished` | `flow_id`, `node_id`, `result`, `output_data` | A node completes |
 | `UserInputRequired` | `flow_id`, `node_id`, `prompt`, `options` | Execution pauses for user input |
 | `FlowError` | `flow_id`, `node_id`, `error`, `recoverable` | A node fails |
 | `FlowFinished` | `flow_id`, `final_output`, `output_data` | All branches complete |
+
+`ProgressEvent` and `CustomEvent` fire whenever the currently-executing
+node (or a tool it called) invokes
+`ExecutionContext.emit_progress(message, percent, **data)` or
+`emit_custom(name, payload)`. Tools reach the active context via the
+`current_context()` helper:
+
+```python
+from quartermaster_tools import tool
+from quartermaster_engine.context.current_context import current_context
+
+@tool()
+def slow_search(query: str) -> dict:
+    ctx = current_context()                # None outside a flow -- safe
+    if ctx is not None:
+        ctx.emit_progress(f"searching {query!r}", percent=0.25)
+    # ... real work ...
+    return {"results": [...]}
+```
 
 ## Dispatchers
 

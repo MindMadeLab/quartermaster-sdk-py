@@ -32,9 +32,12 @@ real API key to actually demonstrate anything end-to-end. The exceptions:
 | `17_streaming_events.py` | Uses a mock executor for the LLM node |
 | `20_ollama_local.py` | Hits a local Ollama instance (start `ollama serve` and pull `gemma4:26b`) |
 
-The remaining 16 examples need at least one of `ANTHROPIC_API_KEY`,
+The remaining examples need at least one of `ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY`, `GROQ_API_KEY`, or `XAI_API_KEY` set — without keys, the
 graph still builds and validates but the LLM nodes return failures.
+
+Example `23_telemetry_otel.py` additionally requires the `[telemetry]`
+extra (OpenTelemetry SDK): `pip install 'quartermaster-sdk[telemetry]'`.
 
 ### API Keys
 
@@ -82,6 +85,9 @@ uv run examples/run_interactive.py
 | 18 | `18_compliance_guard.py` | PII detection/redaction, EU AI Act risk classification, audit logging |
 | 19 | `19_mcp_client.py` | MCP protocol client: discover tools, bridge to Quartermaster graphs |
 | 20 | `20_ollama_local.py` | Local Gemma 4: vision (real image), tool calling, streaming, multi-step |
+| 21 | `21_progress_events.py` | v0.3.0: tool-emitted `emit_progress` / `emit_custom` streamed via `.progress()` and `.custom()` |
+| 22 | `22_streaming_filters.py` | v0.3.0: one graph rendered three ways -- `.tokens()`, `.tool_calls()`, raw chunks |
+| 23 | `23_telemetry_otel.py` | v0.3.0: `qm.telemetry.instrument()` with an in-memory OTEL exporter |
 | -- | `run_interactive.py` | Interactive stdin conversation loop with Ctrl+C exit |
 
 ## Patterns Demonstrated
@@ -105,3 +111,6 @@ uv run examples/run_interactive.py
 - **Interactive mode**: `run_graph()` without `user_input` prompts stdin at User nodes
 - **Multi-provider**: Different LLMs for different nodes (Anthropic + OpenAI + Groq + xAI)
 - **`run_graph()`**: One-line execution with auto-detected provider and streaming
+- **Filtered streams (v0.3.0)**: `stream.tokens()` / `.tool_calls()` / `.progress()` / `.custom()` (examples 21-22)
+- **Live progress events (v0.3.0)**: `ctx.emit_progress()` / `ctx.emit_custom()` reachable via `qm.current_context()` (example 21)
+- **OpenTelemetry (v0.3.0)**: `qm.telemetry.instrument()` for one-line OTEL GenAI span export (example 23)
