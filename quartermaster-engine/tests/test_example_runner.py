@@ -718,7 +718,6 @@ class TestIfExecutor:
         result = _run(IfExecutor().execute(ctx))
         assert result.picked_node == "false"
 
-
     def test_zero_is_falsy(self):
         ctx = _make_context(
             node_metadata={"if_expression": "0"},

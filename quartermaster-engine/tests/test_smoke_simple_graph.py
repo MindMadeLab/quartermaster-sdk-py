@@ -224,9 +224,7 @@ class TestAgentExecutor:
         always_tool = NativeResponse(
             text_content="",
             thinking=[],
-            tool_calls=[
-                ToolCall(tool_name="loopy", tool_id="x", parameters={})
-            ],
+            tool_calls=[ToolCall(tool_name="loopy", tool_id="x", parameters={})],
             stop_reason="tool_calls",
         )
         mock = MockProvider(native_responses=[always_tool])
@@ -249,9 +247,16 @@ class TestAgentExecutor:
                 return FakeTool()
 
             def to_openai_tools(self):
-                return [{"type": "function", "function": {"name": "loopy",
-                                                           "description": "",
-                                                           "parameters": {"type": "object", "properties": {}}}}]
+                return [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "loopy",
+                            "description": "",
+                            "parameters": {"type": "object", "properties": {}},
+                        },
+                    }
+                ]
 
         graph = (
             Graph("loop-cap")

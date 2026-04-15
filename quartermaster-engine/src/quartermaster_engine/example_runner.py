@@ -201,10 +201,7 @@ def _resolve_provider_and_model(
         if providers:
             provider_name = providers[0]
     if not model and provider_name:
-        model = (
-            registry.get_default_model(provider_name)
-            or _MODEL_MAP.get(provider_name, "")
-        )
+        model = registry.get_default_model(provider_name) or _MODEL_MAP.get(provider_name, "")
     return provider_name, model
 
 
@@ -428,9 +425,7 @@ class AgentExecutor(NodeExecutor):
 
         # Match the canonical Quartermaster semantics: 0 = no cap, negative
         # values fall back to the documented default.
-        max_iterations = int(
-            context.get_meta("max_iterations", self.DEFAULT_MAX_ITERATIONS)
-        )
+        max_iterations = int(context.get_meta("max_iterations", self.DEFAULT_MAX_ITERATIONS))
         if max_iterations < 0:
             max_iterations = self.DEFAULT_MAX_ITERATIONS
 
@@ -446,9 +441,7 @@ class AgentExecutor(NodeExecutor):
         requires_another_call = True
         hit_iteration_cap = False
 
-        while requires_another_call and (
-            max_iterations == 0 or iteration < max_iterations
-        ):
+        while requires_another_call and (max_iterations == 0 or iteration < max_iterations):
             iteration += 1
 
             config = LLMConfig(
@@ -460,9 +453,7 @@ class AgentExecutor(NodeExecutor):
             )
 
             try:
-                response = await provider.generate_native_response(
-                    prompt, tools, config
-                )
+                response = await provider.generate_native_response(prompt, tools, config)
             except Exception as exc:
                 print(f"  [AGENT ERROR] {provider_name}/{model}: {exc}", flush=True)
                 return NodeResult(success=False, data={}, error=str(exc))
@@ -547,8 +538,7 @@ class AgentExecutor(NodeExecutor):
                 success=False,
                 data={},
                 error=(
-                    f"Agent reached max_iterations={max_iterations} without "
-                    f"a final text response."
+                    f"Agent reached max_iterations={max_iterations} without a final text response."
                 ),
             )
 
