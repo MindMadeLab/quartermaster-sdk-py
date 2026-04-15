@@ -18,7 +18,7 @@ Optional extras:
 - pip install quartermaster-sdk[all]           — Everything
 """
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 # ── v0.2.0 primary API ────────────────────────────────────────────────
 #
