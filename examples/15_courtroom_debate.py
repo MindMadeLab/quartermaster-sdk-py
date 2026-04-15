@@ -21,16 +21,15 @@ Usage:
 
 from __future__ import annotations
 
-from quartermaster_graph import Graph
+import quartermaster_sdk as qm
 from quartermaster_graph.enums import TraverseIn
-from quartermaster_engine import run_graph
 
 
 # -- Provider config --------------------------------------------------------
 
 PROSECUTOR = dict(model="grok-3-mini-fast", provider="xai")
-DEFENSE    = dict(model="gpt-4o", provider="openai")
-JUDGE      = dict(model="claude-haiku-4-5-20251001", provider="anthropic")
+DEFENSE = dict(model="gpt-4o", provider="openai")
+JUDGE = dict(model="claude-haiku-4-5-20251001", provider="anthropic")
 
 MAX_ROUNDS = 5
 
@@ -38,49 +37,53 @@ MAX_ROUNDS = 5
 # -- Main trial graph -------------------------------------------------------
 
 trial = (
-    Graph("The People v. Dr. Sarah Chen")
-    .start()
+    qm.Graph("The People v. Dr. Sarah Chen")
     .user("Describe the case")
     .var("Capture case", variable="case_description", show_output=False)
     .write_memory("File case", memory_name="case_file", show_output=False)
-
-    .text("Court opens", template=(
-        "═══════════════════════════════════════════\n"
-        "  SUPERIOR COURT — DEPARTMENT 7\n"
-        "  TechCorp Inc. v. Dr. Sarah Chen\n"
-        "  Charges: Trade secret theft, NDA breach\n"
-        "═══════════════════════════════════════════\n\n"
-        "BAILIFF: All rise. Court is now in session.\n"
-        f"JUDGE: We will hear {MAX_ROUNDS} rounds of argument.\n"
-    ))
-
+    .text(
+        "Court opens",
+        template=(
+            "═══════════════════════════════════════════\n"
+            "  SUPERIOR COURT — DEPARTMENT 7\n"
+            "  TechCorp Inc. v. Dr. Sarah Chen\n"
+            "  Charges: Trade secret theft, NDA breach\n"
+            "═══════════════════════════════════════════\n\n"
+            "BAILIFF: All rise. Court is now in session.\n"
+            f"JUDGE: We will hear {MAX_ROUNDS} rounds of argument.\n"
+        ),
+    )
     # -- Initialize loop counter --
     .var("Init round", variable="round_number", expression="1", show_output=False)
-
     # -- Loop target --
-    .text("Round announce", template=(
-        "\n──── Round {{round_number}} of 5 ────"
-    ), traverse_in=TraverseIn.AWAIT_FIRST)
-
+    .text(
+        "Round announce",
+        template=("\n──── Round {{round_number}} of 5 ────"),
+        traverse_in=TraverseIn.AWAIT_FIRST,
+    )
     # -- Round context injected as a text node so LLMs see it --
-    .text("Round context", template=(
-        "COURT CLERK: This is round {{round_number}} of 5.\n"
-        "{% if round_number == 1 %}"
-        "Phase: OPENING STATEMENTS. Present your theory of the case."
-        "{% elif round_number == 2 %}"
-        "Phase: EVIDENCE. Present forensic evidence, call expert witnesses, cite specific data."
-        "{% elif round_number == 3 %}"
-        "Phase: CROSS-EXAMINATION. Challenge the opposing side's evidence and witnesses directly."
-        "{% elif round_number == 4 %}"
-        "Phase: REBUTTAL. Address weaknesses in your case, introduce new counter-evidence."
-        "{% else %}"
-        "Phase: CLOSING ARGUMENTS. This is your final chance. Make it count."
-        "{% endif %}"
-    ), show_output=False)
-
+    .text(
+        "Round context",
+        template=(
+            "COURT CLERK: This is round {{round_number}} of 5.\n"
+            "{% if round_number == 1 %}"
+            "Phase: OPENING STATEMENTS. Present your theory of the case."
+            "{% elif round_number == 2 %}"
+            "Phase: EVIDENCE. Present forensic evidence, call expert witnesses, cite specific data."
+            "{% elif round_number == 3 %}"
+            "Phase: CROSS-EXAMINATION. Challenge the opposing side's evidence and witnesses directly."
+            "{% elif round_number == 4 %}"
+            "Phase: REBUTTAL. Address weaknesses in your case, introduce new counter-evidence."
+            "{% else %}"
+            "Phase: CLOSING ARGUMENTS. This is your final chance. Make it count."
+            "{% endif %}"
+        ),
+        show_output=False,
+    )
     # -- Prosecution --
     .instruction(
-        "Prosecution argues", **PROSECUTOR,
+        "Prosecution argues",
+        **PROSECUTOR,
         system_instruction=(
             "You are the lead prosecutor in TechCorp v. Dr. Sarah Chen.\n"
             "The court clerk has announced the current phase. Follow it STRICTLY:\n\n"
@@ -97,10 +100,10 @@ trial = (
             "2-3 paragraphs. Address the judge as 'Your Honor'."
         ),
     )
-
     # -- Defense --
     .instruction(
-        "Defense rebuts", **DEFENSE,
+        "Defense rebuts",
+        **DEFENSE,
         system_instruction=(
             "You are the defense attorney for Dr. Sarah Chen.\n"
             "The court clerk has announced the current phase. Follow it STRICTLY:\n\n"
@@ -121,41 +124,47 @@ trial = (
             "2-3 paragraphs. Address the judge as 'Your Honor'."
         ),
     )
-
     # -- Increment and check --
-    .var("Increment", variable="round_number", expression="round_number + 1", show_output=False)
-    .if_node("More rounds?", expression=f"round_number > {MAX_ROUNDS}", show_output=False)
-
+    .var(
+        "Increment",
+        variable="round_number",
+        expression="round_number + 1",
+        show_output=False,
+    )
+    .if_node(
+        "More rounds?", expression=f"round_number > {MAX_ROUNDS}", show_output=False
+    )
     # TRUE: verdict
     .on("true")
-        .text("Debate over", template=(
+    .text(
+        "Debate over",
+        template=(
             "\n═══════════════════════════════════════════\n"
             "  ALL ARGUMENTS HEARD — DELIVERING VERDICT\n"
             "═══════════════════════════════════════════"
-        ))
-        .instruction(
-            "Judge delivers verdict", **JUDGE,
-            system_instruction=(
-                "You are the presiding judge delivering the FINAL VERDICT.\n"
-                "You heard 5 rounds: openings, evidence, cross-examination, rebuttal, closings.\n\n"
-                "Structure your verdict:\n"
-                "1. FINDINGS OF FACT — what was established\n"
-                "2. PROSECUTION'S CASE — strongest points and weaknesses\n"
-                "3. DEFENSE'S CASE — strongest points and weaknesses\n"
-                "4. EVIDENCE EVALUATION — the 78% code similarity, access logs, expert testimony\n"
-                "5. NON-COMPETE RULING — enforceable or not, with legal reasoning\n"
-                "6. VERDICT — GUILTY, NOT GUILTY, or MISTRIAL with clear rationale\n\n"
-                "Be thorough and judicial. This is a formal ruling."
-            ),
-        )
-        .text("Adjournment", template="\n--- Court is adjourned ---")
+        ),
+    )
+    .instruction(
+        "Judge delivers verdict",
+        **JUDGE,
+        system_instruction=(
+            "You are the presiding judge delivering the FINAL VERDICT.\n"
+            "You heard 5 rounds: openings, evidence, cross-examination, rebuttal, closings.\n\n"
+            "Structure your verdict:\n"
+            "1. FINDINGS OF FACT — what was established\n"
+            "2. PROSECUTION'S CASE — strongest points and weaknesses\n"
+            "3. DEFENSE'S CASE — strongest points and weaknesses\n"
+            "4. EVIDENCE EVALUATION — the 78% code similarity, access logs, expert testimony\n"
+            "5. NON-COMPETE RULING — enforceable or not, with legal reasoning\n"
+            "6. VERDICT — GUILTY, NOT GUILTY, or MISTRIAL with clear rationale\n\n"
+            "Be thorough and judicial. This is a formal ruling."
+        ),
+    )
+    .text("Adjournment", template="\n--- Court is adjourned ---")
     .end()
-
     # FALSE: loop back
     .on("false")
-        .text("Next round", template="", show_output=False)
-    .end()
-
+    .text("Next round", template="", show_output=False)
     .end()
 )
 
@@ -163,14 +172,15 @@ trial = (
 
 trial.connect("Next round", "Round announce", label="next_round")
 
-# -- Build and run ----------------------------------------------------------
+# -- Build and run -- .build(validate=False) kept here because we deliberately
+# form a cycle (loop-back edge) which the default validator rejects.
 
 agent = trial.build(validate=False)
 
 print(f"Graph: {len(agent.nodes)} nodes, {len(agent.edges)} edges")
 print()
 
-run_graph(
+qm.run_graph(
     agent,
     user_input=(
         "Dr. Sarah Chen, a senior AI engineer, left TechCorp after 5 years "

@@ -146,6 +146,7 @@ async def demo_mcp_client() -> list[McpTool]:
 # and docstrings -- but for MCP tools the schema already exists, so we
 # build the wrapper programmatically.
 
+
 def mcp_to_quartermaster_tools(
     mcp_tools: list[McpTool],
     server_url: str = MCP_SERVER_URL,
@@ -264,7 +265,13 @@ def mcp_to_quartermaster_tools(
             wrapper.__name__ = t.name
             wrapper.__doc__ = t.description
             wrapper.__annotations__ = {
-                p.name: str if p.type == "string" else int if p.type == "integer" else float if p.type == "number" else object
+                p.name: str
+                if p.type == "string"
+                else int
+                if p.type == "integer"
+                else float
+                if p.type == "number"
+                else object
                 for p in t.parameters
             }
             wrapper.__annotations__["return"] = dict
@@ -295,6 +302,7 @@ def mcp_to_quartermaster_tools(
 # passed to an Agent or Instruction node via the ``tools=`` parameter.
 # Below we build the graph structure to show how it all fits together.
 
+
 def demo_graph_with_mcp_tools() -> None:
     """Build a graph that incorporates MCP-provided tools."""
     print("=" * 60)
@@ -303,17 +311,16 @@ def demo_graph_with_mcp_tools() -> None:
     print()
 
     try:
-        from quartermaster_graph import Graph
+        import quartermaster_sdk as qm
     except ImportError:
-        print("quartermaster-graph is not installed; skipping graph demo.")
+        print("quartermaster-sdk is not installed; skipping graph demo.")
         return
 
     # Imagine the MCP server exposes "weather_lookup" and "web_search".
     # After wrapping them (Part 2) they live in a ToolRegistry.
     # An Agent node references them by name via ``tools=[...]``.
     graph = (
-        Graph("MCP Research Agent")
-        .start()
+        qm.Graph("MCP Research Agent")
         .user("What would you like to research?")
         .agent(
             "Researcher",
@@ -338,10 +345,11 @@ def demo_graph_with_mcp_tools() -> None:
                 "concise answer for the user."
             ),
         )
-        .end()
     )
 
-    # Print the graph structure
+    # Print the graph structure — we call .build() here just to inspect the
+    # validated spec; ``qm.run_graph(graph, ...)`` would accept the builder
+    # directly in the v0.2.0 API.
     built = graph.build()
     print("Graph structure:")
     for node in built.nodes:
@@ -355,21 +363,22 @@ def demo_graph_with_mcp_tools() -> None:
         print(f"  {src} -> {tgt}{label}")
     print()
 
-    # To actually run this graph you would use the _runner helper:
+    # To actually run this graph:
     #
-    #   from quartermaster_engine import run_graph
-    #   run_graph(graph, user_input="What is the weather in Tokyo?")
+    #   import quartermaster_sdk as qm
+    #   qm.run_graph(graph, user_input="What is the weather in Tokyo?")
     #
     # The runner wires the ToolRegistry into the FlowRunner so the
     # Agent node can call tools during its reasoning loop.
     print(
         "To execute, set an API key and call:\n"
-        "  run_graph(graph, user_input='What is the weather in Tokyo?')\n"
+        "  qm.run_graph(graph, user_input='What is the weather in Tokyo?')\n"
     )
 
 
 # ── Part 4: Sync API one-liner ─────────────────────────────────────────────
 # For scripts that do not use asyncio the sync wrappers are convenient.
+
 
 def demo_sync_api() -> None:
     """Demonstrate the synchronous (non-async) MCP client API."""
@@ -402,6 +411,7 @@ def demo_sync_api() -> None:
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
+
 
 async def main() -> None:
     # Part 1: connect to a live MCP server (graceful if unavailable)

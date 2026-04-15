@@ -72,4 +72,6 @@ print(f"\nWeather result: {result}")
 # Export as JSON Schema for LLM function calling
 print("\nJSON Schema export:")
 for schema in registry.to_json_schema():
-    print(f"  {schema['name']}: {len(schema['parameters'].get('properties', {}))} params")
+    print(
+        f"  {schema['name']}: {len(schema['parameters'].get('properties', {}))} params"
+    )

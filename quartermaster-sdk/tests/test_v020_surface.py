@@ -100,6 +100,40 @@ class TestConfigure:
 # ── Graph builder v0.2.0 ──────────────────────────────────────────────
 
 
+class TestBuilderPassthrough:
+    """Regression: ``qm.run()`` accepts a ``GraphBuilder`` directly —
+    ``.build()`` is purely optional.  This pins the ergonomic shortcut
+    advertised in the v0.2.0 READMEs and every migrated example so a
+    future refactor of ``_resolve_graph`` can't silently force callers
+    back into the ``.build()`` boilerplate."""
+
+    def test_run_accepts_builder_without_explicit_build(self):
+        reg, _ = _mock_registry("no build call")
+        qm.configure(registry=reg)
+        builder = qm.Graph("x").instruction("One")
+        # Pass the BUILDER (not .build()).  run() finalises internally.
+        result = qm.run(builder, "hi")
+        assert result.success
+        assert result.text == "no build call"
+
+    def test_run_accepts_pre_built_spec_too(self):
+        """The inverse — passing the result of ``.build()`` still works."""
+        reg, _ = _mock_registry("pre built")
+        qm.configure(registry=reg)
+        spec = qm.Graph("x").instruction("One").build()
+        result = qm.run(spec, "hi")
+        assert result.success
+        assert result.text == "pre built"
+
+    def test_run_stream_accepts_builder_without_explicit_build(self):
+        reg, _ = _mock_registry("streamed")
+        qm.configure(registry=reg)
+        builder = qm.Graph("x").instruction("One")
+        chunks = list(qm.run.stream(builder, "hi"))
+        assert chunks[-1].type == "done"
+        assert chunks[-1].result.text == "streamed"
+
+
 class TestAutoStart:
     def test_graph_constructor_creates_start_node(self):
         graph = qm.Graph("x").instruction("Plain").build()

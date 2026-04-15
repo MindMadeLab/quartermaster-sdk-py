@@ -18,9 +18,8 @@ Usage:
 
 from __future__ import annotations
 
-from quartermaster_graph import Graph
+import quartermaster_sdk as qm
 from quartermaster_graph.enums import TraverseIn
-from quartermaster_engine import run_graph
 
 
 WRITER = dict(model="claude-haiku-4-5-20251001", provider="anthropic")
@@ -29,27 +28,30 @@ CRITIC = dict(model="llama-3.3-70b-versatile", provider="groq")
 MAX_ITERATIONS = 3
 
 agent = (
-    Graph("Iterative Refinement")
-    .start()
+    qm.Graph("Iterative Refinement")
     .user("What should I write about?")
     .var("Capture topic", variable="topic", show_output=False)
-
-    .text("Brief", template=(
-        "Assignment: Write a short, compelling paragraph about: {{topic}}\n"
-        "We will refine it through " + str(MAX_ITERATIONS) + " rounds of writing and critique."
-    ))
-
+    .text(
+        "Brief",
+        template=(
+            "Assignment: Write a short, compelling paragraph about: {{topic}}\n"
+            "We will refine it through "
+            + str(MAX_ITERATIONS)
+            + " rounds of writing and critique."
+        ),
+    )
     # -- Initialize iteration counter --
     .var("Init iteration", variable="iteration", expression="1", show_output=False)
-
     # -- Loop target --
-    .text("Iteration header", template=(
-        "\n──── Iteration {{iteration}} of " + str(MAX_ITERATIONS) + " ────"
-    ), traverse_in=TraverseIn.AWAIT_FIRST)
-
+    .text(
+        "Iteration header",
+        template=("\n──── Iteration {{iteration}} of " + str(MAX_ITERATIONS) + " ────"),
+        traverse_in=TraverseIn.AWAIT_FIRST,
+    )
     # -- Writer drafts/revises --
     .instruction(
-        "Writer drafts", **WRITER,
+        "Writer drafts",
+        **WRITER,
         system_instruction=(
             "You are a skilled writer. Write or revise a SHORT paragraph (3-5 sentences) "
             "about the given topic.\n\n"
@@ -59,10 +61,10 @@ agent = (
             "Output ONLY the paragraph, no meta-commentary."
         ),
     )
-
     # -- Critic reviews --
     .instruction(
-        "Critic reviews", **CRITIC,
+        "Critic reviews",
+        **CRITIC,
         system_instruction=(
             "You are a sharp editorial critic. Review the paragraph you just read.\n\n"
             "Give exactly 3 specific, actionable suggestions for improvement. "
@@ -73,45 +75,52 @@ agent = (
             "Format: numbered list, one line each. No fluff."
         ),
     )
-
     # -- Increment and check --
-    .var("Increment", variable="iteration", expression="iteration + 1", show_output=False)
-    .if_node("More iterations?", expression=f"iteration > {MAX_ITERATIONS}", show_output=False)
-
+    .var(
+        "Increment", variable="iteration", expression="iteration + 1", show_output=False
+    )
+    .if_node(
+        "More iterations?",
+        expression=f"iteration > {MAX_ITERATIONS}",
+        show_output=False,
+    )
     # TRUE: done refining
     .on("true")
-        .text("Refinement complete", template=(
+    .text(
+        "Refinement complete",
+        template=(
             "\n──── Refinement Complete ────\n"
-            "The paragraph has been refined through {0} rounds of writing and critique." + str(MAX_ITERATIONS)
-        ))
-        .instruction(
-            "Final polish", **WRITER,
-            system_instruction=(
-                "You are the writer making a FINAL polish. "
-                "Take the latest draft and apply the last critic's feedback. "
-                "Output ONLY the final, polished paragraph. Make every word count."
-            ),
-        )
+            "The paragraph has been refined through {0} rounds of writing and critique."
+            + str(MAX_ITERATIONS)
+        ),
+    )
+    .instruction(
+        "Final polish",
+        **WRITER,
+        system_instruction=(
+            "You are the writer making a FINAL polish. "
+            "Take the latest draft and apply the last critic's feedback. "
+            "Output ONLY the final, polished paragraph. Make every word count."
+        ),
+    )
     .end()
-
     # FALSE: loop back
     .on("false")
-        .text("Next iteration", template="", show_output=False)
-    .end()
-
+    .text("Next iteration", template="", show_output=False)
     .end()
 )
 
 # -- Wire the loop back-edge --
 agent.connect("Next iteration", "Iteration header", label="next_iteration")
 
-# -- Build and run --
+# -- Build and run -- .build(validate=False) kept here because we deliberately
+# form a cycle (loop-back edge) which the default validator rejects.
 graph = agent.build(validate=False)
 
 print(f"Graph: {len(graph.nodes)} nodes, {len(graph.edges)} edges")
 print()
 
-run_graph(
+qm.run_graph(
     graph,
     user_input="The feeling of writing code at 3am when everything finally clicks",
 )

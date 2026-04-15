@@ -11,25 +11,38 @@ Usage:
 
 from __future__ import annotations
 
-from quartermaster_graph import Graph
-from quartermaster_engine import run_graph
+import quartermaster_sdk as qm
 
 agent = (
-    Graph("Sentiment Analyzer")
-    .start()
+    qm.Graph("Sentiment Analyzer")
     .user("Enter text to analyze")
-    .instruction("Analyze sentiment", model="claude-haiku-4-5-20251001", system_instruction="Classify as positive or negative")
+    .instruction(
+        "Analyze sentiment",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Classify as positive or negative",
+    )
     .decision("Sentiment?", options=["positive", "negative"])
     .on("positive")
-        .instruction("Positive response", model="claude-haiku-4-5-20251001", system_instruction="Generate an enthusiastic response")
+    .instruction(
+        "Positive response",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Generate an enthusiastic response",
+    )
     .end()
     .on("negative")
-        .instruction("Negative response", model="claude-haiku-4-5-20251001", system_instruction="Generate an empathetic response")
+    .instruction(
+        "Negative response",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Generate an empathetic response",
+    )
     .end()
     # No merge needed -- decision picks ONE branch, so branches converge
     # directly on the next node.
-    .instruction("Final summary", model="claude-haiku-4-5-20251001", system_instruction="Summarize the analysis")
-    .end()
+    .instruction(
+        "Final summary",
+        model="claude-haiku-4-5-20251001",
+        system_instruction="Summarize the analysis",
+    )
 )
 
-run_graph(agent, user_input="I absolutely love this product, it changed my life!")
+qm.run_graph(agent, user_input="I absolutely love this product, it changed my life!")

@@ -27,34 +27,64 @@ uv sync
 
 ## Quick Start
 
-The simplest possible graph — `start → user → agent → end` — running against a
-local Ollama in three lines:
+The simplest possible graph — running against a local Ollama in four lines
+(no `.start()`, no `.end()`, no `.build()`, no `FlowRunner` import):
 
 ```python
-from quartermaster_sdk import Graph, FlowRunner, register_local
+import quartermaster_sdk as qm
 
-provider_registry = register_local(
-    "ollama",
-    base_url="http://localhost:11434",   # or set $OLLAMA_HOST
-    default_model="gemma4:26b",
-)
+qm.configure(provider="ollama", base_url="http://localhost:11434", default_model="gemma4:26b")
 
-graph = Graph("chat").start().user().agent().end().build()
-runner = FlowRunner(graph=graph, provider_registry=provider_registry)
-result = runner.run("Pozdravljen, koliko je ura?")
-print(result.final_output)
+result = qm.run(qm.Graph("chat").user().agent(), "Pozdravljen, koliko je ura?")
+print(result.text)
+```
+
+`qm.run()` accepts the builder directly and finalises it internally —
+`.build()` is only needed when you want the validated `GraphSpec` for
+serialisation or inspection. For single-shot calls skip the graph entirely:
+
+```python
+reply = qm.instruction(system="Respond in Slovenian.", user="Pozdravljen!")
+# reply is a str.
+```
+
+For typed JSON extraction:
+
+```python
+from pydantic import BaseModel
+
+class Classification(BaseModel):
+    category: str
+    priority: str
+
+data = qm.instruction_form(Classification, system="Classify.", user=email_body)
+# data is a Classification instance.
 ```
 
 For richer flows you keep the explicit per-node configuration:
 
 ```python
 agent = (
-    Graph("My Agent")
-    .start()
+    qm.Graph("My Agent")
     .user("What can I help you with?")
     .instruction("Respond", model="gpt-4o", system_instruction="You are a helpful assistant.")
-    .end()
 )
+result = qm.run(agent, "...")
+```
+
+### Reading specific node outputs with `capture_as=`
+
+Attach a name to any node and read its output from `result.captures`:
+
+```python
+graph = (
+    qm.Graph("enrich")
+    .agent("Research", tools=[...], capture_as="notes")
+    .instruction_form(CustomerData, system="Extract.", capture_as="data")
+)
+result = qm.run(graph, "VT-Treyd Slovenija")
+result["notes"].output_text    # agent's free-text research
+result["data"].output_text     # form-parsed JSON
 ```
 
 ### Sync `OllamaProvider.chat()` for non-graph callers
@@ -239,7 +269,7 @@ quartermaster-code-runner   Standalone Docker code execution
 ## Key Concepts
 
 - **Graph** -- A directed graph (supports cycles via `connect()` for loops) of nodes and edges. Built with the fluent `Graph("name").start().user("Input")...end()` API.
-- **GraphSpec** -- The serializable graph model (`GraphSpec` in quartermaster-graph) returned by `Graph.build()`. `AgentGraph` remains as a deprecated backward-compat alias.
+- **GraphSpec** -- The serializable graph model (`GraphSpec` in quartermaster-graph). `qm.run(graph, ...)` finalises the builder for you; explicit `Graph.build()` only matters when you want the validated spec to serialise / inspect. `AgentGraph` remains as a deprecated backward-compat alias.
 - **User Node** -- Every graph starts with `.user()` after `.start()` to collect user input.
 - **Nodes** -- Units of work: LLM calls, decisions, user input, memory, tools, templates.
 - **Edges** -- Directed connections between nodes. Decision/IF/Switch edges carry labels.

@@ -27,10 +27,12 @@ import tempfile
 from quartermaster_tools.builtin.privacy.detect import DetectPIITool, ScanFilePIITool
 from quartermaster_tools.builtin.privacy.redact import RedactPIITool
 from quartermaster_tools.builtin.compliance.risk_classifier import RiskClassifierTool
-from quartermaster_tools.builtin.compliance.audit_log import AuditLogTool, ReadAuditLogTool
+from quartermaster_tools.builtin.compliance.audit_log import (
+    AuditLogTool,
+    ReadAuditLogTool,
+)
 
-from quartermaster_graph import Graph
-from quartermaster_engine import run_graph
+import quartermaster_sdk as qm
 
 
 # ============================================================================
@@ -126,7 +128,10 @@ AuditLogTool.run(
     action="pii_redaction",
     actor="compliance_pipeline",
     system_id="complaint-analyser-v1",
-    details={"strategy": "redact", "entities_redacted": redacted_result.data.get("entities_found", 0)},
+    details={
+        "strategy": "redact",
+        "entities_redacted": redacted_result.data.get("entities_found", 0),
+    },
     log_path=audit_path,
 )
 
@@ -167,19 +172,18 @@ print()
 # -- Build the graph ---------------------------------------------------------
 
 agent = (
-    Graph("Compliance-Aware Agent")
-    .start()
-
+    qm.Graph("Compliance-Aware Agent")
     # The user input is the REDACTED text (PII already removed)
     .user("Enter the complaint text")
     .var("Capture complaint", variable="complaint_text")
     .write_memory("Store complaint", memory_name="complaint")
-
-    .text("Status", template=(
-        "--- Compliance Pipeline ---\n"
-        "PII has been removed. Processing cleaned text..."
-    ))
-
+    .text(
+        "Status",
+        template=(
+            "--- Compliance Pipeline ---\n"
+            "PII has been removed. Processing cleaned text..."
+        ),
+    )
     # Analyse the complaint (safe -- no PII in the text)
     .instruction(
         "Analyse complaint",
@@ -198,47 +202,50 @@ agent = (
         ),
     )
     .var("Capture analysis", variable="analysis", show_output=False)
-
     # Route by priority
     .if_node("High priority?", expression="priority_level <= 2")
     .on("true")
-        .text("Escalation", template=(
+    .text(
+        "Escalation",
+        template=(
             "\n*** ESCALATION ***\n"
             "High-priority complaint detected. Flagging for immediate review."
-        ))
-        .instruction(
-            "Escalation brief",
-            model="claude-haiku-4-5-20251001",
-            provider="anthropic",
-            system_instruction=(
-                "Write a brief escalation summary for a manager. Include "
-                "the core issue, why it is urgent, and recommended immediate "
-                "actions. Keep it under 100 words."
-            ),
-        )
+        ),
+    )
+    .instruction(
+        "Escalation brief",
+        model="claude-haiku-4-5-20251001",
+        provider="anthropic",
+        system_instruction=(
+            "Write a brief escalation summary for a manager. Include "
+            "the core issue, why it is urgent, and recommended immediate "
+            "actions. Keep it under 100 words."
+        ),
+    )
     .end()
     .on("false")
-        .instruction(
-            "Standard response",
-            model="claude-haiku-4-5-20251001",
-            provider="anthropic",
-            system_instruction=(
-                "Draft a professional customer response acknowledging the "
-                "complaint and outlining the resolution timeline. Do NOT "
-                "include any personal data."
-            ),
-        )
+    .instruction(
+        "Standard response",
+        model="claude-haiku-4-5-20251001",
+        provider="anthropic",
+        system_instruction=(
+            "Draft a professional customer response acknowledging the "
+            "complaint and outlining the resolution timeline. Do NOT "
+            "include any personal data."
+        ),
+    )
     .end()
-
     # Final summary
     .write_memory("Store resolution", memory_name="resolution")
-    .text("Complete", template=(
-        "\n--- Pipeline Complete ---\n"
-        "Complaint processed. Resolution stored in memory."
-    ))
-    .end()
+    .text(
+        "Complete",
+        template=(
+            "\n--- Pipeline Complete ---\n"
+            "Complaint processed. Resolution stored in memory."
+        ),
+    )
 )
 
 # -- Execute with the cleaned text as input ----------------------------------
 
-run_graph(agent, user_input=clean_text)
+qm.run_graph(agent, user_input=clean_text)
