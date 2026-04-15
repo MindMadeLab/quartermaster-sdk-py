@@ -670,7 +670,12 @@ class StaticExecutor(NodeExecutor):
 
 
 class VarExecutor(NodeExecutor):
-    """Sets a variable in flow memory, with expression evaluation."""
+    """Sets a variable in flow memory, with expression evaluation.
+
+    Expressions go through ``quartermaster_nodes.safe_eval`` (a
+    ``simpleeval``-backed sandbox) — the dunder/``__class__`` escape
+    that breaks ``eval(..., {"__builtins__": {}}, ...)`` is closed.
+    """
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
         # Builder stores var name as "name" in metadata
@@ -678,10 +683,25 @@ class VarExecutor(NodeExecutor):
         expression = context.get_meta("expression", "")
         if variable:
             if expression:
-                # Try to evaluate expression against flow memory
+                # safe_eval supports literals, arithmetic, comparisons,
+                # bool/bitwise ops, subscripts, comprehensions and a small
+                # whitelist of builtins (len, str, int, …).  Anything
+                # outside that — imports, attribute escapes, exec — raises
+                # SafeEvalError, in which case we fall back to the literal
+                # expression string (matching pre-0.1.2 behaviour).
+                from quartermaster_nodes.safe_eval import (  # local: optional dep
+                    SafeEvalError,
+                    safe_eval,
+                )
+
                 try:
-                    value = eval(expression, {"__builtins__": {}}, dict(context.memory))
-                except Exception:
+                    value = safe_eval(expression, dict(context.memory))
+                except (SafeEvalError, ValueError, TypeError, KeyError) as exc:
+                    logger.info(
+                        "VarExecutor: expression %r rejected by safe_eval: %s",
+                        expression,
+                        exc,
+                    )
                     value = expression
             else:
                 # No expression — capture last message content
@@ -699,17 +719,31 @@ class VarExecutor(NodeExecutor):
 
 
 class IfExecutor(NodeExecutor):
-    """Evaluates a boolean expression and picks the true/false branch."""
+    """Evaluates a boolean expression and picks the true/false branch.
+
+    Uses ``quartermaster_nodes.safe_eval`` so a malicious ``if_expression``
+    can't escape via ``__class__.__bases__`` like a raw ``eval`` would.
+    """
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
         expression = context.get_meta("if_expression", "")
         if not expression:
             return NodeResult(success=True, data={}, output_text="true", picked_node="true")
 
+        from quartermaster_nodes.safe_eval import (  # local: optional dep
+            SafeEvalError,
+            safe_eval,
+        )
+
         try:
-            result = eval(expression, {"__builtins__": {}}, dict(context.memory))
+            result = safe_eval(expression, dict(context.memory))
             picked = "true" if result else "false"
-        except Exception:
+        except (SafeEvalError, ValueError, TypeError, KeyError) as exc:
+            logger.info(
+                "IfExecutor: expression %r rejected by safe_eval: %s",
+                expression,
+                exc,
+            )
             picked = "false"
 
         return NodeResult(success=True, data={}, output_text=picked, picked_node=picked)
