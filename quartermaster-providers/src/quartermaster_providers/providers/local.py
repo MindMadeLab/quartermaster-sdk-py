@@ -51,20 +51,32 @@ def _normalize_openai_compat_url(base_url: str) -> str:
 
 
 def _strip_v1(base_url: str) -> str:
-    """Drop a trailing ``/v1`` segment.
+    """Drop the ``/v1`` segment that ``_normalize_openai_compat_url`` adds.
 
     The OpenAI-compat path lives at ``/v1/chat/completions`` but the
     native Ollama API lives at ``/api/chat``.  ``OllamaProvider`` stores
     its base URL in the ``/v1`` form (so the openai SDK works), so the
     sync ``chat()`` shim has to peel ``/v1`` back off before talking to
     ``/api/chat``.
+
+    We only strip when ``/v1`` sits directly under the host root —
+    ``http://host:port/v1``.  A URL like ``http://gateway/api/v1`` is
+    likely a corporate proxy with its own path prefix (where stripping
+    would silently produce ``http://gateway/api`` and route ``/api/chat``
+    requests to ``/api/api/chat``).  In that case we leave the URL alone
+    and let the caller hit whatever they configured.
     """
     if not base_url:
         return base_url
-    stripped = base_url.rstrip("/")
-    if stripped.endswith("/v1"):
-        return stripped[: -len("/v1")]
-    return stripped
+    from urllib.parse import urlparse, urlunparse
+
+    parsed = urlparse(base_url)
+    path = parsed.path.rstrip("/")
+    if path == "/v1":
+        # Bare host + /v1 — strip it.
+        return urlunparse(parsed._replace(path=""))
+    # Anything else (deeper path, or no /v1 at all) is left untouched.
+    return base_url.rstrip("/")
 
 
 @dataclass
@@ -219,9 +231,21 @@ class OllamaProvider(OpenAICompatibleProvider):
                 provider=self.PROVIDER_NAME,
                 status_code=exc.response.status_code,
             ) from exc
-        except (httpx.ConnectError, httpx.ReadError, httpx.ReadTimeout) as exc:
-            # Network unreachable / timed out — caller needs to know
-            # this didn't even hit the model, not a soft "no answer".
+        except (
+            httpx.ConnectError,
+            httpx.ReadError,
+            httpx.WriteError,
+            httpx.TimeoutException,
+        ) as exc:
+            # Network unreachable, write failed, or any flavour of
+            # timeout — connect/read/write/pool — all mean the request
+            # didn't get a usable answer from Ollama.  ``TimeoutException``
+            # is the umbrella for ``ConnectTimeout`` (server up but slow
+            # to accept the socket — common during model load) plus
+            # ``ReadTimeout`` and ``WriteTimeout``.  Catching only
+            # ``ReadTimeout`` would let ``ConnectTimeout`` bubble out as
+            # a generic ``ProviderError`` and confuse callers about
+            # whether Ollama was reachable at all.
             raise ServiceUnavailableError(
                 f"Could not reach Ollama at {url}: {exc}",
                 provider=self.PROVIDER_NAME,

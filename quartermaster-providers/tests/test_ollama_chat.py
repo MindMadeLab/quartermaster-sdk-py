@@ -76,6 +76,19 @@ class TestStripV1:
     def test_leaves_bare_host_alone(self):
         assert _strip_v1("http://localhost:11434") == "http://localhost:11434"
 
+    def test_preserves_corporate_gateway_path(self):
+        """Regression: ``http://gateway/api/v1`` is a real-world prefix
+        for corporate Ollama proxies.  We must NOT strip ``/v1`` and
+        produce ``http://gateway/api`` (which would route ``/api/chat``
+        requests to ``/api/api/chat`` and 404)."""
+        assert _strip_v1("http://gateway.corp/api/v1") == "http://gateway.corp/api/v1"
+
+    def test_preserves_v1beta(self):
+        assert _strip_v1("http://api.example.com/v1beta") == "http://api.example.com/v1beta"
+
+    def test_preserves_path_segment_named_v1(self):
+        assert _strip_v1("http://h/v1/inner") == "http://h/v1/inner"
+
 
 # ── chat() happy path ──────────────────────────────────────────────────
 
@@ -253,6 +266,37 @@ class TestErrorBubbling:
         patch_httpx_client(lambda _r: httpx.Response(404, text='{"error":"model not found"}'))
         provider = OllamaProvider(base_url="http://localhost:11434/v1")
         with pytest.raises(ProviderError, match="HTTP 404"):
+            provider.chat(messages=[{"role": "user", "content": "?"}], model="gemma4:26b")
+
+    @pytest.mark.parametrize(
+        "exc_cls",
+        [httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout],
+        ids=["connect", "read", "write", "pool"],
+    )
+    def test_all_timeout_subclasses_raise_service_unavailable(self, monkeypatch, exc_cls):
+        """Regression for the v0.1.3 review: pre-fix only ``ReadTimeout``
+        was caught; ``ConnectTimeout`` (server up but slow to accept the
+        socket — common while a model is loading) escaped and surfaced as
+        a generic ``ProviderError`` instead.  All timeout subclasses must
+        now route through ``ServiceUnavailableError`` so callers can
+        distinguish "Ollama unreachable" from other failures."""
+
+        class _BoomClient:
+            def __init__(self, *_a, **_k):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def post(self, *_a, **_k):
+                raise exc_cls("simulated timeout")
+
+        monkeypatch.setattr(httpx, "Client", _BoomClient)
+        provider = OllamaProvider(base_url="http://slow:11434/v1")
+        with pytest.raises(ServiceUnavailableError, match="Could not reach Ollama"):
             provider.chat(messages=[{"role": "user", "content": "?"}], model="gemma4:26b")
 
 

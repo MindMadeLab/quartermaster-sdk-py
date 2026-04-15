@@ -220,6 +220,20 @@ THINKING_LEVELS: dict[str, tuple[bool, int | None]] = {
 }
 
 
+def _coerce_bool(value: Any) -> bool:
+    """Coerce a metadata value to ``bool``, treating string ``"false"`` as False.
+
+    Node metadata round-trips through YAML / JSON in some pipelines and
+    can come back as the string ``"false"`` — and ``bool("false")`` is
+    truthy in Python.  Treat the common falsy-string spellings as
+    ``False`` so a typo in the wire format doesn't silently flip a
+    feature on.
+    """
+    if isinstance(value, str):
+        return value.strip().lower() not in ("", "false", "0", "no", "off")
+    return bool(value)
+
+
 def _build_llm_config(
     context: ExecutionContext,
     *,
@@ -228,6 +242,7 @@ def _build_llm_config(
     stream: bool,
     system_message: str | None = None,
     temperature_default: float = 0.7,
+    temperature_override: float | None = None,
 ) -> LLMConfig:
     """Build an :class:`LLMConfig` from the node's metadata.
 
@@ -237,19 +252,40 @@ def _build_llm_config(
     was silently dropped.  Setting ``max_output_tokens=50`` and watching
     the provider burn 2 000 tokens was a real downstream blocker; this
     helper plugs the gap.
+
+    Args:
+        temperature_default: Used when the node leaves ``llm_temperature``
+            unset.
+        temperature_override: When given, takes precedence over both the
+            node metadata and the default.  Decision nodes use this to
+            pin temperature=0 regardless of what the YAML says.
     """
     thinking_level = context.get_meta("llm_thinking_level", "off")
+    if thinking_level not in THINKING_LEVELS:
+        # Unknown level — fall back to "off" but log so the misconfiguration
+        # is visible.  Silently swallowing was the same class of failure as
+        # the pre-0.1.3 max_output_tokens drop.
+        logger.warning(
+            "Unknown llm_thinking_level=%r (expected one of %s); falling back to 'off'.",
+            thinking_level,
+            sorted(THINKING_LEVELS),
+        )
     thinking_enabled, thinking_budget = THINKING_LEVELS.get(thinking_level, (False, None))
+
+    if temperature_override is not None:
+        temperature = temperature_override
+    else:
+        temperature = context.get_meta("llm_temperature", temperature_default)
 
     return LLMConfig(
         model=model,
         provider=provider_name,
         system_message=system_message,
-        temperature=context.get_meta("llm_temperature", temperature_default),
+        temperature=temperature,
         stream=stream,
         max_output_tokens=context.get_meta("llm_max_output_tokens", None),
         max_input_tokens=context.get_meta("llm_max_input_tokens", None),
-        vision=bool(context.get_meta("llm_vision", False)),
+        vision=_coerce_bool(context.get_meta("llm_vision", False)),
         thinking_enabled=thinking_enabled,
         thinking_budget=thinking_budget,
     )
@@ -658,19 +694,20 @@ class DecisionExecutor(NodeExecutor):
         user_input = str(context.memory.get("__user_input__", "Choose"))
         prompt = _format_conversation(conversation, user_input)
 
-        # Decision nodes pin temperature=0 for determinism — the helper
-        # only takes a default for that field, the per-node ``llm_temperature``
-        # is intentionally ignored here.  Everything else (max tokens,
-        # thinking, vision) flows through the metadata.
+        # Decision nodes pin temperature=0 for determinism regardless of
+        # what the per-node ``llm_temperature`` says.  Use the helper's
+        # explicit override so the contract is enforced at the call site
+        # (vs. mutating the returned config — which only worked because
+        # ``LLMConfig`` is mutable, a fragile guarantee).  Every other
+        # field (max tokens, thinking, vision) still flows through.
         config = _build_llm_config(
             context,
             provider_name=provider_name,
             model=model,
             stream=False,
             system_message=decision_prompt,
-            temperature_default=0.0,
+            temperature_override=0.0,
         )
-        config.temperature = 0.0
 
         try:
             response = await provider.generate_text_response(prompt, config)
@@ -681,7 +718,16 @@ class DecisionExecutor(NodeExecutor):
                     picked = opt
                     break
             return NodeResult(success=True, data={}, output_text="", picked_node=picked)
-        except Exception as e:
+        except Exception as exc:
+            # Decision LLM call failed — pick the first available option so
+            # the flow keeps going.  Log the failure so ops can see it
+            # rather than silently swallowing.
+            logger.warning(
+                "DecisionExecutor: %s/%s raised, defaulting to first option: %s",
+                provider_name,
+                model,
+                exc,
+            )
             picked = options[0] if options else ""
             return NodeResult(success=True, data={}, output_text="", picked_node=picked)
 
