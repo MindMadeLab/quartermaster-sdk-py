@@ -17,13 +17,21 @@ take precedence.
 The design mirrors how ``openai.OpenAI()`` and ``anthropic.Anthropic()``
 clients are typically used in real codebases — one construct at boot,
 reused everywhere else.
+
+**Deployment note:** the configured registry lives in module-level
+globals.  Under pre-fork ASGI servers (``gunicorn -w 4``, Uvicorn with
+``--workers``) each worker has its own copy — calling :func:`configure`
+in the parent process before ``fork`` is visible to the children, but
+calling it after fork only affects that worker.  Best practice: call
+:func:`configure` inside your ASGI lifespan startup hook rather than at
+module import time.  Single-process servers (``uvicorn app:api``) and
+Celery workers are unaffected.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any
 
 from quartermaster_providers import ProviderRegistry, register_local
 
@@ -120,10 +128,17 @@ def get_default_model() -> str | None:
         return _default_model
     if _default_registry is not None:
         # ``ProviderRegistry.get_default_model()`` returns the fallback
-        # provider's default model; handle both shapes.
+        # provider's default model.  We narrow the catch so real bugs
+        # (e.g. a registry that overrides the method with the wrong
+        # signature) surface instead of being silently swallowed as
+        # "no default".
         try:
             return _default_registry.get_default_model()
-        except Exception:
+        except (AttributeError, TypeError) as exc:
+            logger.warning(
+                "Configured registry does not expose a usable get_default_model(): %s",
+                exc,
+            )
             return None
     return None
 

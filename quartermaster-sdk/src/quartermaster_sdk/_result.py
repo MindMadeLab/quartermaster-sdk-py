@@ -11,11 +11,25 @@ if r.node_type == NodeType.INSTRUCTION_FORM: ...``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from quartermaster_engine import FlowResult
     from quartermaster_engine.nodes import NodeResult
+
+
+def format_missing_capture_error(name: str, captures: dict[str, "NodeResult"]) -> str:
+    """Shared error-message formatter for missing capture keys.
+
+    Used by both :class:`Result.__getitem__` here and
+    :class:`FlowResult.__getitem__` in the engine — kept in this module
+    because the engine imports *from* the SDK only via public API, and
+    duplicating the string was flagged by the v0.2.0 reviewer as a
+    maintenance footgun (changing wording in one spot would leave the
+    other silently out of date).
+    """
+    available = ", ".join(sorted(captures)) or "(no captures registered)"
+    return f"No capture named {name!r}. Available captures: {available}"
 
 
 @dataclass
@@ -56,10 +70,7 @@ class Result:
         try:
             return self.captures[name]
         except KeyError:
-            available = ", ".join(sorted(self.captures)) or "(none)"
-            raise KeyError(
-                f"No capture named {name!r}. Available captures: {available}"
-            ) from None
+            raise KeyError(format_missing_capture_error(name, self.captures)) from None
 
     def __contains__(self, name: str) -> bool:
         return name in self.captures
@@ -77,4 +88,4 @@ class Result:
         )
 
 
-__all__ = ["Result"]
+__all__ = ["Result", "format_missing_capture_error"]

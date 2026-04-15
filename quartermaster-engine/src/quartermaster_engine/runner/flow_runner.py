@@ -86,13 +86,23 @@ class FlowResult:
         """Syntactic sugar: ``result["research"]`` → the captured node result.
 
         Raises ``KeyError`` with a helpful message listing available
-        capture names when *name* is unknown.
+        capture names when *name* is unknown.  The SDK's ``Result`` type
+        uses the same message format (see ``quartermaster_sdk._result.
+        format_missing_capture_error``) so switching between the two is
+        seamless.
         """
         try:
             return self.captures[name]
         except KeyError:
-            available = ", ".join(sorted(self.captures)) or "(no captures registered)"
-            raise KeyError(f"No capture named {name!r}. Available captures: {available}") from None
+            raise KeyError(_format_missing_capture(name, self.captures)) from None
+
+
+def _format_missing_capture(name: str, captures: dict[str, NodeResult]) -> str:
+    """Shared format for "no capture named X" errors — matches the SDK's
+    ``format_missing_capture_error``.  Kept as a module-private helper here
+    so the engine doesn't depend on the SDK package."""
+    available = ", ".join(sorted(captures)) or "(no captures registered)"
+    return f"No capture named {name!r}. Available captures: {available}"
 
 
 class FlowRunner:

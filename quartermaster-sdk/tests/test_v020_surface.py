@@ -272,3 +272,77 @@ class TestToolNamePrefixStripping:
         assert _normalise_tool_name("mcp:list_orders") == "list_orders"
         # Bare names pass through unchanged.
         assert _normalise_tool_name("list_orders") == "list_orders"
+
+
+class TestMarkdownFenceStripping:
+    """Regression for the v0.2.0 reviewer HIGH: the old implementation
+    used ``str.strip("`")`` which ate backticks from anywhere in the
+    string — corrupting JSON whose string values contained literal
+    backticks.  The new regex-anchored stripper only touches the fence."""
+
+    def test_preserves_backticks_inside_json_strings(self):
+        from quartermaster_sdk._helpers import _strip_markdown_fence
+
+        raw = "```json\n" + '{"sql":"SELECT `id` FROM users"}' + "\n```"
+        assert _strip_markdown_fence(raw) == '{"sql":"SELECT `id` FROM users"}', (
+            "fence stripper must preserve backticks that appear inside string values"
+        )
+
+    def test_bare_triple_backtick_fence(self):
+        from quartermaster_sdk._helpers import _strip_markdown_fence
+
+        raw = '```\n{"ok":true}\n```'
+        assert _strip_markdown_fence(raw) == '{"ok":true}'
+
+    def test_unfenced_passes_through(self):
+        from quartermaster_sdk._helpers import _strip_markdown_fence
+
+        raw = '{"plain":"value"}'
+        assert _strip_markdown_fence(raw) == raw
+
+    def test_instruction_form_survives_backticks_in_json(self):
+        """The integration case: ``instruction_form`` returns a valid
+        Pydantic model even when the canned response contains backticks
+        inside a string field."""
+
+        class Sample(BaseModel):
+            query: str
+
+        canned = "```json\n" + '{"query":"SELECT `id` FROM users"}' + "\n```"
+        reg, _ = _mock_registry(canned)
+        qm.configure(registry=reg)
+        out = qm.instruction_form(Sample, system="c", user="u")
+        # The backticks survive — they were part of the JSON value, not the fence.
+        assert out.query == "SELECT `id` FROM users"
+
+
+class TestStreamEarlyExitCancels:
+    """Regression for the v0.2.0 reviewer HIGH: abandoning the generator
+    early must set the cancellation Event and join the runner thread
+    within the documented timeout — not leak the thread forever."""
+
+    def test_break_out_of_stream_finishes_promptly(self):
+        import threading as _threading
+        import time as _time
+
+        reg, _ = _mock_registry("streaming response tokens")
+        qm.configure(registry=reg)
+        graph = qm.Graph("x").instruction("One").build()
+
+        before = _threading.active_count()
+        for _chunk in qm.run.stream(graph, "hi"):
+            break  # abandon the iterator immediately
+        # Allow the join(timeout=5.0) in the generator's finally to run.
+        _time.sleep(0.2)
+        after = _threading.active_count()
+        # Some background threads are OK (pytest, etc.), but our named
+        # "qm-run-stream" must have exited.
+        leaked = [
+            t
+            for t in _threading.enumerate()
+            if t.name == "qm-run-stream" and t.is_alive()
+        ]
+        assert leaked == [], (
+            f"run.stream thread leaked after early break; still alive: {leaked}. "
+            f"active count went from {before} to {after}."
+        )

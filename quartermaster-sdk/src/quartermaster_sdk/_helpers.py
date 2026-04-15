@@ -12,12 +12,12 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, TypeVar
+import re
+from typing import TYPE_CHECKING, TypeVar
 
 from quartermaster_graph import Graph
-from quartermaster_graph.enums import NodeType
 
-from ._config import get_default_model, get_default_registry
+from ._config import get_default_model
 from ._runner import run
 
 if TYPE_CHECKING:
@@ -28,6 +28,28 @@ logger = logging.getLogger(__name__)
 
 
 T = TypeVar("T", bound="BaseModel")
+
+
+# Match an opening ```lang\n (or ``` alone) at the start of a response and
+# a closing ``` at the end, leaving any triple-backtick-looking characters
+# INSIDE the JSON alone.  ``str.strip("`")`` would eat backticks out of
+# string values (e.g. SQL or regex examples quoted in the JSON body);
+# this regex pair targets only the fence itself.
+_MD_FENCE_OPEN_RE = re.compile(r"\A\s*```[A-Za-z0-9_-]*\s*\n?")
+_MD_FENCE_CLOSE_RE = re.compile(r"\n?\s*```\s*\Z")
+
+
+def _strip_markdown_fence(raw: str) -> str:
+    """Remove a leading ``` fence (with optional language tag) and a trailing ``` fence.
+
+    Preserves every backtick that appears inside the fenced content —
+    ``re.sub(r'^```[lang]\\n?', '')`` + ``re.sub(r'\\n?```$', '')`` rather
+    than the pre-0.2.0 naive ``str.strip("`")`` which corrupted JSON
+    strings containing literal backticks.
+    """
+    text = _MD_FENCE_OPEN_RE.sub("", raw)
+    text = _MD_FENCE_CLOSE_RE.sub("", text)
+    return text.strip()
 
 
 def instruction(
@@ -177,12 +199,10 @@ def instruction_form(
     )
 
     # Strip fences in case the model insists on markdown despite instructions.
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.strip("`")
-        # after stripping backticks, optionally drop a leading "json\n"
-        if cleaned.lower().startswith("json"):
-            cleaned = cleaned[4:].lstrip()
+    # Uses a regex-anchored pattern — the pre-0.2.0 ``str.strip("`")`` ate
+    # backticks out of string values (code snippets, regex examples) and
+    # corrupted the JSON before parsing could see it.
+    cleaned = _strip_markdown_fence(raw)
 
     try:
         return schema.model_validate_json(cleaned)
