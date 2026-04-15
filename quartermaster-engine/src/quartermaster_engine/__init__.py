@@ -3,11 +3,13 @@
 from quartermaster_engine.context.execution_context import ExecutionContext
 from quartermaster_engine.context.node_execution import NodeExecution, NodeStatus
 from quartermaster_engine.events import (
+    CustomEvent,
     FlowError,
     FlowEvent,
     FlowFinished,
     NodeFinished,
     NodeStarted,
+    ProgressEvent,
     TokenGenerated,
     ToolCallFinished,
     ToolCallStarted,
@@ -71,6 +73,8 @@ __all__ = [
     "FlowError",
     "ToolCallStarted",
     "ToolCallFinished",
+    "ProgressEvent",
+    "CustomEvent",
     # Stores
     "ExecutionStore",
     "InMemoryStore",

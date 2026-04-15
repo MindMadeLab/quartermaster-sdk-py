@@ -19,6 +19,7 @@ The execution loop:
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import time
 from collections.abc import AsyncIterator, Callable
@@ -26,15 +27,18 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID, uuid4
 
+from quartermaster_engine.context.current_context import bind as bind_current_context
 from quartermaster_engine.context.execution_context import ExecutionContext
 from quartermaster_engine.context.node_execution import NodeExecution, NodeStatus
 from quartermaster_engine.dispatchers.sync_dispatcher import SyncDispatcher
 from quartermaster_engine.events import (
+    CustomEvent,
     FlowError,
     FlowEvent,
     FlowFinished,
     NodeFinished,
     NodeStarted,
+    ProgressEvent,
     TokenGenerated,
     ToolCallFinished,
     ToolCallStarted,
@@ -491,6 +495,23 @@ class FlowRunner:
                     iteration=it,
                 )
             ),
+            on_progress=lambda msg, percent, data: self._emit(
+                ProgressEvent(
+                    flow_id=flow_id,
+                    node_id=node.id,
+                    message=msg,
+                    percent=percent,
+                    data=data,
+                )
+            ),
+            on_custom=lambda name, payload: self._emit(
+                CustomEvent(
+                    flow_id=flow_id,
+                    node_id=node.id,
+                    name=name,
+                    payload=payload,
+                )
+            ),
         )
 
         # Execute with error handling
@@ -517,6 +538,20 @@ class FlowRunner:
     ) -> NodeResult:
         """Run a node executor, handling sync/async transparently.
 
+        Wraps the executor invocation in ``current_context.bind(context)``
+        so application code inside the executor (most importantly
+        ``@tool()`` callables) can reach the live :class:`ExecutionContext`
+        via :func:`quartermaster_sdk.current_context` and emit progress
+        or custom events back onto the stream.
+
+        Threading: when we're inside a running asyncio event loop we
+        dispatch to a ``ThreadPoolExecutor``. Python's ``contextvars``
+        do NOT propagate into pool workers automatically, so we submit
+        ``contextvars.copy_context().run(target)`` — the worker thread
+        inherits a snapshot of the caller's contextvars (including the
+        freshly-bound ``_current_ctx``) and tools running inside the
+        coroutine see ``current_context()`` return a non-None value.
+
         If the node has a ``timeout`` set (in seconds), execution is wrapped
         in ``asyncio.wait_for`` so that a ``TimeoutError`` is raised when the
         node exceeds its time budget.
@@ -532,14 +567,25 @@ class FlowRunner:
         except RuntimeError:
             loop = None
 
-        if loop and loop.is_running():
-            # We're inside an async context — create a new thread to run the coroutine
-            import concurrent.futures
+        # Bind the contextvar for the duration of this executor call so
+        # tools invoked during execution can emit progress/custom events.
+        # The ``with`` scope unwinds the var after the executor returns.
+        with bind_current_context(context):
+            if loop and loop.is_running():
+                # Inside an async context — spawn a worker thread for the
+                # coroutine. ``copy_context().run(...)`` carries the
+                # freshly-bound contextvar into the worker's stack so
+                # ``current_context()`` resolves correctly there too.
+                import concurrent.futures
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(asyncio.run, coro)
-                return future.result(timeout=node.timeout)
-        else:
+                ctx_snapshot = contextvars.copy_context()
+
+                def _worker() -> NodeResult:
+                    return asyncio.run(coro)
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(ctx_snapshot.run, _worker)
+                    return future.result(timeout=node.timeout)
             return asyncio.run(coro)
 
     def _handle_node_error(
