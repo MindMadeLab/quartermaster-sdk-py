@@ -16,7 +16,24 @@ Example:
     response = await provider.generate_text_response("Hello!", config)
 """
 
+from quartermaster_providers.base import AbstractLLMProvider
 from quartermaster_providers.config import LLMConfig
+from quartermaster_providers.exceptions import (
+    AuthenticationError,
+    ContentFilterError,
+    ContextLengthError,
+    InvalidModelError,
+    InvalidRequestError,
+    ProviderError,
+    RateLimitError,
+    ServiceUnavailableError,
+)
+from quartermaster_providers.registry import (
+    ProviderRegistry,
+    get_default_registry,
+    infer_provider,
+    register_local,
+)
 from quartermaster_providers.types import (
     Message,
     MessageHistory,
@@ -29,20 +46,8 @@ from quartermaster_providers.types import (
     ToolCallResponse,
     ToolDefinition,
 )
-from quartermaster_providers.base import AbstractLLMProvider
-from quartermaster_providers.exceptions import (
-    AuthenticationError,
-    ContentFilterError,
-    ContextLengthError,
-    InvalidModelError,
-    InvalidRequestError,
-    ProviderError,
-    RateLimitError,
-    ServiceUnavailableError,
-)
-from quartermaster_providers.registry import ProviderRegistry, infer_provider, get_default_registry
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 __author__ = "MindMade"
 
 __all__ = [
@@ -74,4 +79,5 @@ __all__ = [
     "ProviderRegistry",
     "infer_provider",
     "get_default_registry",
+    "register_local",
 ]

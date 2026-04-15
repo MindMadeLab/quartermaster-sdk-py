@@ -23,33 +23,55 @@ All of these expose an OpenAI-compatible ``/v1`` endpoint.
 
 from __future__ import annotations
 
+import os
+
 from quartermaster_providers.providers.openai_compat import OpenAICompatibleProvider
+
+
+def _normalize_openai_compat_url(base_url: str) -> str:
+    """Ensure an OpenAI-compatible endpoint URL ends with ``/v1``.
+
+    Users naturally type ``http://host:11434`` (the bare Ollama address) but
+    the OpenAI SDK needs ``/v1`` appended.  We add it iff it isn't already
+    there so both forms work.
+    """
+    if not base_url:
+        return base_url
+    stripped = base_url.rstrip("/")
+    if stripped.endswith("/v1") or "/v1/" in stripped:
+        return stripped
+    return f"{stripped}/v1"
 
 
 class OllamaProvider(OpenAICompatibleProvider):
     """Ollama local inference.
 
-    Default endpoint: ``http://localhost:11434/v1``
+    Default endpoint: ``http://localhost:11434/v1`` (overridable via the
+    ``OLLAMA_HOST`` env var — accepts either ``http://host:port`` or
+    ``http://host:port/v1``).
 
     Ollama doesn't require an API key.  Just run ``ollama serve`` and
     pull a model (``ollama pull llama3.1``).
 
     Example::
 
-        provider = OllamaProvider()                       # localhost
-        provider = OllamaProvider(base_url="http://gpu-box:11434/v1")
+        provider = OllamaProvider()                       # localhost or $OLLAMA_HOST
+        provider = OllamaProvider(base_url="http://gpu-box:11434")     # /v1 added
+        provider = OllamaProvider(base_url="http://gpu-box:11434/v1")  # already correct
     """
 
     PROVIDER_NAME = "ollama"
+    DEFAULT_BASE_URL = "http://localhost:11434/v1"
 
     def __init__(
         self,
-        base_url: str = "http://localhost:11434/v1",
+        base_url: str | None = None,
         api_key: str = "ollama",
         **kwargs,
     ):
+        resolved = base_url or os.environ.get("OLLAMA_HOST") or self.DEFAULT_BASE_URL
         super().__init__(
-            base_url=base_url,
+            base_url=_normalize_openai_compat_url(resolved),
             api_key=api_key,
             auth_method="none",
             provider_name="ollama",

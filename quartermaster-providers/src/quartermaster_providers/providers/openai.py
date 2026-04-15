@@ -67,6 +67,31 @@ def _is_o_series(model: str) -> bool:
     return model.startswith("o1") or model.startswith("o3")
 
 
+def _extract_reasoning_text(obj: Any) -> str:
+    """Pull reasoning text out of a non-standard OpenAI-compatible response.
+
+    Some OpenAI-compatible servers (notably Ollama proxies for reasoning
+    models like ``gemma4:26b``) leave ``content`` empty and put the user-
+    visible answer in a ``reasoning`` or ``reasoning_content`` field.  This
+    helper checks both attribute access (Pydantic model) and dict access so
+    it works for any shape the SDK returns.
+
+    The fallback is intentionally narrow: only non-empty string values
+    trigger it, so a vanilla OpenAI response with empty content + empty
+    reasoning still returns ``""`` (preserving "model said nothing"
+    semantics for content-filtered or zero-temperature edge cases).
+    """
+    if obj is None:
+        return ""
+    for key in ("reasoning_content", "reasoning"):
+        value = getattr(obj, key, None)
+        if value is None and isinstance(obj, dict):
+            value = obj.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
 class OpenAIProvider(AbstractLLMProvider):
     """OpenAI LLM provider for GPT-4o, GPT-4, o-series, and Whisper.
 
@@ -216,8 +241,13 @@ class OpenAIProvider(AbstractLLMProvider):
             else:
                 response = await client.chat.completions.create(**params)
                 choice = response.choices[0]
+                content = choice.message.content or ""
+                if not content:
+                    # Some OpenAI-compatible reasoning models leave content
+                    # empty and place the answer in a ``reasoning`` field.
+                    content = _extract_reasoning_text(choice.message)
                 return TokenResponse(
-                    content=choice.message.content or "",
+                    content=content,
                     stop_reason=choice.finish_reason,
                 )
         except (AuthenticationError, RateLimitError, ProviderError):
@@ -233,16 +263,28 @@ class OpenAIProvider(AbstractLLMProvider):
             async for chunk in stream:
                 if chunk.choices:
                     delta = chunk.choices[0].delta
+                    finish_reason = chunk.choices[0].finish_reason
                     if delta and delta.content:
                         yield TokenResponse(
                             content=delta.content,
-                            stop_reason=chunk.choices[0].finish_reason,
+                            stop_reason=finish_reason,
                         )
-                    elif chunk.choices[0].finish_reason:
-                        yield TokenResponse(
-                            content="",
-                            stop_reason=chunk.choices[0].finish_reason,
-                        )
+                    else:
+                        # OpenAI-compatible reasoning models stream their
+                        # answer through ``reasoning_content`` (or ``reasoning``)
+                        # when ``content`` is absent — surface that as visible
+                        # text so callers don't see an empty stream.
+                        reasoning_chunk = _extract_reasoning_text(delta) if delta else ""
+                        if reasoning_chunk:
+                            yield TokenResponse(
+                                content=reasoning_chunk,
+                                stop_reason=finish_reason,
+                            )
+                        elif finish_reason:
+                            yield TokenResponse(
+                                content="",
+                                stop_reason=finish_reason,
+                            )
                 if hasattr(chunk, "usage") and chunk.usage:
                     yield TokenResponse(
                         content="",
@@ -347,8 +389,11 @@ class OpenAIProvider(AbstractLLMProvider):
                     output_tokens=response.usage.completion_tokens,
                 )
 
+            text_content = message.content or ""
+            if not text_content:
+                text_content = _extract_reasoning_text(message)
             return NativeResponse(
-                text_content=message.content or "",
+                text_content=text_content,
                 thinking=[],
                 tool_calls=tool_calls,
                 stop_reason=choice.finish_reason,
