@@ -22,6 +22,7 @@ import logging
 import os
 import pathlib
 import sys
+from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -434,17 +435,41 @@ def _normalise_tool_name(tool_name: str) -> str:
     return tool_name
 
 
-def _execute_tool_call(tool_registry: Any, tool_name: str, parameters: dict) -> str:
-    """Run one tool from the registry and serialise its result for the LLM.
+@dataclass
+class _ToolInvocation:
+    """Result of invoking one tool from the registry.
 
-    The returned string is fed back into the next LLM prompt, so exception
-    detail is intentionally generic — the full traceback goes to the
-    module logger instead, where ops can inspect it without exposing
-    internal paths/identifiers to the model (or, by extension, to any
-    user who can read the model's reasoning).
+    ``prompt_text`` is what gets baked into the next LLM prompt
+    (string, safe for the model to read); ``raw`` is the original
+    structured payload — a dict for most ``@tool()``-decorated
+    callables, ``None`` when the tool errored or returned nothing
+    structured. ``error`` is set when the lookup failed or the tool
+    raised; downstream ``ToolCallFinished`` event handlers surface
+    it to chat UIs so the user sees a red tool card.
+    """
+
+    prompt_text: str
+    raw: Any
+    error: str | None
+
+
+def _execute_tool_call(
+    tool_registry: Any, tool_name: str, parameters: dict
+) -> _ToolInvocation:
+    """Run one tool from the registry and return both the LLM-facing
+    string and the structured payload for live streaming.
+
+    The ``prompt_text`` surface is fed back into the next LLM prompt, so
+    exception detail is intentionally generic — the full traceback goes
+    to the module logger instead, where ops can inspect it without
+    exposing internal paths/identifiers to the model (or, by extension,
+    to any user who can read the model's reasoning). The structured
+    ``raw`` + ``error`` fields are only observed by the agent loop and
+    the ``ToolCallFinished`` event downstream, never fed back to the LLM.
     """
     if tool_registry is None:
-        return f"[ERROR: no tool registry available to execute '{tool_name}']"
+        msg = f"[ERROR: no tool registry available to execute '{tool_name}']"
+        return _ToolInvocation(prompt_text=msg, raw=None, error="no tool registry")
     # Strip ``default_api:`` / ``functions:`` / ``mcp:`` prefixes that
     # different providers attach to the function name.  Without this the
     # registry lookup would miss a tool that's registered under the bare
@@ -454,15 +479,18 @@ def _execute_tool_call(tool_registry: Any, tool_name: str, parameters: dict) -> 
         tool = tool_registry.get(normalised)
     except Exception as exc:
         logger.warning("Tool lookup failed for %r: %s", normalised, exc)
-        return f"[ERROR: tool '{normalised}' not found]"
+        msg = f"[ERROR: tool '{normalised}' not found]"
+        return _ToolInvocation(prompt_text=msg, raw=None, error=f"not found: {exc}")
     safe_run = getattr(tool, "safe_run", None) or getattr(tool, "run", None)
     if safe_run is None:
-        return f"[ERROR: tool '{normalised}' has no run() method]"
+        msg = f"[ERROR: tool '{normalised}' has no run() method]"
+        return _ToolInvocation(prompt_text=msg, raw=None, error="no run() method")
     try:
         result = safe_run(**parameters)
     except Exception as exc:
         logger.warning("Tool %r raised during execution: %s", normalised, exc)
-        return f"[ERROR: tool '{normalised}' execution failed]"
+        msg = f"[ERROR: tool '{normalised}' execution failed]"
+        return _ToolInvocation(prompt_text=msg, raw=None, error=str(exc))
     # ToolResult duck-typing: prefer .data, fall back to str().
     if hasattr(result, "success") and not result.success:
         # Tool itself returned a structured failure — these errors come from
@@ -470,10 +498,14 @@ def _execute_tool_call(tool_registry: Any, tool_name: str, parameters: dict) -> 
         # but log them too for ops visibility.
         err = getattr(result, "error", "tool failed")
         logger.info("Tool %r returned error result: %s", normalised, err)
-        return f"[ERROR: {err}]"
+        return _ToolInvocation(
+            prompt_text=f"[ERROR: {err}]",
+            raw=getattr(result, "data", None),
+            error=str(err),
+        )
     if hasattr(result, "data"):
-        return str(result.data)
-    return str(result)
+        return _ToolInvocation(prompt_text=str(result.data), raw=result.data, error=None)
+    return _ToolInvocation(prompt_text=str(result), raw=result, error=None)
 
 
 class AgentExecutor(NodeExecutor):
@@ -553,6 +585,13 @@ class AgentExecutor(NodeExecutor):
         prompt = base_prompt
         final_text = ""
         accumulated_tool_log: list[str] = []
+        # Structured record of every tool invocation this node made.
+        # Surfaces on ``NodeResult.data["tool_calls"]`` so downstream
+        # ``Result.captures["name"].data["tool_calls"]`` works for both
+        # the blocking (``qm.run``) and streaming (``qm.run.stream``)
+        # paths.  Each entry: {tool, arguments, result, raw, error,
+        # iteration}.
+        tool_call_log: list[dict[str, Any]] = []
         iteration = 0
         requires_another_call = True
         hit_iteration_cap = False
@@ -634,7 +673,40 @@ class AgentExecutor(NodeExecutor):
                     params = getattr(call, "parameters", None)
                     if params is None:
                         params = getattr(call, "arguments", {}) or {}
-                result = _execute_tool_call(per_node_tools, tool_name, params)
+
+                # Normalise the tool name BEFORE emitting the "started"
+                # event so downstream UIs see the same name the registry
+                # looks up (strips ``default_api:`` / ``functions:`` /
+                # ``mcp:`` prefixes).  Without this the chat card would
+                # say ``default_api:list_orders`` while the tool call log
+                # says ``list_orders`` — confusing.
+                public_name = _normalise_tool_name(tool_name)
+                context.emit_tool_start(public_name, dict(params), iteration)
+
+                invocation = _execute_tool_call(per_node_tools, tool_name, params)
+
+                context.emit_tool_finish(
+                    public_name,
+                    dict(params),
+                    invocation.prompt_text,
+                    invocation.raw,
+                    invocation.error,
+                    iteration,
+                )
+
+                # Structured record for NodeResult.data["tool_calls"] so
+                # ``qm.run(...)`` callers (non-streaming) can read exactly
+                # the same shape the streaming ToolCallFinished event
+                # carries.  Both surfaces stay in sync by construction.
+                tool_call_log.append({
+                    "tool": public_name,
+                    "arguments": dict(params),
+                    "result": invocation.prompt_text,
+                    "raw": invocation.raw,
+                    "error": invocation.error,
+                    "iteration": iteration,
+                })
+
                 # Wrap each tool result in an explicit untrusted-data block.
                 # Tool output frequently includes external content (web
                 # pages, file contents, DB rows), which can carry indirect
@@ -643,8 +715,8 @@ class AgentExecutor(NodeExecutor):
                 # instructions, blunts that attack class.
                 accumulated_tool_log.append(
                     "<tool_result"
-                    f' tool="{tool_name}" iteration="{iteration}"'
-                    f" args={params!r}>\n{result}\n</tool_result>"
+                    f' tool="{public_name}" iteration="{iteration}"'
+                    f" args={params!r}>\n{invocation.prompt_text}\n</tool_result>"
                 )
 
             tool_history = "\n".join(accumulated_tool_log)
@@ -677,7 +749,15 @@ class AgentExecutor(NodeExecutor):
         _append_to_conversation(conversation, node_name, final_text, round_num)
         return NodeResult(
             success=True,
-            data={"memory_updates": {"__conversation__": conversation}},
+            data={
+                "memory_updates": {"__conversation__": conversation},
+                # Surface the structured tool-call log on NodeResult.data
+                # so the SDK's Result.captures["x"].data["tool_calls"]
+                # read matches what streaming ToolCallChunk / ToolResultChunk
+                # events carry.  Empty list when the agent didn't call tools.
+                "tool_calls": tool_call_log,
+                "iterations": iteration,
+            },
             output_text=final_text,
         )
 
