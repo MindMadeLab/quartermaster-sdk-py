@@ -62,7 +62,7 @@ from quartermaster_graph.traversal import (
 )
 from quartermaster_graph.validation import ValidationError, validate_graph
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 __all__ = [
     # Enums
