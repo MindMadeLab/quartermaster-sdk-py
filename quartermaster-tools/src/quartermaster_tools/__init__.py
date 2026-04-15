@@ -62,7 +62,12 @@ from quartermaster_tools.builtin.web_search import (
     WebScraperTool,
 )
 from quartermaster_tools.chain import Chain, Handler
-from quartermaster_tools.decorator import FunctionTool, tool
+from quartermaster_tools.decorator import (
+    FunctionTool,
+    auto_decorate,
+    is_quartermaster_tool,
+    tool,
+)
 from quartermaster_tools.registry import ToolRegistry, get_default_registry, register_tool
 from quartermaster_tools.types import (
     ToolDescriptor,
@@ -75,6 +80,7 @@ __version__ = "0.3.1"
 __all__ = [
     "AbstractLocalTool",
     "AbstractTool",
+    "auto_decorate",
     "Chain",
     "convert_format",
     "ConvertFormatTool",
@@ -95,6 +101,7 @@ __all__ = [
     "FunctionTool",
     "GetVariableTool",
     "grep",
+    "is_quartermaster_tool",
     "GrepTool",
     "Handler",
     "JavaScriptExecutorTool",

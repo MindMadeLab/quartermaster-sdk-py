@@ -86,6 +86,76 @@ def _llm_meta(
     return meta
 
 
+def _normalise_agent_tools(
+    tools: list[Any] | None,
+    inline_registry: dict[str, Any],
+) -> list[str]:
+    """Normalise an ``agent(tools=...)`` argument to a list of tool NAMES.
+
+    The v0.4.0 surface accepts a mix of:
+
+    * ``str`` — a tool name the run-time registry already knows about
+      (classic v0.3.x behaviour, unchanged).
+    * A ``FunctionTool`` / :class:`AbstractTool` instance — typically
+      what ``@tool()`` produces. Stashed in *inline_registry* by name
+      so the SDK runner can register it lazily at run time.
+    * A plain callable (undecorated ``def``) — auto-decorated on the
+      fly via :func:`quartermaster_tools.auto_decorate`, then stashed
+      the same way.
+    * A lambda / unintrospectable callable — raises ``ValueError`` with
+      an actionable message telling the caller to decorate explicitly.
+
+    Returns the ordered list of NAMES to store on the node metadata.
+    Mutates *inline_registry* in place with ``{name: tool_instance}``
+    entries for every callable encountered.
+    """
+    if not tools:
+        return []
+    try:
+        from quartermaster_tools import (
+            auto_decorate,
+            is_quartermaster_tool,
+        )
+    except ImportError as exc:  # pragma: no cover — quartermaster-tools is a hard dep
+        raise ImportError(
+            "quartermaster_tools is required to pass callables to "
+            "agent(tools=[...]). Install quartermaster-tools or pass tool "
+            "name strings instead."
+        ) from exc
+
+    result: list[str] = []
+    for item in tools:
+        if isinstance(item, str):
+            result.append(item)
+            continue
+        if is_quartermaster_tool(item):
+            tool_name = item.name()
+            inline_registry[tool_name] = item
+            result.append(tool_name)
+            continue
+        if callable(item):
+            try:
+                wrapped = auto_decorate(item)
+            except ValueError as exc:
+                raise ValueError(
+                    f"tools=[{item!r}] — function is not @tool()-decorated "
+                    f"and cannot be auto-decorated ({exc}). Either decorate "
+                    "it with @tool() or register it explicitly via "
+                    "get_default_registry().register(...) and pass the "
+                    "name string."
+                ) from exc
+            tool_name = wrapped.name()
+            inline_registry[tool_name] = wrapped
+            result.append(tool_name)
+            continue
+        raise TypeError(
+            f"tools=[{item!r}] — unsupported item type {type(item).__name__}. "
+            "Expected a tool name string, a @tool()-decorated function, "
+            "or an AbstractTool instance."
+        )
+    return result
+
+
 def _inline_subgraph(
     sub_graph: GraphSpec | GraphBuilder,
     nodes: list[GraphNode],
@@ -291,8 +361,9 @@ class _BranchBuilder:
         model: str = "",
         provider: str = "",
         system_instruction: str = "",
-        tools: list[str] | None = None,
+        tools: list[Any] | None = None,
         max_iterations: int = 25,
+        tool_scope: str = "strict",
         **kwargs: Any,
     ) -> _BranchBuilder:
         """Add an Agent node — autonomous agentic loop with optional tools.
@@ -302,10 +373,20 @@ class _BranchBuilder:
         with no positional args.
 
         Args:
-            tools: List of tool/program-version IDs the agent may call.
-                Empty / unset → single-shot text generation, no loop.
+            tools: Mix of tool name strings, ``@tool()``-decorated
+                callables, or :class:`AbstractTool` instances. Callables
+                are auto-registered into a per-run tool registry by the
+                SDK runner. Empty / unset → single-shot text generation,
+                no loop.
             max_iterations: Maximum loop iterations before forced stop
                 (only relevant when *tools* is non-empty).
+            tool_scope: ``"strict"`` (default, v0.4.0 behaviour) — the
+                model can ONLY call tools listed in *tools*; a
+                hallucinated out-of-list name returns a structured error
+                to the model so it can correct itself.
+                ``"permissive"`` — the legacy pre-v0.4.0 behaviour where
+                every tool registered on the shared registry is reachable
+                from this node; intended as a migration escape hatch.
         """
         flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
@@ -314,8 +395,9 @@ class _BranchBuilder:
             system_instruction=system_instruction,
             **kwargs,
         )
-        meta["program_version_ids"] = tools or []
+        meta["program_version_ids"] = _normalise_agent_tools(tools, self._graph._inline_tools)
         meta["max_iterations"] = max_iterations
+        meta["tool_scope"] = tool_scope
         node = GraphNode(
             type=NodeType.AGENT, name=name, metadata=meta, message_type=MessageType.ASSISTANT
         )
@@ -1134,6 +1216,13 @@ class GraphBuilder:
         self._position_x = 0
         self._position_y = 0
         self._allowed_agents: list[str] = []
+        # v0.4.0: side-channel dict of {tool_name: AbstractTool-like instance}
+        # populated by ``.agent(tools=[...])`` when callables are passed
+        # inline. The SDK runner reads this at run time and merges the
+        # entries into the run-scoped tool registry — callables never land
+        # in the serialisable GraphSpec (they can't survive JSON/YAML
+        # round-trips), only the resolved tool NAMES do.
+        self._inline_tools: dict[str, Any] = {}
         if auto_start:
             self._create_start_node()
 
@@ -1410,8 +1499,9 @@ class GraphBuilder:
         model: str = "",
         provider: str = "",
         system_instruction: str = "",
-        tools: list[str] | None = None,
+        tools: list[Any] | None = None,
         max_iterations: int = 25,
+        tool_scope: str = "strict",
         **kwargs: Any,
     ) -> GraphBuilder:
         """Add an Agent node — autonomous agentic loop with optional tools.
@@ -1423,10 +1513,22 @@ class GraphBuilder:
         Args:
             name: Display name (defaults to "Agent" so ``.agent()`` works
                 bare, with no positional args).
-            tools: List of tool/program-version IDs the agent may call.
-                Empty / unset → single-shot text generation, no loop.
+            tools: Mix of tool name strings, ``@tool()``-decorated
+                callables, or :class:`AbstractTool` instances. Callables
+                are auto-registered into a per-run tool registry by the
+                SDK runner; strings are resolved against the registry
+                the integrator passes to ``qm.run(tool_registry=...)``
+                (or the module-level default). Empty / unset → single-
+                shot text generation, no loop.
             max_iterations: Maximum loop iterations before forced stop
                 (only relevant when *tools* is non-empty).
+            tool_scope: ``"strict"`` (default, v0.4.0 behaviour) — the
+                model can ONLY call tools listed in *tools*; a
+                hallucinated out-of-list name returns a structured error
+                to the model so it can correct itself.
+                ``"permissive"`` — the legacy pre-v0.4.0 behaviour where
+                every tool registered on the shared registry is reachable
+                from this node; intended as a migration escape hatch.
         """
         flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
@@ -1435,8 +1537,9 @@ class GraphBuilder:
             system_instruction=system_instruction,
             **kwargs,
         )
-        meta["program_version_ids"] = tools or []
+        meta["program_version_ids"] = _normalise_agent_tools(tools, self._inline_tools)
         meta["max_iterations"] = max_iterations
+        meta["tool_scope"] = tool_scope
         node = GraphNode(
             type=NodeType.AGENT, name=name, metadata=meta, message_type=MessageType.ASSISTANT
         )
@@ -2167,6 +2270,14 @@ class GraphBuilder:
         )
         if validate:
             validate_graph(ver)
+        # v0.4.0: transfer the builder's inline-tools side-channel onto
+        # the built spec via a private attribute.  ``GraphSpec`` is a
+        # Pydantic model so we can't add this as a declared field (it
+        # would serialise to JSON, which callables can't survive); using
+        # ``object.__setattr__`` keeps the attribute out of ``model_dump``
+        # yet accessible to the SDK runner via ``getattr(spec, "_inline_tools")``.
+        if self._inline_tools:
+            object.__setattr__(ver, "_inline_tools", dict(self._inline_tools))
         return ver
 
     def build(self, validate: bool = True) -> GraphSpec:

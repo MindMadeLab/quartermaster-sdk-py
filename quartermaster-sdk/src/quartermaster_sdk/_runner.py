@@ -76,6 +76,150 @@ def _resolve_graph(graph: GraphBuilder | GraphSpec) -> GraphSpec:
     return graph
 
 
+def _extract_inline_tools(graph: GraphBuilder | GraphSpec) -> dict[str, Any]:
+    """Return the builder-side ``_inline_tools`` dict if present.
+
+    v0.4.0: ``.agent(tools=[...])`` stashes @tool()-decorated callables
+    (and auto-decorated bare functions) on the builder so the runner can
+    merge them into the run-scoped tool registry without requiring the
+    caller to do a manual ``get_default_registry().register(...)`` dance.
+
+    Returns an empty dict when the graph is a pre-built :class:`GraphSpec`
+    (callables are not JSON/YAML-serialisable so they can't survive a
+    build-then-transport round-trip — callers in that mode must register
+    their tools on the ``tool_registry=`` they pass in, as before).
+    """
+    raw = getattr(graph, "_inline_tools", None)
+    if not isinstance(raw, dict):
+        return {}
+    return dict(raw)
+
+
+def _merge_inline_tools(
+    tool_registry: Any | None,
+    inline_tools: dict[str, Any],
+) -> Any | None:
+    """Return a tool registry that exposes *inline_tools* plus any
+    registry the caller passed in.
+
+    Strategy:
+
+    * If there are no inline callables, return *tool_registry* unchanged.
+    * If the caller supplied a registry AND we have inline tools, wrap
+      both in a combining shim that first consults the inline dict and
+      then delegates to the caller registry. We don't mutate the caller
+      registry — the global default stays pristine so tests can't leak
+      tool names across runs.
+    * If the caller supplied nothing AND we have inline tools, build a
+      fresh :class:`ToolRegistry` (or fall back to the shim if
+      quartermaster-tools is unavailable, though that branch is
+      defensive only — quartermaster-tools is a hard dep).
+    """
+    if not inline_tools:
+        return tool_registry
+
+    if tool_registry is None:
+        try:
+            from quartermaster_tools import ToolRegistry
+        except ImportError:  # pragma: no cover — quartermaster-tools is a hard dep
+            return _InlineToolRegistry(inline_tools, None)
+        reg = ToolRegistry()
+        for tool in inline_tools.values():
+            try:
+                reg.register(tool)
+            except ValueError:
+                # Same name/version already in this fresh registry — skip
+                # the duplicate. Can happen if the same tool is referenced
+                # across multiple agent nodes in the same graph.
+                pass
+        return reg
+
+    return _InlineToolRegistry(inline_tools, tool_registry)
+
+
+class _InlineToolRegistry:
+    """Per-run shim that exposes inline @tool() callables AND delegates
+    unknown lookups to the caller-provided registry.
+
+    Mirrors the subset of :class:`quartermaster_tools.ToolRegistry`
+    interface that the engine's ``AgentExecutor`` actually calls:
+
+    * ``get(name) → tool`` — raises ``KeyError`` if neither the inline
+      dict nor the delegate knows the name.
+    * ``to_openai_tools() / to_anthropic_tools() / to_mcp_tools() /
+      list_tools()`` — concatenates descriptors from both sides so the
+      agent's JSON schema catalog includes both inline and pre-registered
+      tools.
+
+    The original caller-supplied registry is left untouched; inline
+    entries live in this shim for the lifetime of the run and are
+    garbage-collected when the shim goes out of scope.
+    """
+
+    def __init__(self, inline: dict[str, Any], delegate: Any | None) -> None:
+        self._inline = dict(inline)
+        self._delegate = delegate
+
+    def get(self, name: str, version: str | None = None) -> Any:
+        if name in self._inline:
+            return self._inline[name]
+        if self._delegate is None:
+            raise KeyError(name)
+        if version is None:
+            return self._delegate.get(name)
+        return self._delegate.get(name, version)
+
+    def __contains__(self, name: str) -> bool:
+        if name in self._inline:
+            return True
+        if self._delegate is None:
+            return False
+        return name in self._delegate
+
+    def list_tools(self) -> list[Any]:
+        out: list[Any] = [tool.info() for tool in self._inline.values()]
+        if self._delegate is not None:
+            delegate_list = getattr(self._delegate, "list_tools", None)
+            if callable(delegate_list):
+                out.extend(delegate_list())
+        return out
+
+    def _collect_schemas(self, method: str) -> list[dict[str, Any]]:
+        schemas: list[dict[str, Any]] = []
+        # Inline side: reuse ToolRegistry's schema helpers by temporarily
+        # building a throwaway ToolRegistry. Keeps the schema format in
+        # sync with what the canonical registry emits.
+        if self._inline:
+            try:
+                from quartermaster_tools import ToolRegistry
+
+                tmp = ToolRegistry()
+                for tool in self._inline.values():
+                    try:
+                        tmp.register(tool)
+                    except ValueError:
+                        pass
+                fn = getattr(tmp, method, None)
+                if callable(fn):
+                    schemas.extend(fn())
+            except ImportError:  # pragma: no cover
+                pass
+        if self._delegate is not None:
+            fn = getattr(self._delegate, method, None)
+            if callable(fn):
+                schemas.extend(fn())
+        return schemas
+
+    def to_openai_tools(self) -> list[dict[str, Any]]:
+        return self._collect_schemas("to_openai_tools")
+
+    def to_anthropic_tools(self) -> list[dict[str, Any]]:
+        return self._collect_schemas("to_anthropic_tools")
+
+    def to_mcp_tools(self) -> list[dict[str, Any]]:
+        return self._collect_schemas("to_mcp_tools")
+
+
 class _RunCallable:
     """Callable + ``.stream`` method exposed as ``qm.run``.
 
@@ -116,9 +260,11 @@ class _RunCallable:
                 made available to ``agent()``-type nodes that specify
                 ``tools=[...]``.
         """
+        inline_tools = _extract_inline_tools(graph)
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
         prepared_images = prepare_images(image=image, images=images)
+        effective_tool_registry = _merge_inline_tools(tool_registry, inline_tools)
 
         # v0.3.0 trace: accumulate every FlowEvent into a local list
         # so we can build a ``Trace`` and attach it to the returned
@@ -133,7 +279,7 @@ class _RunCallable:
         runner = FlowRunner(
             graph=spec,
             provider_registry=registry,
-            tool_registry=tool_registry,
+            tool_registry=effective_tool_registry,
             # Forward every event to the global listener registry so
             # bolt-on instrumentation (e.g. ``qm.telemetry.instrument()``)
             # observes the same FlowEvent stream the streaming runner
@@ -218,9 +364,11 @@ class _RunCallable:
         Kept private: callers always go through ``stream()`` which
         wraps the result in :class:`_Stream` for filter support.
         """
+        inline_tools = _extract_inline_tools(graph)
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
         prepared_images = prepare_images(image=image, images=images)
+        effective_tool_registry = _merge_inline_tools(tool_registry, inline_tools)
 
         q: queue.Queue[FlowEvent | None] = queue.Queue()
         holder_lock = threading.Lock()
@@ -250,7 +398,7 @@ class _RunCallable:
         runner = FlowRunner(
             graph=spec,
             provider_registry=registry,
-            tool_registry=tool_registry,
+            tool_registry=effective_tool_registry,
             on_event=on_event,
         )
 
