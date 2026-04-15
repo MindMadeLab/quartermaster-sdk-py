@@ -282,9 +282,13 @@ class TestInstructionForm:
             qm.instruction_form(self._Classification, system="c", user="u")
 
     def test_instruction_form_rejects_non_pydantic_schema(self):
+        # v0.4.0: passing ``dict`` (the type, not an instance) is still a
+        # schema-type error. The error class upgraded from ``ValueError``
+        # to ``TypeError`` now that dict instances *are* valid schemas
+        # (JSON Schema literals) — see ``test_v040_instruction_form_robustness``.
         reg, _ = _mock_registry("{}")
         qm.configure(registry=reg)
-        with pytest.raises(ValueError, match="pydantic.BaseModel subclass"):
+        with pytest.raises(TypeError, match="pydantic.BaseModel"):
             qm.instruction_form(dict, system="c", user="u")  # type: ignore[arg-type]
 
 
