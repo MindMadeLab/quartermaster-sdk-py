@@ -277,7 +277,7 @@ class _BranchBuilder:
 
     def agent(
         self,
-        name: str,
+        name: str = "Agent",
         model: str = "",
         provider: str = "",
         system_instruction: str = "",
@@ -285,14 +285,17 @@ class _BranchBuilder:
         max_iterations: int = 25,
         **kwargs: Any,
     ) -> _BranchBuilder:
-        """Add an Agent node — autonomous agentic loop WITH tools.
+        """Add an Agent node — autonomous agentic loop with optional tools.
 
-        Iterates up to *max_iterations* times. Each iteration the LLM
-        may call tools; the loop continues until no tool calls are returned.
+        With no tools the node degenerates to a plain text completion against
+        the configured provider, so ``.agent()`` works bare on any branch
+        with no positional args.
 
         Args:
             tools: List of tool/program-version IDs the agent may call.
-            max_iterations: Maximum loop iterations before forced stop.
+                Empty / unset → single-shot text generation, no loop.
+            max_iterations: Maximum loop iterations before forced stop
+                (only relevant when *tools* is non-empty).
         """
         flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
@@ -1278,7 +1281,7 @@ class GraphBuilder:
 
     def agent(
         self,
-        name: str,
+        name: str = "Agent",
         model: str = "",
         provider: str = "",
         system_instruction: str = "",
@@ -1286,14 +1289,19 @@ class GraphBuilder:
         max_iterations: int = 25,
         **kwargs: Any,
     ) -> GraphBuilder:
-        """Add an Agent node — autonomous agentic loop WITH tools.
+        """Add an Agent node — autonomous agentic loop with optional tools.
 
-        Iterates up to *max_iterations* times. Each iteration the LLM
-        may call tools; the loop continues until no tool calls are returned.
+        With no tools the node degenerates to a plain text completion against
+        the configured provider, which is exactly what the simplest
+        ``start → user → agent → end`` graph wants.
 
         Args:
+            name: Display name (defaults to "Agent" so ``.agent()`` works
+                bare, with no positional args).
             tools: List of tool/program-version IDs the agent may call.
-            max_iterations: Maximum loop iterations before forced stop.
+                Empty / unset → single-shot text generation, no loop.
+            max_iterations: Maximum loop iterations before forced stop
+                (only relevant when *tools* is non-empty).
         """
         flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
