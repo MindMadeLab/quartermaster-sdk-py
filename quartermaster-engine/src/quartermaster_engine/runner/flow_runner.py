@@ -36,6 +36,8 @@ from quartermaster_engine.events import (
     NodeFinished,
     NodeStarted,
     TokenGenerated,
+    ToolCallFinished,
+    ToolCallStarted,
     UserInputRequired,
 )
 from quartermaster_engine.messaging.context_manager import ContextManager
@@ -467,6 +469,27 @@ class FlowRunner:
             metadata=dict(node.metadata),
             on_token=lambda t: self._emit(
                 TokenGenerated(flow_id=flow_id, node_id=node.id, token=t)
+            ),
+            on_tool_start=lambda tool, args, it: self._emit(
+                ToolCallStarted(
+                    flow_id=flow_id,
+                    node_id=node.id,
+                    tool=tool,
+                    arguments=args,
+                    iteration=it,
+                )
+            ),
+            on_tool_finish=lambda tool, args, result, raw, err, it: self._emit(
+                ToolCallFinished(
+                    flow_id=flow_id,
+                    node_id=node.id,
+                    tool=tool,
+                    arguments=args,
+                    result=result,
+                    raw=raw,
+                    error=err,
+                    iteration=it,
+                )
             ),
         )
 

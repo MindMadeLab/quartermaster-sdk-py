@@ -36,6 +36,14 @@ class ExecutionContext:
     on_message: Callable[[str], None] | None = None
     on_status_change: Callable[[NodeStatus], None] | None = None
     on_token: Callable[[str], None] | None = None
+    # Tool-call streaming — fires once per agent tool invocation so
+    # downstream chat UIs can render live "calling tool X..." cards
+    # instead of waiting for the full NodeResult. Payload shape matches
+    # ``events.ToolCallStarted`` / ``ToolCallFinished``.
+    on_tool_start: Callable[[str, dict, int], None] | None = None
+    on_tool_finish: (
+        Callable[[str, dict, str, Any, str | None, int], None] | None
+    ) = None
 
     def get_meta(self, key: str, default: Any = None) -> Any:
         """Get a value from the node's metadata, falling back to graph metadata."""
@@ -51,6 +59,26 @@ class ExecutionContext:
         """Emit a streaming token if a callback is registered."""
         if self.on_token:
             self.on_token(token)
+
+    def emit_tool_start(
+        self, tool: str, arguments: dict[str, Any], iteration: int
+    ) -> None:
+        """Fire ``on_tool_start`` for the agent-executor tool loop, if wired."""
+        if self.on_tool_start:
+            self.on_tool_start(tool, arguments, iteration)
+
+    def emit_tool_finish(
+        self,
+        tool: str,
+        arguments: dict[str, Any],
+        result: str,
+        raw: Any,
+        error: str | None,
+        iteration: int,
+    ) -> None:
+        """Fire ``on_tool_finish`` for the agent-executor tool loop, if wired."""
+        if self.on_tool_finish:
+            self.on_tool_finish(tool, arguments, result, raw, error, iteration)
 
     def emit_message(self, content: str) -> None:
         """Emit a complete message if a callback is registered."""

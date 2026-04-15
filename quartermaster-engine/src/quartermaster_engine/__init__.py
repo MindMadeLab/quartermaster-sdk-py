@@ -9,6 +9,8 @@ from quartermaster_engine.events import (
     NodeFinished,
     NodeStarted,
     TokenGenerated,
+    ToolCallFinished,
+    ToolCallStarted,
     UserInputRequired,
 )
 from quartermaster_engine.example_runner import (
@@ -67,6 +69,8 @@ __all__ = [
     "FlowFinished",
     "UserInputRequired",
     "FlowError",
+    "ToolCallStarted",
+    "ToolCallFinished",
     # Stores
     "ExecutionStore",
     "InMemoryStore",
