@@ -183,6 +183,4 @@ agent = (
 )
 
 # Execute with a real LLM
-qm.run_graph(
-    agent, user_input="What are the latest advances in quantum error correction?"
-)
+qm.run(agent, "What are the latest advances in quantum error correction?")

@@ -45,4 +45,4 @@ agent = (
     )
 )
 
-qm.run_graph(agent, user_input="I absolutely love this product, it changed my life!")
+qm.run(agent, "I absolutely love this product, it changed my life!")

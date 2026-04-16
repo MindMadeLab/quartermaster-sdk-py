@@ -195,7 +195,7 @@ agent = (
 )
 
 # Execute with a real LLM
-qm.run_graph(
+qm.run(
     agent,
-    user_input="My laptop won't connect to the VPN and I need access to the finance portal urgently",
+    "My laptop won't connect to the VPN and I need access to the finance portal urgently",
 )

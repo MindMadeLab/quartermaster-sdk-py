@@ -348,8 +348,8 @@ def demo_graph_with_mcp_tools() -> None:
     )
 
     # Print the graph structure — we call .build() here just to inspect the
-    # validated spec; ``qm.run_graph(graph, ...)`` would accept the builder
-    # directly in the v0.2.0 API.
+    # validated spec; ``qm.run(graph, ...)`` also accepts the builder
+    # directly (auto-builds internally).
     built = graph.build()
     print("Graph structure:")
     for node in built.nodes:
@@ -366,13 +366,13 @@ def demo_graph_with_mcp_tools() -> None:
     # To actually run this graph:
     #
     #   import quartermaster_sdk as qm
-    #   qm.run_graph(graph, user_input="What is the weather in Tokyo?")
+    #   qm.run(graph, "What is the weather in Tokyo?")
     #
     # The runner wires the ToolRegistry into the FlowRunner so the
     # Agent node can call tools during its reasoning loop.
     print(
         "To execute, set an API key and call:\n"
-        "  qm.run_graph(graph, user_input='What is the weather in Tokyo?')\n"
+        "  qm.run(graph, 'What is the weather in Tokyo?')\n"
     )
 
 
