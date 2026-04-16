@@ -419,10 +419,7 @@ class _RunCallable:
                 raise ValueError("run(): session= requires session_id=")
             history: list[ChatTurn] = session.load(session_id)
             if history:
-                parts = [
-                    f"{t.role.capitalize()}: {t.content}"
-                    for t in history
-                ]
+                parts = [f"{t.role.capitalize()}: {t.content}" for t in history]
                 parts.append(f"User: {user_input}")
                 user_input = "\n".join(parts)
 

@@ -174,8 +174,10 @@ def configure(
     # v0.4.0 circuit breaker (Sorex P3.4): wrap the provider instance
     # with a CircuitBreakerWrapper so every generate_* call is gated.
     if circuit_breaker is not None:
-        provider_name = provider if registry is None else (
-            _default_registry.default_provider or provider
+        provider_name = (
+            provider
+            if registry is None
+            else (_default_registry.default_provider or provider)
         )
         _breaker_state = CircuitBreakerState(circuit_breaker)
         inner = _default_registry.get(provider_name)
@@ -201,7 +203,9 @@ def configure(
         from . import telemetry as _telemetry
 
         _telemetry.instrument()
-        logger.info("quartermaster_sdk.telemetry: instrumented from configure(telemetry=True)")
+        logger.info(
+            "quartermaster_sdk.telemetry: instrumented from configure(telemetry=True)"
+        )
 
     return _default_registry
 
