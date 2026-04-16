@@ -248,4 +248,5 @@ agent = (
 
 # -- Execute with the cleaned text as input ----------------------------------
 
-qm.run(agent, clean_text)
+result = qm.run(agent, clean_text)
+print(result.text)

@@ -65,7 +65,8 @@ agent = (
 )
 
 # Execute with a real LLM
-qm.run(
+result = qm.run(
     agent,
     "Design a Python microservice that handles user authentication with JWT tokens and rate limiting",
 )
+print(result.text)

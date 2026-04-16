@@ -77,4 +77,5 @@ agent = (
     .end()
 )
 
-qm.run(agent, "My server keeps crashing with out-of-memory errors every few hours")
+result = qm.run(agent, "My server keeps crashing with out-of-memory errors every few hours")
+print(result.text)
