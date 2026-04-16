@@ -73,4 +73,4 @@ agent = (
     )
 )
 
-qm.run_graph(agent, user_input="Alice")
+qm.run(agent, "Alice")

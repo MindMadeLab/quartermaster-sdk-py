@@ -248,4 +248,4 @@ agent = (
 
 # -- Execute with the cleaned text as input ----------------------------------
 
-qm.run_graph(agent, user_input=clean_text)
+qm.run(agent, clean_text)

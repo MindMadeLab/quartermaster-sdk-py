@@ -113,7 +113,7 @@ vision_agent = (
     )
 )
 
-qm.run_graph(vision_agent, user_input=image_prompt)
+qm.run(vision_agent, image_prompt)
 
 
 # ============================================================================
@@ -175,10 +175,7 @@ pipeline = (
     )
 )
 
-qm.run_graph(
-    pipeline,
-    user_input="The history of artificial intelligence",
-)
+qm.run(pipeline, "The history of artificial intelligence")
 
 
 # ============================================================================

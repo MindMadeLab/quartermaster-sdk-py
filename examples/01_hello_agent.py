@@ -32,8 +32,7 @@ print("Single-shot:", reply)
 
 # Full graph path: same semantics as the cloud-auto-detecting v0.1.x
 # `run_graph()`, but now without the `.start().end().build()` dance.
-# `qm.run_graph()` finalises the builder internally and prints as it
-# streams.
+# `qm.run()` finalises the builder internally and prints as it streams.
 agent = (
     qm.Graph("Hello Agent")
     .user("Ask me anything")
@@ -43,4 +42,4 @@ agent = (
         system_instruction="You are a helpful assistant. Be concise.",
     )
 )
-qm.run_graph(agent, user_input="What is the capital of Slovenia?")
+qm.run(agent, "What is the capital of Slovenia?")

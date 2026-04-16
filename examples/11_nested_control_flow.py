@@ -65,7 +65,7 @@ agent = (
 )
 
 # Execute with a real LLM
-qm.run_graph(
+qm.run(
     agent,
-    user_input="Design a Python microservice that handles user authentication with JWT tokens and rate limiting",
+    "Design a Python microservice that handles user authentication with JWT tokens and rate limiting",
 )

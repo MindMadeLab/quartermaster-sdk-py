@@ -63,7 +63,7 @@ graph = (
 )
 
 # Execute with a real LLM
-qm.run_graph(
+qm.run(
     graph,
-    user_input="Write a technical blog post about WebAssembly's role in server-side computing",
+    "Write a technical blog post about WebAssembly's role in server-side computing",
 )
