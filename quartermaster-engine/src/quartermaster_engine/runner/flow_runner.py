@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import logging
+import threading
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
@@ -130,6 +131,7 @@ class FlowRunner:
         *,
         provider_registry: Any | None = None,
         tool_registry: Any | None = None,
+        parent_context: ExecutionContext | None = None,
     ) -> None:
         """Construct a runner.
 
@@ -150,6 +152,12 @@ class FlowRunner:
         this constructor.  When you build the node registry yourself the
         runner has no way to know which provider/tool registry sits
         behind it, so they will be ``None`` — that's expected, not a bug.
+
+        Pass *parent_context* when this runner is driving a sub-graph
+        invoked by a parent flow's ``SUB_ASSISTANT`` node; executors
+        inside the sub-graph read it so that a Back or End node knows
+        to return control to the parent instead of looping to Start
+        (main graph — parent_context is ``None``).
         """
         if node_registry is None:
             if provider_registry is None:
@@ -180,18 +188,77 @@ class FlowRunner:
         self.dispatcher = dispatcher or SyncDispatcher()
         self.context_manager = context_manager or ContextManager()
         self.on_event = on_event
+        # v0.3.0: pointer back at the parent flow's ExecutionContext when
+        # this runner is driving a sub-graph (spawned via SUB_ASSISTANT).
+        self.parent_context = parent_context
 
         self._traverse_in = TraverseInGate()
         self._traverse_out = TraverseOutGate()
         self._message_router = MessageRouter(self.store)
         self._stopped: set[UUID] = set()
+        # v0.4.0 per-flow cancellation events.
+        # Every ExecutionContext this runner builds for a given flow
+        # shares the same ``threading.Event``; :meth:`stop` sets it so
+        # tools polling ``ctx.cancelled`` observe the abort and can
+        # bail cooperatively. The event also gates ``_execute_node``
+        # dispatch (alongside the legacy ``_stopped`` set) so long
+        # agent loops unwind within a bounded time after a consumer
+        # disconnects.
+        self._cancel_events: dict[UUID, threading.Event] = {}
+        # v0.3.1 Back → Start loop safety cap.  A Back node dispatches
+        # the Start node again; a broken loop (e.g. a Decision that
+        # always picks the Back arm) would otherwise recurse forever.
+        # The guard caps Back-driven dispatches at a conservative
+        # ceiling so tests and misconfigured graphs fail fast instead
+        # of hanging.  Conditional loops that correctly break via
+        # .end() on one arm terminate long before hitting this cap.
+        self._loop_counter: dict[UUID, int] = {}
+        self.max_loop_iterations = 100
 
-    def run(self, input_message: str, flow_id: UUID | None = None) -> FlowResult:
+    def _get_cancel_event(self, flow_id: UUID) -> threading.Event:
+        """Return (creating if needed) the per-flow cancellation event.
+
+        Called from :meth:`_execute_logic_node` when building an
+        :class:`ExecutionContext` and from :meth:`stop`. Creating lazily
+        means a runner instance that never executes a flow doesn't
+        allocate an event; at the same time, both the stopper and the
+        node-setup paths see the same event object because we dedupe
+        on ``flow_id``.
+        """
+        event = self._cancel_events.get(flow_id)
+        if event is None:
+            event = threading.Event()
+            self._cancel_events[flow_id] = event
+        return event
+
+    def run(
+        self,
+        input_message: str,
+        *,
+        images: list[tuple[str, str]] | None = None,
+        flow_id: UUID | None = None,
+        llm_timeouts: dict[str, float | None] | None = None,
+    ) -> FlowResult:
         """Execute the graph synchronously.
 
         Args:
             input_message: The user's input message.
+            images: Optional list of ``(base64_ascii, mime_type)`` pairs
+                attached to the initial user turn. Vision-capable
+                nodes (``Graph().vision(...)``) read this list from
+                flow memory via the ``__user_images__`` key and forward
+                it to the provider alongside the text prompt. Pass raw
+                image bytes in the SDK (``qm.run(..., image=bytes)``);
+                the SDK normalises them to the internal base64 tuple
+                shape before calling this method.
             flow_id: Optional flow ID (auto-generated if not provided).
+            llm_timeouts: Optional ``{"connect_timeout": float,
+                "read_timeout": float}`` dict stashed in flow memory
+                under ``__llm_timeouts__`` so every LLM-executing
+                node's ``_build_llm_config`` picks up the same budget.
+                Added in v0.4.0 — the SDK populates it from
+                ``qm.configure`` defaults and per-call
+                ``qm.run(..., read_timeout=...)`` overrides.
 
         Returns:
             A FlowResult with the final output and metadata.
@@ -206,6 +273,21 @@ class FlowRunner:
 
             # Store the initial user input in flow memory
             self.store.save_memory(fid, "__user_input__", input_message)
+            # Store any attached images so vision-capable nodes can pick
+            # them up via ``context.memory["__user_images__"]`` without
+            # the caller having to touch the store directly. Stored as
+            # a plain list[tuple[str, str]] — base64 ASCII + MIME type.
+            if images:
+                self.store.save_memory(fid, "__user_images__", list(images))
+            # v0.4.0: stash application-level LLM timeouts so every node's
+            # ``_build_llm_config`` sees the same defaults. Only written
+            # when the caller actually configured timeouts — otherwise
+            # leaving the key absent lets provider SDKs fall back to
+            # their own defaults (preserves v0.3.x behaviour).
+            if llm_timeouts:
+                cleaned = {k: v for k, v in llm_timeouts.items() if v is not None}
+                if cleaned:
+                    self.store.save_memory(fid, "__llm_timeouts__", cleaned)
 
             # Execute the start node, which kicks off the traversal
             self._execute_node(fid, start_node.id, input_message)
@@ -305,8 +387,21 @@ class FlowRunner:
         return result
 
     def stop(self, flow_id: UUID) -> None:
-        """Stop a running flow. Marks all active nodes as failed."""
+        """Stop a running flow. Marks all active nodes as failed.
+
+        v0.4.0: also sets the per-flow cancellation event so every
+        :class:`ExecutionContext` bound to this flow sees
+        ``ctx.cancelled == True`` on its next read. Tools polling the
+        flag can short-circuit immediately instead of waiting for the
+        next ``_execute_node`` dispatch to skip them (which is still
+        the enforcement backstop — see the ``flow_id in self._stopped``
+        guard at the top of :meth:`_execute_node`).
+        """
         self._stopped.add(flow_id)
+        # Flip the per-flow cancellation event — every context already
+        # bound to this flow shares this event object, so polling
+        # tools observe ``ctx.cancelled`` turning True on the next read.
+        self._get_cancel_event(flow_id).set()
         executions = self.store.get_all_node_executions(flow_id)
         for nid, execution in executions.items():
             if execution.status.is_active:
@@ -351,7 +446,7 @@ class FlowRunner:
 
         # Handle built-in control flow nodes
         result: NodeResult | None
-        if node.type in (NodeType.START, NodeType.END, NodeType.MERGE):
+        if node.type in (NodeType.START, NodeType.END, NodeType.MERGE, NodeType.BACK):
             result = self._execute_control_node(flow_id, node, user_input, execution)
         else:
             result = self._execute_logic_node(flow_id, node, user_input, execution)
@@ -414,7 +509,7 @@ class FlowRunner:
         user_input: str,
         execution: NodeExecution,
     ) -> NodeResult:
-        """Handle built-in control flow nodes (Start, End, Merge)."""
+        """Handle built-in control flow nodes (Start, End, Back, Merge)."""
         if node.type == NodeType.START:
             # Start node: pass the user input through
             messages = [Message(role=MessageRole.USER, content=user_input)]
@@ -422,11 +517,37 @@ class FlowRunner:
             return NodeResult(success=True, data={}, output_text=user_input)
 
         if node.type == NodeType.END:
-            # End node: collect the final output from predecessors
+            # End node (v0.3.1 reverted semantics): collect the final
+            # output from predecessors and stop.  When this runner is
+            # driving a sub-graph (``parent_context`` is set), stamp
+            # ``__return_to_parent__`` on the result so control returns
+            # to the parent's SUB_ASSISTANT node.  In the main graph an
+            # End just stops — ``_dispatch_successors`` honours the
+            # node's ``traverse_out=SPAWN_NONE``.
             messages = self._message_router.get_messages_for_node(flow_id, node, self.graph)
             final_output = messages[-1].content if messages else ""
             self._message_router.save_node_output(flow_id, node.id, messages)
-            return NodeResult(success=True, data={}, output_text=final_output)
+            data: dict[str, Any] = {}
+            if self.parent_context is not None:
+                data["__return_to_parent__"] = True
+            return NodeResult(success=True, data=data, output_text=final_output)
+
+        if node.type == NodeType.BACK:
+            # Back node (v0.3.1): explicit "loop to Start / return to
+            # parent".  No LLM call, no message production — pure
+            # control-flow marker.  ``_dispatch_successors`` reads the
+            # node type and dispatches the Start node (main graph) or
+            # signals the parent flow (sub-graph) via the same
+            # ``__return_to_parent__`` sentinel as End.
+            data = {}
+            if self.parent_context is not None:
+                data["__return_to_parent__"] = True
+            # Preserve the preceding message so downstream captures /
+            # final_output don't lose the last produced text.
+            messages = self._message_router.get_messages_for_node(flow_id, node, self.graph)
+            final_output = messages[-1].content if messages else ""
+            self._message_router.save_node_output(flow_id, node.id, messages)
+            return NodeResult(success=True, data=data, output_text=final_output)
 
         if node.type == NodeType.MERGE:
             # Merge node: combine outputs from all predecessors
@@ -471,6 +592,7 @@ class FlowRunner:
             messages=messages,
             memory=flow_memory,
             metadata=dict(node.metadata),
+            parent_context=self.parent_context,
             on_token=lambda t: self._emit(
                 TokenGenerated(flow_id=flow_id, node_id=node.id, token=t)
             ),
@@ -512,6 +634,11 @@ class FlowRunner:
                     payload=payload,
                 )
             ),
+            # v0.4.0: wire the per-flow cancellation event in so
+            # ``ctx.cancelled`` reads the same source of truth
+            # ``runner.stop(flow_id)`` flips. Every context the runner
+            # builds for this flow shares the same event object.
+            _cancelled_event=self._get_cancel_event(flow_id),
         )
 
         # Execute with error handling
@@ -632,11 +759,62 @@ class FlowRunner:
         result: NodeResult,
         user_input: str,
     ) -> None:
-        """Determine and dispatch successor nodes based on traverse_out strategy."""
-        # End nodes and failed nodes with Stop strategy don't dispatch
-        if node.type == NodeType.END:
-            return
+        """Determine and dispatch successor nodes based on traverse_out strategy.
+
+        End / Back semantics (v0.3.1):
+
+        * **End** — stops the branch.  In a sub-graph (when the executor
+          stamps ``__return_to_parent__``) control returns to the
+          parent's SUB_ASSISTANT node automatically once the child
+          runner finishes.  In the main graph the End node's
+          ``traverse_out=SPAWN_NONE`` ensures no further dispatch.
+        * **Back** — the explicit "loop to Start / return to parent"
+          marker.  In a sub-graph the ``__return_to_parent__`` sentinel
+          hands control back to the parent flow.  In the main graph we
+          dispatch the Start node again, subject to the
+          ``max_loop_iterations`` safety cap.
+        """
+        # Failed nodes with STOP strategy always halt, regardless of type.
         if not result.success and node.error_handling == ErrorStrategy.STOP:
+            return
+
+        # End node (v0.3.1 reverted): in a sub-graph the
+        # ``__return_to_parent__`` sentinel lets the parent's
+        # SUB_ASSISTANT node take over; in the main graph
+        # traverse_out=SPAWN_NONE ensures nothing further dispatches.
+        if node.type == NodeType.END:
+            if result.data.get("__return_to_parent__"):
+                return
+            # Fall through to the usual traverse_out logic, which will
+            # return [] for SPAWN_NONE.
+
+        # Back node (v0.3.1): explicit loop / return-to-parent.
+        if node.type == NodeType.BACK:
+            # Sub-graph Back: hand control back to the parent flow.
+            if result.data.get("__return_to_parent__"):
+                return
+            # Main-graph Back: dispatch Start, subject to the safety cap.
+            count = self._loop_counter.get(flow_id, 0) + 1
+            self._loop_counter[flow_id] = count
+            if count > self.max_loop_iterations:
+                logger.warning(
+                    "Flow %s exceeded max_loop_iterations=%d; stopping "
+                    "instead of looping back to Start via Back node.  "
+                    "Tighten the loop-termination condition upstream "
+                    "of the Back node (e.g. an If/Decision that picks "
+                    ".end() once the exit criterion is met).",
+                    flow_id,
+                    self.max_loop_iterations,
+                )
+                return
+            start_node = self.graph.get_start_node()
+            if start_node is None:
+                return
+            self.dispatcher.dispatch(
+                flow_id,
+                start_node.id,
+                lambda fid, nid: self._execute_node(fid, nid, user_input),
+            )
             return
 
         next_nodes = self._traverse_out.get_next_nodes(
@@ -714,8 +892,9 @@ class FlowRunner:
         """Check if a node is being re-executed as part of a loop.
 
         Returns True when *any* already-finished predecessor dispatches back
-        to this node — covers both ``SPAWN_START`` (explicit loop-to-start)
-        and conditional loops where ``SPAWN_PICKED`` selects a back-edge.
+        to this node — covers ``SPAWN_START`` (explicit loop-to-start),
+        conditional loops where ``SPAWN_PICKED`` selects a back-edge, and
+        v0.3.1 Back nodes that dispatch the Start node.
         """
         executions = self.store.get_all_node_executions(flow_id)
 
@@ -725,6 +904,16 @@ class FlowRunner:
                 start = self.graph.get_start_node()
                 if start and start.id == node_id:
                     return True
+
+        # A Back node in the graph loops back to Start, so if ``node_id`` is
+        # the Start node and any Back node has already run, we're on a loop.
+        start = self.graph.get_start_node()
+        if start and start.id == node_id:
+            for node in self.graph.nodes:
+                if node.type == NodeType.BACK:
+                    node_exec = executions.get(node.id)
+                    if node_exec and node_exec.status.is_terminal:
+                        return True
 
         # Any predecessor that has already completed and has an edge to this
         # node is a back-edge (the node finished, but it dispatched us again).

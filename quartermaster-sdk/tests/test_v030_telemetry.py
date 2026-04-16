@@ -206,12 +206,7 @@ def test_instrument_creates_span_per_node(exporter):
     qm.configure(registry=_mock_registry("ok"))
     telemetry.instrument(tracer_provider=provider)
 
-    graph = (
-        qm.Graph("x")
-        .instruction("first")
-        .instruction("second")
-        .build()
-    )
+    graph = qm.Graph("x").instruction("first").instruction("second").build()
     result = qm.run(graph, "hi")
     assert result.success, result.error
 
@@ -241,10 +236,7 @@ def test_instrument_creates_tool_spans_under_agent_node(exporter):
 
     tool_reg = _ToolRegistry({"x": _OkTool({"echo": "hi"})})
     graph = (
-        qm.Graph("chat")
-        .user()
-        .agent("Tooled", tools=["x"], capture_as="agent")
-        .build()
+        qm.Graph("chat").user().agent("Tooled", tools=["x"], capture_as="agent").build()
     )
 
     result = qm.run(graph, "hi", tool_registry=tool_reg)
@@ -307,10 +299,7 @@ def test_progress_event_becomes_span_event(exporter):
 
     tool_reg = _ToolRegistry({"p": _ProgressTool()}, schema_name="p")
     graph = (
-        qm.Graph("chat")
-        .user()
-        .agent("Loader", tools=["p"], capture_as="agent")
-        .build()
+        qm.Graph("chat").user().agent("Loader", tools=["p"], capture_as="agent").build()
     )
     result = qm.run(graph, "hi", tool_registry=tool_reg)
     assert result.success, result.error

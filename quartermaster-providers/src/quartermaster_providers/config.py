@@ -5,7 +5,7 @@ all LLM providers, allowing consistent parameter passing regardless of which
 provider is used.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -22,12 +22,29 @@ class LLMConfig:
         max_output_tokens: Maximum tokens in the response.
         max_messages: Maximum number of messages to include in conversation context.
         vision: Whether the request includes vision/image understanding.
+        images: Optional list of ``(base64_data, mime_type)`` pairs to send
+            alongside the prompt for vision-capable models. ``base64_data``
+            is the raw image bytes encoded as ASCII base64 (no ``data:``
+            URI prefix); ``mime_type`` is e.g. ``"image/jpeg"`` /
+            ``"image/png"`` / ``"image/webp"``. Populated by the v0.3.0
+            engine path that reads ``flow_memory["__user_images__"]``;
+            providers that support vision consume this list when building
+            the request payload. Empty/``None`` means a text-only request.
         thinking_enabled: Whether to enable extended thinking mode (e.g., Claude thinking).
         thinking_budget: Maximum tokens allowed for thinking/reasoning.
         top_p: Nucleus sampling parameter (alternative to temperature).
         top_k: Top-k sampling parameter.
         frequency_penalty: Penalty for repeating tokens (OpenAI).
         presence_penalty: Penalty for new tokens (OpenAI).
+        connect_timeout: Connect-phase timeout in seconds — fail fast if
+            the provider endpoint is unreachable. ``None`` means use the
+            SDK's underlying HTTP client default. Added in v0.4.0.
+        read_timeout: Read-phase timeout in seconds — ceiling for waiting
+            on a single streaming token / complete response. ``None``
+            means use the SDK's underlying HTTP client default. Added
+            in v0.4.0 so Celery / worker tasks no longer depend on
+            blunt ``CELERY_TASK_TIME_LIMIT`` kills when an Ollama
+            instance wedges mid-stream.
     """
 
     model: str
@@ -39,12 +56,20 @@ class LLMConfig:
     max_output_tokens: int | None = None
     max_messages: int | None = None
     vision: bool = False
+    images: list[tuple[str, str]] = field(default_factory=list)
     thinking_enabled: bool = False
     thinking_budget: int | None = None
     top_p: float | None = None
     top_k: int | None = None
     frequency_penalty: float | None = None
     presence_penalty: float | None = None
+    # v0.4.0 timeouts — threaded through to each provider's HTTP client
+    # when the SDK's ``qm.configure(timeout=/connect_timeout=/read_timeout=)``
+    # or per-call ``qm.run(..., read_timeout=)`` kwargs are used.
+    # ``None`` on both leaves the provider SDK's own default behaviour
+    # untouched (backwards-compat with v0.3.x callers).
+    connect_timeout: float | None = None
+    read_timeout: float | None = None
 
     def validate(self) -> None:
         """Validate configuration parameters.
@@ -82,6 +107,12 @@ class LLMConfig:
         if self.presence_penalty is not None and not -2.0 <= self.presence_penalty <= 2.0:
             raise ValueError("presence_penalty must be between -2.0 and 2.0")
 
+        if self.connect_timeout is not None and self.connect_timeout <= 0:
+            raise ValueError("connect_timeout must be > 0")
+
+        if self.read_timeout is not None and self.read_timeout <= 0:
+            raise ValueError("read_timeout must be > 0")
+
     @classmethod
     def from_dict(cls, config_dict: dict) -> "LLMConfig":
         """Create LLMConfig from a dictionary.
@@ -118,10 +149,13 @@ class LLMConfig:
             "max_output_tokens": self.max_output_tokens,
             "max_messages": self.max_messages,
             "vision": self.vision,
+            "images": list(self.images),
             "thinking_enabled": self.thinking_enabled,
             "thinking_budget": self.thinking_budget,
             "top_p": self.top_p,
             "top_k": self.top_k,
             "frequency_penalty": self.frequency_penalty,
             "presence_penalty": self.presence_penalty,
+            "connect_timeout": self.connect_timeout,
+            "read_timeout": self.read_timeout,
         }

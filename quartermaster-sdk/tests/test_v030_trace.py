@@ -195,19 +195,14 @@ def test_trace_tool_calls_extracted_from_events():
 
     tool_reg = _ToolRegistry({"x": _OkTool({"value": 42})})
     graph = (
-        qm.Graph("chat")
-        .user()
-        .agent("Tooled", tools=["x"], capture_as="agent")
-        .build()
+        qm.Graph("chat").user().agent("Tooled", tools=["x"], capture_as="agent").build()
     )
 
     result = qm.run(graph, "hi", tool_registry=tool_reg)
     assert result.success, result.error
 
     tool_calls = result.trace.tool_calls
-    assert isinstance(tool_calls, list), (
-        f"expected list, got {type(tool_calls)}"
-    )
+    assert isinstance(tool_calls, list), f"expected list, got {type(tool_calls)}"
     assert len(tool_calls) == 1, f"expected exactly 1 tool call, got {tool_calls}"
 
     entry = tool_calls[0]
@@ -265,12 +260,7 @@ def test_trace_by_node_buckets_events_by_name():
     # The ``instruction(name, ...)`` first arg IS the node's name — no
     # second ``name=`` kwarg. The trace buckets on that same string
     # via :class:`NodeStarted.node_name` / :class:`NodeFinished.node_name`.
-    graph = (
-        qm.Graph("x")
-        .instruction("node_a")
-        .instruction("node_b")
-        .build()
-    )
+    graph = qm.Graph("x").instruction("node_a").instruction("node_b").build()
 
     result = qm.run(graph, "hi")
     assert result.success, result.error
@@ -324,6 +314,7 @@ def test_trace_progress_and_custom_filters():
       custom event (here named ``"x"``) — zero matches for a different
       name.
     """
+
     # Tool that emits progress + custom via the contextvar on each call.
     class _EmittingTool:
         """Emit progress/custom when invoked by the agent loop."""
@@ -346,16 +337,11 @@ def test_trace_progress_and_custom_filters():
             r.data = {"ok": True}
             return r
 
-    reg, _ = _tool_aware_registry(
-        tool_name="x", tool_args={"q": "q"}, final_text="ok"
-    )
+    reg, _ = _tool_aware_registry(tool_name="x", tool_args={"q": "q"}, final_text="ok")
     qm.configure(registry=reg)
     tool_reg = _ToolRegistry({"x": _EmittingTool()})
     graph = (
-        qm.Graph("chat")
-        .user()
-        .agent("Tooled", tools=["x"], capture_as="agent")
-        .build()
+        qm.Graph("chat").user().agent("Tooled", tools=["x"], capture_as="agent").build()
     )
 
     result = qm.run(graph, "hi", tool_registry=tool_reg)
@@ -398,12 +384,18 @@ def test_trace_as_jsonl_roundtrips():
 
     # Every line must parse as JSON.
     lines = jsonl.splitlines()
-    assert len(lines) == len(result.trace.events), (
-        f"line count {len(lines)} != event count {len(result.trace.events)}"
+    # v0.4.0: as_jsonl() may prepend a header line when user_input is set
+    # (e.g. {"_meta": "trace_header", "user_input": "hi"}). Filter it out
+    # for the event-count assertion.
+    event_lines = [line for line in lines if not json.loads(line).get("_meta")]
+    assert len(event_lines) == len(result.trace.events), (
+        f"event line count {len(event_lines)} != event count {len(result.trace.events)}"
     )
     for line in lines:
         parsed = json.loads(line)
         assert isinstance(parsed, dict), f"line not a JSON object: {line}"
+        if parsed.get("_meta"):
+            continue  # header line — no flow_id expected
         # ``flow_id`` is required on every FlowEvent (it's the only
         # base-class field) — its presence is the cheapest sanity check
         # that ``asdict`` serialised the dataclass correctly.

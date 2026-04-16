@@ -214,6 +214,42 @@ class AbstractLLMProvider(ABC):
         """
         return None
 
+    @staticmethod
+    def _resolve_httpx_timeout(config: LLMConfig | None) -> Any:
+        """Translate ``LLMConfig`` timeouts into an httpx-style timeout.
+
+        Added in v0.4.0. Returns a value suitable for passing to the
+        OpenAI / Anthropic SDKs' ``timeout=`` kwarg, which both accept
+        either a scalar (uniform) or an ``httpx.Timeout`` object
+        (separate connect/read phases).
+
+        Resolution:
+
+        * ``config is None`` or both fields ``None`` → ``None`` (leave
+          the underlying SDK's default behaviour untouched).
+        * Only ``read_timeout`` set → scalar float (both connect and
+          read share the read budget — simplest case).
+        * ``connect_timeout`` and/or ``read_timeout`` set → an
+          ``httpx.Timeout`` that separates the two phases.
+        """
+        if config is None:
+            return None
+        connect = config.connect_timeout
+        read = config.read_timeout
+        if connect is None and read is None:
+            return None
+        # When a connect budget is present we prefer httpx.Timeout so the
+        # SDK honours the connect/read split. This is what the anthropic
+        # and openai SDKs consume via their underlying httpx transport.
+        if connect is not None:
+            import httpx
+
+            fallback = read if read is not None else 60.0
+            return httpx.Timeout(fallback, connect=connect, read=fallback)
+        # Only read_timeout set → a scalar is sufficient and keeps the
+        # code path simple for providers that don't need the split.
+        return float(read)
+
     def estimate_cost(
         self,
         text: str,

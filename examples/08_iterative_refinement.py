@@ -111,11 +111,22 @@ agent = (
 )
 
 # -- Wire the loop back-edge --
+# The explicit edge skips the one-time setup (user prompt + topic
+# capture + brief + iteration init) and jumps straight back to
+# "Iteration header".  We deliberately do NOT use ``.back()`` here —
+# ``.back()`` dispatches the graph's Start node, which would re-run
+# the user prompt and every setup node each iteration.  Under the
+# v0.3.1 reverted End semantics the End node on the false branch is
+# harmless (it just stops that branch path); the actual loop is
+# driven by the ``.connect()`` edge below, which makes
+# "Next iteration" dispatch "Iteration header" via its default
+# SPAWN_ALL.  The End sibling simply does nothing, cleanly.
 agent.connect("Next iteration", "Iteration header", label="next_iteration")
 
-# -- Build and run -- .build(validate=False) kept here because we deliberately
-# form a cycle (loop-back edge) which the default validator rejects.
-graph = agent.build(validate=False)
+# -- Build and run -- The TRUE branch's trailing ``.end()`` sets
+# ``traverse_out=SPAWN_NONE`` (v0.3.1 revert: End means stop) and
+# guarantees the flow terminates after MAX_ITERATIONS rounds.
+graph = agent.build()
 
 print(f"Graph: {len(graph.nodes)} nodes, {len(graph.edges)} edges")
 print()

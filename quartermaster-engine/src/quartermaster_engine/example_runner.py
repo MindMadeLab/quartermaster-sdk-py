@@ -22,6 +22,7 @@ import logging
 import os
 import pathlib
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -43,6 +44,7 @@ from quartermaster_graph import GraphSpec
 from quartermaster_graph.enums import NodeType
 from quartermaster_providers import LLMConfig, ProviderRegistry
 
+from quartermaster_engine.cancellation import Cancelled
 from quartermaster_engine.context.execution_context import ExecutionContext
 from quartermaster_engine.context.node_execution import NodeStatus
 from quartermaster_engine.events import (
@@ -235,6 +237,30 @@ def _coerce_bool(value: Any) -> bool:
     return bool(value)
 
 
+def _user_images(context: ExecutionContext) -> list[tuple[str, str]]:
+    """Return the user-supplied vision payload from flow memory.
+
+    The SDK's ``qm.run(..., image=bytes)`` / ``images=[...]`` path
+    normalises every supported shape (bytes / Path / str path) into a
+    list of ``(base64_ascii, mime_type)`` pairs and drops that list
+    into ``flow_memory["__user_images__"]``.
+
+    This helper hands the same list out to callers that actually want
+    to forward images to the provider — currently the vision node's
+    ``LLMExecutor`` via ``_build_llm_config``. Returns an empty list
+    when no images were attached (the common text-only case) so
+    callers can treat the return value as "always iterable" without
+    branching on None.
+
+    Non-list values in memory fall through as ``[]`` — defensive
+    against a misbehaving store, not an expected code path.
+    """
+    images = context.memory.get("__user_images__", [])
+    if not isinstance(images, list):
+        return []
+    return list(images)
+
+
 def _build_llm_config(
     context: ExecutionContext,
     *,
@@ -278,6 +304,26 @@ def _build_llm_config(
     else:
         temperature = context.get_meta("llm_temperature", temperature_default)
 
+    vision_enabled = _coerce_bool(context.get_meta("llm_vision", False))
+    # Forward user-supplied images ONLY into vision nodes. Non-vision
+    # nodes sharing the same flow memory must not accidentally drag the
+    # image payload into a text-only prompt — that's wasted tokens at
+    # best and an API error at worst (most providers reject image parts
+    # on a non-vision model id). The SDK's ``image=`` kwarg is thus a
+    # no-op on graphs that don't declare a ``.vision()`` node.
+    images = _user_images(context) if vision_enabled else []
+
+    # v0.4.0: read configure-time / per-call timeouts from flow memory.
+    # ``__llm_timeouts__`` is populated by :meth:`FlowRunner.run`; the
+    # SDK's runner puts the merged defaults there before dispatching.
+    timeouts = context.memory.get("__llm_timeouts__", {}) or {}
+    connect_timeout = context.get_meta("llm_connect_timeout", None)
+    if connect_timeout is None:
+        connect_timeout = timeouts.get("connect_timeout")
+    read_timeout = context.get_meta("llm_read_timeout", None)
+    if read_timeout is None:
+        read_timeout = timeouts.get("read_timeout")
+
     return LLMConfig(
         model=model,
         provider=provider_name,
@@ -286,9 +332,12 @@ def _build_llm_config(
         stream=stream,
         max_output_tokens=context.get_meta("llm_max_output_tokens", None),
         max_input_tokens=context.get_meta("llm_max_input_tokens", None),
-        vision=_coerce_bool(context.get_meta("llm_vision", False)),
+        vision=vision_enabled,
+        images=images,
         thinking_enabled=thinking_enabled,
         thinking_budget=thinking_budget,
+        connect_timeout=float(connect_timeout) if connect_timeout is not None else None,
+        read_timeout=float(read_timeout) if read_timeout is not None else None,
     )
 
 
@@ -454,7 +503,10 @@ class _ToolInvocation:
 
 
 def _execute_tool_call(
-    tool_registry: Any, tool_name: str, parameters: dict
+    tool_registry: Any,
+    tool_name: str,
+    parameters: dict,
+    allowed_tools: list[str] | None = None,
 ) -> _ToolInvocation:
     """Run one tool from the registry and return both the LLM-facing
     string and the structured payload for live streaming.
@@ -466,6 +518,15 @@ def _execute_tool_call(
     to any user who can read the model's reasoning). The structured
     ``raw`` + ``error`` fields are only observed by the agent loop and
     the ``ToolCallFinished`` event downstream, never fed back to the LLM.
+
+    v0.4.0: if *allowed_tools* is not ``None`` the normalised
+    tool name MUST appear in the list — otherwise the call is rejected
+    with a structured error before it ever reaches the registry. This
+    is the per-node tool scoping enforcement: when a graph node declares
+    ``.agent(tools=["web_search"])`` the model cannot hallucinate a call
+    to some other registered tool and have it silently execute. Passing
+    ``allowed_tools=None`` (the default) keeps the legacy permissive
+    behaviour for callers that don't opt in.
     """
     if tool_registry is None:
         msg = f"[ERROR: no tool registry available to execute '{tool_name}']"
@@ -475,6 +536,26 @@ def _execute_tool_call(
     # registry lookup would miss a tool that's registered under the bare
     # name — a recurring integrator complaint before v0.2.0.
     normalised = _normalise_tool_name(tool_name)
+    # v0.4.0 per-node scoping check — runs AFTER prefix-stripping so that
+    # ``default_api:A`` matches an allow-list entry of ``A`` (preserves the
+    # v0.2.1 prefix-stripping contract), but BEFORE the registry lookup so
+    # an out-of-scope tool never actually executes.
+    if allowed_tools is not None and normalised not in allowed_tools:
+        allowed_display = ", ".join(allowed_tools) if allowed_tools else "<none>"
+        msg = (
+            f"[ERROR: tool '{normalised}' is not allowed for this agent node. "
+            f"Allowed: {allowed_display}]"
+        )
+        logger.info(
+            "Tool %r rejected by per-node allow-list (allowed=%r)",
+            normalised,
+            allowed_tools,
+        )
+        return _ToolInvocation(
+            prompt_text=msg,
+            raw=None,
+            error=f"not allowed: {normalised}",
+        )
     try:
         tool = tool_registry.get(normalised)
     except Exception as exc:
@@ -487,6 +568,12 @@ def _execute_tool_call(
         return _ToolInvocation(prompt_text=msg, raw=None, error="no run() method")
     try:
         result = safe_run(**parameters)
+    except Cancelled:
+        # v0.4.0: let the cooperative-abort signal escape so
+        # AgentExecutor can stamp the node result with
+        # ``error="cancelled"`` — SDK consumers rely on that sentinel
+        # to tell a deliberate abort apart from a genuine tool crash.
+        raise
     except Exception as exc:
         logger.warning("Tool %r raised during execution: %s", normalised, exc)
         msg = f"[ERROR: tool '{normalised}' execution failed]"
@@ -570,6 +657,26 @@ class AgentExecutor(NodeExecutor):
         per_node_tools = context.get_meta("_tool_registry") or self._tools
         program_ids = context.get_meta("program_version_ids", []) or []
         tools = _tool_definitions(per_node_tools) if program_ids else None
+
+        # v0.4.0 per-node tool scoping: the list of tool names
+        # declared in ``.agent(tools=[...])`` becomes the HARD allow-list.
+        # A hallucinated out-of-list tool call hits the
+        # ``[ERROR: tool 'X' is not allowed for this agent node...]`` branch
+        # in ``_execute_tool_call`` and the model gets a chance to correct
+        # itself on the next iteration instead of silently executing a
+        # tool the graph author never authorised. ``tool_scope="permissive"``
+        # opts back into the pre-v0.4.0 behaviour (any tool registered on
+        # the shared registry is reachable) — intended only as a
+        # migration escape hatch for integrators that relied on the leak.
+        tool_scope = str(context.get_meta("tool_scope", "strict") or "strict").lower()
+        if tool_scope == "strict":
+            # ``program_version_ids`` is the canonical allow-list — a list
+            # of bare tool names set by ``agent(tools=[...])`` in the
+            # builder. Empty list ⇒ NO tools are reachable (the node
+            # opted in to tool-calling semantics without listing any).
+            allowed_tools: list[str] | None = list(program_ids)
+        else:
+            allowed_tools = None
 
         # Match the canonical Quartermaster semantics: 0 = no cap, negative
         # values fall back to the documented default.
@@ -683,7 +790,37 @@ class AgentExecutor(NodeExecutor):
                 public_name = _normalise_tool_name(tool_name)
                 context.emit_tool_start(public_name, dict(params), iteration)
 
-                invocation = _execute_tool_call(per_node_tools, tool_name, params)
+                try:
+                    invocation = _execute_tool_call(
+                        per_node_tools,
+                        tool_name,
+                        params,
+                        allowed_tools=allowed_tools,
+                    )
+                except Cancelled:
+                    # v0.4.0 cooperative cancel — bubble out as a
+                    # distinct node failure so SDK consumers see
+                    # ``ErrorChunk(error="cancelled", ...)`` instead of
+                    # the generic tool-crash string. Fire a paired
+                    # ``tool_finish`` event first so UIs don't leave a
+                    # spinner on the "called" tool card.
+                    logger.info(
+                        "AgentExecutor: tool %r raised Cancelled — aborting agent loop",
+                        public_name,
+                    )
+                    context.emit_tool_finish(
+                        public_name,
+                        dict(params),
+                        "[CANCELLED]",
+                        None,
+                        "cancelled",
+                        iteration,
+                    )
+                    return NodeResult(
+                        success=False,
+                        data={"cancelled": True},
+                        error="cancelled",
+                    )
 
                 context.emit_tool_finish(
                     public_name,
@@ -698,14 +835,16 @@ class AgentExecutor(NodeExecutor):
                 # ``qm.run(...)`` callers (non-streaming) can read exactly
                 # the same shape the streaming ToolCallFinished event
                 # carries.  Both surfaces stay in sync by construction.
-                tool_call_log.append({
-                    "tool": public_name,
-                    "arguments": dict(params),
-                    "result": invocation.prompt_text,
-                    "raw": invocation.raw,
-                    "error": invocation.error,
-                    "iteration": iteration,
-                })
+                tool_call_log.append(
+                    {
+                        "tool": public_name,
+                        "arguments": dict(params),
+                        "result": invocation.prompt_text,
+                        "raw": invocation.raw,
+                        "error": invocation.error,
+                        "iteration": iteration,
+                    }
+                )
 
                 # Wrap each tool result in an explicit untrusted-data block.
                 # Tool output frequently includes external content (web
@@ -1082,6 +1221,83 @@ class UserFormExecutor(NodeExecutor):
         )
 
 
+class SubAssistantExecutor(NodeExecutor):
+    """Spawn a child :class:`FlowRunner` to execute a sub-graph.
+
+    The sub-graph is looked up via a caller-supplied ``resolver(sub_id)``
+    callable (typically a dict lookup); the sub runner inherits the
+    parent's node registry (or a caller-supplied one) and is constructed
+    with ``parent_context=context`` so an End node inside the sub-graph
+    can tell it's running below a parent flow and return control upward
+    instead of looping to Start.
+
+    The sub-flow's final output is surfaced as the executor's
+    ``output_text`` so the SUB_ASSISTANT node's downstream edges see
+    the sub-flow's tail result on the wire.
+
+    Without a resolver (the default registry wiring) this executor
+    degrades gracefully to the pre-0.3.0 passthrough behaviour, so
+    graphs that declare SUB_ASSISTANT nodes but resolve at runtime
+    still traverse past without error.
+    """
+
+    def __init__(
+        self,
+        resolver: Callable[[str], Any] | None = None,
+        node_registry: Any | None = None,
+    ) -> None:
+        self._resolver = resolver
+        self._node_registry = node_registry
+
+    async def execute(self, context: ExecutionContext) -> NodeResult:
+        sub_id = context.get_meta("sub_assistant_id", "")
+        if not self._resolver or not sub_id:
+            # Degrade to passthrough — no sub-graph to invoke.
+            text = ""
+            for msg in reversed(context.messages):
+                if msg.content:
+                    text = msg.content
+                    break
+            return NodeResult(success=True, data={}, output_text=text)
+
+        sub_graph = self._resolver(sub_id)
+        if sub_graph is None:
+            return NodeResult(
+                success=False,
+                data={},
+                error=f"SubAssistant: no graph registered for id {sub_id!r}",
+            )
+
+        # Last user-visible message becomes the sub-flow's kickoff input.
+        user_input = ""
+        for msg in reversed(context.messages):
+            if msg.content:
+                user_input = msg.content
+                break
+
+        # Local import to avoid the example_runner ↔ flow_runner cycle
+        # at module import time.
+        from quartermaster_engine.runner.flow_runner import FlowRunner
+
+        sub_runner = FlowRunner(
+            graph=sub_graph,
+            node_registry=self._node_registry,
+            parent_context=context,
+        )
+        sub_result = sub_runner.run(user_input)
+        if not sub_result.success:
+            return NodeResult(
+                success=False,
+                data={"sub_flow_output": sub_result.final_output},
+                error=sub_result.error or "sub-flow failed",
+            )
+        return NodeResult(
+            success=True,
+            data={"sub_flow_output": sub_result.final_output},
+            output_text=sub_result.final_output,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Registry factory
 # ---------------------------------------------------------------------------
@@ -1170,7 +1386,16 @@ def build_default_registry(
     reg.register(NodeType.STATIC_MERGE.value, static_merge_exec)
     reg.register(NodeType.COMMENT.value, passthrough)
     reg.register(NodeType.BLANK.value, passthrough)
-    reg.register(NodeType.SUB_ASSISTANT.value, passthrough)
+    # SubAssistant: a node-type that can spawn a child FlowRunner
+    # against a separately-registered sub-graph.  Without a resolver
+    # wired in it behaves like the pre-0.3.0 passthrough — the v0.3.0
+    # return-to-parent semantics kick in automatically once a caller
+    # registers a real SubAssistantExecutor with their own sub-graph
+    # resolver.
+    reg.register(
+        NodeType.SUB_ASSISTANT.value,
+        SubAssistantExecutor(resolver=None, node_registry=reg),
+    )
     reg.register(NodeType.BREAK.value, passthrough)
     reg.register(NodeType.TEXT_TO_VARIABLE.value, var)
     if_exec = IfExecutor()

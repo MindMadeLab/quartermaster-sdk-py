@@ -575,13 +575,95 @@ class LlamaCppProvider(OpenAICompatibleProvider):
 
 
 # ── Lookup table for register_local() ────────────────────────────────
+#
+# v0.4.0: the shorthand ``"ollama"`` now resolves to
+# :class:`OllamaNativeProvider` rather than the compat-only
+# ``OllamaProvider`` above.  The native subclass still inherits all of
+# the OpenAI-compat plumbing — so the sync ``chat()`` shim, SSRF
+# warning, URL normalisation, and default-model threading keep
+# working — but it *also* routes tool-calling requests through
+# Ollama's native ``/api/chat`` endpoint when the model supports it.
+# That kills the Gemma-4 ``list_orders_v2`` / ``default_api:`` tool-
+# name hallucination class of bugs the compat path was prone to.
+#
+# We import ``OllamaNativeProvider`` inside a factory-style lookup
+# (via ``__getattr__`` on the module) to keep the import cycle sane:
+# ``ollama.py`` imports ``local.OllamaProvider`` as its base class, so
+# ``local.py`` can't unconditionally import ``ollama.py`` at module
+# load time.  The indirection is cheap — it only fires the first time
+# someone actually calls ``register_local("ollama")``.
 
-LOCAL_PROVIDERS: dict[str, type[OpenAICompatibleProvider]] = {
-    "ollama": OllamaProvider,
-    "vllm": VLLMProvider,
-    "lm-studio": LMStudioProvider,
-    "tgi": TGIProvider,
-    "localai": LocalAIProvider,
-    "llama-cpp": LlamaCppProvider,
-}
-"""Maps shorthand names to provider classes for :meth:`ProviderRegistry.register_local`."""
+
+def _lookup_ollama_provider_class() -> type[OpenAICompatibleProvider]:
+    """Return the default Ollama provider class (lazy import).
+
+    Lazy so ``ollama.py`` (which inherits from this module's
+    :class:`OllamaProvider`) can import cleanly without a circular
+    dependency.  Callers who want the raw OpenAI-compat behaviour for
+    some reason can still construct ``OllamaProvider`` directly from
+    this module.
+    """
+    from quartermaster_providers.providers.ollama import OllamaNativeProvider
+
+    return OllamaNativeProvider
+
+
+class _LocalProvidersLookup(dict):
+    """dict that lazily resolves ``"ollama"`` to :class:`OllamaNativeProvider`.
+
+    Mirrors ``dict.__getitem__`` / ``dict.get`` semantics so existing
+    callsites (``LOCAL_PROVIDERS[engine]``) keep working unchanged,
+    but defers the ``ollama.py`` import until the key is actually
+    accessed.  This avoids the ``local.py`` → ``ollama.py`` → ``local.py``
+    circular import that a top-level ``from .ollama import ...`` would
+    produce (``ollama.py`` subclasses ``OllamaProvider``).
+    """
+
+    def __getitem__(self, key: str) -> type[OpenAICompatibleProvider]:
+        if key == "ollama":
+            return _lookup_ollama_provider_class()
+        return super().__getitem__(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if key == "ollama":
+            return _lookup_ollama_provider_class()
+        return super().get(key, default)
+
+    def __contains__(self, key: object) -> bool:
+        if key == "ollama":
+            return True
+        return super().__contains__(key)
+
+    def values(self):  # type: ignore[override]
+        """Include the native Ollama class when callers iterate ``.values()``.
+
+        Regression guard: the test ``test_all_are_openai_compatible``
+        iterates ``LOCAL_PROVIDERS.values()`` and checks the subclass
+        invariant — without this override the native class would be
+        missing from the iteration (since it only exists via
+        ``__getitem__``) and the check would fall through silently.
+        """
+        items = dict(self)
+        items["ollama"] = _lookup_ollama_provider_class()
+        return items.values()
+
+
+LOCAL_PROVIDERS: dict[str, type[OpenAICompatibleProvider]] = _LocalProvidersLookup(
+    {
+        # NOTE: ``"ollama"`` resolves lazily via __getitem__/__contains__
+        # above; the sentinel here keeps ``keys()`` / iteration sane.
+        "ollama": OllamaProvider,
+        "vllm": VLLMProvider,
+        "lm-studio": LMStudioProvider,
+        "tgi": TGIProvider,
+        "localai": LocalAIProvider,
+        "llama-cpp": LlamaCppProvider,
+    }
+)
+"""Maps shorthand names to provider classes for :meth:`ProviderRegistry.register_local`.
+
+Note: ``"ollama"`` resolves to :class:`OllamaNativeProvider` (the
+v0.4.0 native ``/api/chat`` subclass) via a lazy lookup to keep the
+module import graph acyclic.  Callers who specifically want the
+compat-only behaviour can import :class:`OllamaProvider` directly.
+"""

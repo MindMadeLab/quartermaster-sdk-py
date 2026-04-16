@@ -152,10 +152,26 @@ def validate_graph(version: GraphSpec) -> list[ValidationError]:  # type: ignore
                     queue_cycle.append(succ)
 
         if visited_count < len(version.nodes):
+            # v0.3.0: End → Start back-edges are implicit (they live in
+            # the runner's dispatch logic, not in ``version.edges``),
+            # so a graph that uses the new loop semantics passes
+            # without effort.  User-written cycles via explicit edges
+            # are still flagged, but only as a WARNING because the
+            # runner has a ``_is_loop_target`` / ``max_loop_iterations``
+            # guard that makes intentional back-edges safe at run time.
             errors.append(
                 ValidationError(
                     code="cycle_detected",
-                    message="Graph contains a cycle (not a DAG)",
+                    message=(
+                        "Graph contains a cycle via explicit edges. "
+                        "Intentional loops are supported at run time "
+                        "(``FlowRunner.max_loop_iterations`` caps the "
+                        "dispatches), and the default v0.3.0 End-node "
+                        "semantics loop back to Start implicitly — so "
+                        "you rarely need an explicit back-edge.  "
+                        "Consider replacing the cycle with .end()."
+                    ),
+                    severity="warning",
                 )
             )
 

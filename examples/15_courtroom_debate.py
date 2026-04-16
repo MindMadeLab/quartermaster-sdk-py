@@ -170,12 +170,25 @@ trial = (
 
 # -- Wire the loop back-edge -----------------------------------------------
 
+# The "Next round" branch loops back to "Round announce" (past the
+# one-time courtroom-opening setup).  We deliberately do NOT use
+# ``.back()`` here — ``.back()`` dispatches the graph's Start node,
+# which would replay the "Describe the case" prompt and the whole
+# "Court opens" / "Init round" preamble on every iteration.  Instead
+# we rely on the v0.3.1 reverted End semantics: the trailing
+# ``.end()`` after "Next round" stops that branch path cleanly, while
+# the ``.connect()`` below makes "Next round" dispatch "Round
+# announce" via its default SPAWN_ALL — so the loop lands on the
+# right node.
 trial.connect("Next round", "Round announce", label="next_round")
 
-# -- Build and run -- .build(validate=False) kept here because we deliberately
-# form a cycle (loop-back edge) which the default validator rejects.
+# -- Build and run -- v0.3.1 validator treats user-wired cycles as a
+# warning, so we no longer need ``validate=False`` here.  The TRUE
+# branch's trailing ``.end()`` sets ``traverse_out=SPAWN_NONE`` and
+# guarantees the flow terminates after MAX_ROUNDS rounds instead of
+# looping forever.
 
-agent = trial.build(validate=False)
+agent = trial.build()
 
 print(f"Graph: {len(agent.nodes)} nodes, {len(agent.edges)} edges")
 print()

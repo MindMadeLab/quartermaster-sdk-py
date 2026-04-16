@@ -160,10 +160,7 @@ def _graph_with_agent() -> Any:
     captured agent output so non-streaming tests can read it back via
     ``result["agent"]``."""
     return (
-        qm.Graph("chat")
-        .user()
-        .agent("Tooled", tools=["x"], capture_as="agent")
-        .build()
+        qm.Graph("chat").user().agent("Tooled", tools=["x"], capture_as="agent").build()
     )
 
 
@@ -343,9 +340,7 @@ class TestToolPrefixNormalisation:
 
         # --- Streaming surface: ToolCallChunk.tool is stripped ---
         chunks = list(qm.run.stream(graph, "hi", tool_registry=tool_reg))
-        tool_call_chunk = next(
-            (c for c in chunks if c.type == "tool_call"), None
-        )
+        tool_call_chunk = next((c for c in chunks if c.type == "tool_call"), None)
         assert tool_call_chunk is not None, "no tool_call chunk emitted"
         assert isinstance(tool_call_chunk, qm.ToolCallChunk)
         assert tool_call_chunk.tool == "list_orders", (
