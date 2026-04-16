@@ -1465,7 +1465,7 @@ def run_graph(
     node_registry = build_default_registry(provider_registry, interactive=interactive)
 
     # Event handler — respects show_output metadata flag
-    _silent_types = {NodeType.START.value, NodeType.END.value}
+    _silent_types = {NodeType.START.value, NodeType.END.value, NodeType.BACK.value}
     if interactive:
         _silent_types.add(NodeType.USER.value)
     _node_map = {n.id: n for n in agent_graph.nodes}
