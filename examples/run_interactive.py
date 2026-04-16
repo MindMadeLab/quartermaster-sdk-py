@@ -53,7 +53,7 @@ def main():
     print("Ctrl+C to exit\n")
 
     try:
-        qm.run_graph(agent)
+        qm.run(agent)
     except (KeyboardInterrupt, EOFError):
         pass
 

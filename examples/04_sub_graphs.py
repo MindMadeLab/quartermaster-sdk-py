@@ -71,7 +71,4 @@ agent = (
     )
 )
 
-qm.run_graph(
-    agent,
-    user_input="Research the latest trends in WebAssembly for server-side applications",
-)
+qm.run(agent, "Research the latest trends in WebAssembly for server-side applications")

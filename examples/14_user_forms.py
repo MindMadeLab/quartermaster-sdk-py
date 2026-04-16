@@ -208,6 +208,6 @@ feedback = (
 
 
 # Execute both graphs
-qm.run_graph(agent, user_input="Register me for the conference")
+qm.run(agent, "Register me for the conference")
 print("\n" + "=" * 60 + "\n")
-qm.run_graph(feedback, user_input="I want to leave feedback")
+qm.run(feedback, "I want to leave feedback")

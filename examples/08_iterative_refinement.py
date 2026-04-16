@@ -123,15 +123,13 @@ agent = (
 # SPAWN_ALL.  The End sibling simply does nothing, cleanly.
 agent.connect("Next iteration", "Iteration header", label="next_iteration")
 
-# -- Build and run -- The TRUE branch's trailing ``.end()`` sets
-# ``traverse_out=SPAWN_NONE`` (v0.3.1 revert: End means stop) and
-# guarantees the flow terminates after MAX_ITERATIONS rounds.
+# -- Build for inspection, then run -- The TRUE branch's trailing
+# ``.end()`` sets ``traverse_out=SPAWN_NONE`` (v0.3.1 revert: End
+# means stop) and guarantees the flow terminates after MAX_ITERATIONS
+# rounds.
 graph = agent.build()
 
 print(f"Graph: {len(graph.nodes)} nodes, {len(graph.edges)} edges")
 print()
 
-qm.run_graph(
-    graph,
-    user_input="The feeling of writing code at 3am when everything finally clicks",
-)
+qm.run(graph, "The feeling of writing code at 3am when everything finally clicks")

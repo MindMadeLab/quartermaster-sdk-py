@@ -77,7 +77,4 @@ agent = (
     .end()
 )
 
-qm.run_graph(
-    agent,
-    user_input="My server keeps crashing with out-of-memory errors every few hours",
-)
+qm.run(agent, "My server keeps crashing with out-of-memory errors every few hours")
