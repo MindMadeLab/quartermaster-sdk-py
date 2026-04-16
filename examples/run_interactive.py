@@ -32,15 +32,23 @@ def main():
     args = parser.parse_args()
 
     # The graph loops natively via .back():
-    #   Start → User (stdin) → Instruction (LLM) → Back → Start → User → ...
+    #   Start → User (stdin) → Agent (LLM) → Back → Start → User → ...
     # No external while-loop required.
+    #
+    # Why .agent() and not .instruction()?
+    # The agent node maintains a __conversation__ memory across .back()
+    # iterations, so the LLM remembers what you said in previous turns.
+    # An instruction node would lose context on every loop — it only
+    # sees the current turn's user input.
     agent = (
         qm.Graph("Interactive Assistant")
         .user("You")
-        .instruction(
+        .agent(
             "Respond",
             model=args.model,
             provider=args.provider,
+            tools=[],              # no tools — pure conversation
+            max_iterations=1,      # one LLM call per turn (no tool loop)
             system_instruction=(
                 "You are a helpful assistant. Be concise and clear. "
                 "Respond in the same language the user writes in."
