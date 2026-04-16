@@ -31,6 +31,11 @@ def main():
     )
     args = parser.parse_args()
 
+    # Configure the provider — qm.run() requires this (unlike the legacy
+    # run_graph() which auto-configured). For cloud providers the API key
+    # comes from the environment (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.).
+    qm.configure(provider=args.provider, default_model=args.model)
+
     # The graph loops natively via .back():
     #   Start → User (stdin) → Agent (LLM) → Back → Start → User → ...
     # No external while-loop required.
