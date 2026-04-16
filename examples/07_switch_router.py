@@ -61,4 +61,4 @@ agent = (
     # No merge -- decision picks one language branch, they converge on the (implicit) end.
 )
 
-qm.run_graph(agent, user_input="Bonjour, comment allez-vous aujourd'hui?")
+qm.run(agent, "Bonjour, comment allez-vous aujourd'hui?")

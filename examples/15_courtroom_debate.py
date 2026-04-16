@@ -182,25 +182,23 @@ trial = (
 # right node.
 trial.connect("Next round", "Round announce", label="next_round")
 
-# -- Build and run -- v0.3.1 validator treats user-wired cycles as a
-# warning, so we no longer need ``validate=False`` here.  The TRUE
-# branch's trailing ``.end()`` sets ``traverse_out=SPAWN_NONE`` and
-# guarantees the flow terminates after MAX_ROUNDS rounds instead of
-# looping forever.
+# -- Build for inspection, then run -- v0.3.1 validator treats
+# user-wired cycles as a warning, so we no longer need
+# ``validate=False`` here.  The TRUE branch's trailing ``.end()``
+# sets ``traverse_out=SPAWN_NONE`` and guarantees the flow terminates
+# after MAX_ROUNDS rounds instead of looping forever.
 
-agent = trial.build()
+built = trial.build()
 
-print(f"Graph: {len(agent.nodes)} nodes, {len(agent.edges)} edges")
+print(f"Graph: {len(built.nodes)} nodes, {len(built.edges)} edges")
 print()
 
-qm.run_graph(
-    agent,
-    user_input=(
-        "Dr. Sarah Chen, a senior AI engineer, left TechCorp after 5 years "
-        "to co-found NeuralStart. TechCorp alleges she copied proprietary "
-        "training data and model architectures, violating her NDA and "
-        "2-year non-compete. Forensic analysis shows 78% code similarity. "
-        "The defense argues the non-compete is overly broad and the code "
-        "comes from open-source frameworks."
-    ),
+qm.run(
+    built,
+    "Dr. Sarah Chen, a senior AI engineer, left TechCorp after 5 years "
+    "to co-found NeuralStart. TechCorp alleges she copied proprietary "
+    "training data and model architectures, violating her NDA and "
+    "2-year non-compete. Forensic analysis shows 78% code similarity. "
+    "The defense argues the non-compete is overly broad and the code "
+    "comes from open-source frameworks.",
 )
