@@ -499,6 +499,37 @@ class FlowRunner:
                 )
             )
 
+        # ── User-turn tracking for .back() conversation loops ─────────
+        #
+        # LLM executors (Instruction, Agent, Static, Text, etc.) already
+        # append their output to ``__conversation__`` via their own
+        # ``memory_updates``. But USER and USER_FORM nodes don't — the
+        # user's input is saved to the message router but never to the
+        # flow-memory conversation log. This means ``.back()`` loops
+        # lose user turns: the LLM sees its own prior replies but not
+        # what the user said.
+        #
+        # This block fills that gap: when a User or UserForm node
+        # finishes with output, append a ``{role: "User", text: ...}``
+        # entry to ``__conversation__`` so subsequent LLM nodes see the
+        # full multi-turn history.
+        #
+        # We also update ``__user_input__`` so downstream nodes in this
+        # iteration see the CURRENT turn's input, not the stale initial
+        # input from the first ``FlowRunner.run()`` call.
+        if (
+            result.success
+            and result.output_text
+            and result.output_text.strip()
+            and node.type in (NodeType.USER, NodeType.USER_FORM)
+        ):
+            conversation = list(
+                self.store.get_memory(flow_id, "__conversation__") or []
+            )
+            conversation.append({"role": "User", "text": result.output_text})
+            self.store.save_memory(flow_id, "__conversation__", conversation)
+            self.store.save_memory(flow_id, "__user_input__", result.output_text)
+
         # Determine and dispatch successors (no-op when STOP + failure).
         self._dispatch_successors(flow_id, node, result, user_input)
 
