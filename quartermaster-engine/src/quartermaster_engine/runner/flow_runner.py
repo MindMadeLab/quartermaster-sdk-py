@@ -523,9 +523,7 @@ class FlowRunner:
             and result.output_text.strip()
             and node.type in (NodeType.USER, NodeType.USER_FORM)
         ):
-            conversation = list(
-                self.store.get_memory(flow_id, "__conversation__") or []
-            )
+            conversation = list(self.store.get_memory(flow_id, "__conversation__") or [])
             conversation.append({"role": "User", "text": result.output_text})
             self.store.save_memory(flow_id, "__conversation__", conversation)
             self.store.save_memory(flow_id, "__user_input__", result.output_text)
