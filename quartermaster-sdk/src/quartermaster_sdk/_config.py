@@ -33,7 +33,13 @@ from __future__ import annotations
 import logging
 import os
 
-from quartermaster_providers import ProviderRegistry, register_local
+from quartermaster_providers import (
+    CircuitBreakerState,
+    CircuitBreakerWrapper,
+    ProviderRegistry,
+    register_local,
+)
+from quartermaster_providers.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +75,7 @@ def configure(
     auto_redact_pii: bool = False,
     auto_redact_policy: str = "all",
     telemetry: bool = False,
+    circuit_breaker: CircuitBreaker | None = None,
 ) -> ProviderRegistry:
     """Bind a default provider registry for subsequent ``qm.*`` calls.
 
@@ -163,6 +170,17 @@ def configure(
         if provider == "ollama":
             register_kwargs["tool_protocol"] = ollama_tool_protocol
         _default_registry = register_local(provider, **register_kwargs)
+
+    # v0.4.0 circuit breaker (Sorex P3.4): wrap the provider instance
+    # with a CircuitBreakerWrapper so every generate_* call is gated.
+    if circuit_breaker is not None:
+        provider_name = provider if registry is None else (
+            _default_registry.default_provider or provider
+        )
+        _breaker_state = CircuitBreakerState(circuit_breaker)
+        inner = _default_registry.get(provider_name)
+        wrapped = CircuitBreakerWrapper(inner, _breaker_state)
+        _default_registry.register_instance(provider_name, wrapped)
 
     _default_model = resolved_default_model
     _default_connect_timeout = resolved_connect
