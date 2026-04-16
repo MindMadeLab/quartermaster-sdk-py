@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List
 
 
 @dataclass
@@ -66,7 +65,7 @@ class InMemorySessionStore(SessionStore):
     """
 
     def __init__(self) -> None:
-        self._sessions: Dict[str, List[ChatTurn]] = {}
+        self._sessions: dict[str, list[ChatTurn]] = {}
 
     def load(self, session_id: str) -> list[ChatTurn]:
         return list(self._sessions.get(session_id, []))
@@ -75,33 +74,8 @@ class InMemorySessionStore(SessionStore):
         self._sessions.setdefault(session_id, []).append(turn)
 
 
-def _fold_history(history: list[ChatTurn], current_input: str) -> str:
-    """Format prior turns + current input into a single prompt string.
-
-    This is the pattern every integrator writes by hand when managing
-    multi-turn chat. The output looks like::
-
-        User: How do I reset my password?
-        Assistant: Go to Settings > Security > Reset password.
-        User: Thanks, and how do I enable 2FA?
-
-    When *history* is empty the function returns *current_input*
-    unchanged — no prefix, no formatting overhead.
-    """
-    if not history:
-        return current_input
-
-    parts: list[str] = []
-    for turn in history:
-        label = turn.role.capitalize()
-        parts.append(f"{label}: {turn.content}")
-    parts.append(f"User: {current_input}")
-    return "\n".join(parts)
-
-
 __all__ = [
     "ChatTurn",
     "SessionStore",
     "InMemorySessionStore",
-    "_fold_history",
 ]

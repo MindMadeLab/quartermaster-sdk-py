@@ -418,6 +418,13 @@ The `MessageRouter` and `ContextManager` handle conversation history assembly:
 3. An input message is built based on the node's `MessageType` setting.
 4. The complete message list is passed to the node executor.
 
+## What's new in v0.4.0
+
+- **Cooperative cancellation** -- `ctx.cancelled` property returns `True` when the flow has been asked to stop. Tools can poll this and `raise qm.Cancelled(...)` or early-return. The SDK's `with qm.run.stream(...) as stream:` context-manager sets this on break/return/exception.
+- **Per-node tool scoping** -- `agent(tools=[...])` is now strictly enforced; unknown tool names raise at build time. Use `tool_scope="permissive"` on the agent node to restore the old allow-all behaviour.
+- **Inline `@tool` callables** -- `agent(tools=[my_func])` accepts bare callables alongside string registry names. The engine wraps them as `FunctionTool` instances automatically.
+- **Application timeouts** -- `qm.configure(timeout=, connect_timeout=, read_timeout=)` propagates deadline defaults to every LLM call; per-call overrides via `qm.run(..., read_timeout=)`.
+
 ## See Also
 
 - [Architecture](architecture.md) -- System overview and data flow

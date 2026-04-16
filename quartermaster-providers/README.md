@@ -20,6 +20,11 @@ Unified multi-LLM provider abstraction for Python. Write once, run against OpenA
 - **Testing Utilities**: `MockProvider` and `InMemoryHistory` for unit tests
 - **Type-Safe**: Dataclass responses with full type hints
 
+### New in v0.4.0
+
+- **Native Ollama `/api/chat` for tool calls** -- auto-detected when the provider is `"ollama"`, eliminating tool-name hallucinations on Gemma models. Override with `ollama_tool_protocol=` in `qm.configure()`.
+- **`CircuitBreaker`** -- `CircuitBreaker(failure_threshold=, recovery_timeout=)` wraps any provider; raises `CircuitOpenError` when the failure threshold is reached and recovers after the timeout.
+
 ## Installation
 
 ```bash

@@ -4,6 +4,23 @@
 
 Quartermaster lets you build AI agent workflows as directed graphs — define nodes (LLM calls, decisions, user input, tools), connect them with edges, and execute them with a pluggable engine.
 
+## What's new in v0.4.0
+
+- **Application timeouts** -- `qm.configure(timeout=, connect_timeout=, read_timeout=)` + per-call overrides.
+- **Stream cancellation** -- `with qm.run.stream(...) as stream:` context-manager; `qm.Cancelled` + `ctx.cancelled`.
+- **Native Ollama `/api/chat`** for tool calls (auto-detect) + `ollama_tool_protocol=` config.
+- **Per-node tool scoping** -- `agent(tools=[...])` strictly enforced; `tool_scope="permissive"` escape hatch.
+- **Inline `@tool` callables** -- `agent(tools=[my_func])` accepts bare callables.
+- **`instruction_form`** -- Gemma preamble robustness + dict-schema support.
+- **`qm.configure(telemetry=True)`** -- sugar for `qm.telemetry.instrument()`.
+- **`qm.configure(auto_redact_pii=True)`** -- automatic PII redaction policy.
+- **`Trace.from_jsonl()` / `assert_traces_equal()`** -- round-trip trace serialisation for golden-file tests.
+- **`SessionStore` protocol** -- `qm.run(graph, input, session=store, session_id=...)` + `InMemorySessionStore`.
+- **`TypedEvent`** -- Pydantic base class for typed custom events.
+- **`python -m quartermaster_sdk.lint check`** -- static graph linter (QM001--QM005).
+- **`CircuitBreaker`** -- `CircuitBreaker(failure_threshold=, recovery_timeout=)` + `CircuitOpenError`.
+- **Local-GPU cost tracker** -- `duration_seconds` + `local_gpu_cost_per_hour` support.
+
 ## Quick Install
 
 ```bash

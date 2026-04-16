@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field, fields
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID
 
 from quartermaster_engine import (
@@ -60,8 +60,6 @@ from quartermaster_engine import (
     UserInputRequired,
 )
 
-if TYPE_CHECKING:
-    pass
 
 # ── Event (de)serialisation helpers ────────────────────────────────────
 

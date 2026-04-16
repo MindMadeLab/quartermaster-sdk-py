@@ -114,3 +114,11 @@ uv run examples/run_interactive.py
 - **Filtered streams (v0.3.0)**: `stream.tokens()` / `.tool_calls()` / `.progress()` / `.custom()` (examples 21-22)
 - **Live progress events (v0.3.0)**: `ctx.emit_progress()` / `ctx.emit_custom()` reachable via `qm.current_context()` (example 21)
 - **OpenTelemetry (v0.3.0)**: `qm.telemetry.instrument()` for one-line OTEL GenAI span export (example 23)
+- **Application timeouts (v0.4.0)**: `qm.configure(timeout=)` + per-call `qm.run(..., read_timeout=)`
+- **Stream cancellation (v0.4.0)**: `with qm.run.stream(...) as stream:` context-manager + `qm.Cancelled` + `ctx.cancelled`
+- **Per-node tool scoping (v0.4.0)**: `agent(tools=[...])` strictly enforced; `tool_scope="permissive"` escape
+- **Inline tool callables (v0.4.0)**: `agent(tools=[my_func])` accepts bare callables
+- **SessionStore (v0.4.0)**: `qm.run(graph, input, session=store, session_id=...)` for multi-turn chat
+- **TypedEvent (v0.4.0)**: Pydantic base class for typed custom events
+- **Graph linter (v0.4.0)**: `python -m quartermaster_sdk.lint check` (QM001--QM005)
+- **CircuitBreaker (v0.4.0)**: `CircuitBreaker(failure_threshold=, recovery_timeout=)` + `CircuitOpenError`

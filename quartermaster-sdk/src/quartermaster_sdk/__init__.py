@@ -163,4 +163,8 @@ __all__ = [
     "InMemorySessionStore",
     # v0.4.0 typed custom events
     "TypedEvent",
+    # v0.4.0 trace regression testing
+    "assert_traces_equal",
+    # Telemetry module (qm.telemetry.instrument())
+    "telemetry",
 ]
