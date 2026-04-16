@@ -211,13 +211,71 @@ def configure(
 
 
 def get_default_registry() -> ProviderRegistry:
-    """Return the module-level default registry or raise a helpful error."""
-    if _default_registry is None:
+    """Return the module-level default registry, auto-configuring if needed.
+
+    If :func:`configure` hasn't been called yet, this function tries to
+    auto-discover providers from the environment — exactly the same way
+    the legacy ``run_graph()`` helper does:
+
+    * Cloud providers: ``ANTHROPIC_API_KEY``, ``OPENAI_API_KEY``,
+      ``GROQ_API_KEY``, ``XAI_API_KEY`` → register whichever keys exist.
+    * Local providers: Ollama is always attempted (no key needed).
+
+    This means ``qm.run(graph, "hello")`` works out of the box for
+    examples and quick scripts — no ``qm.configure(...)`` call required
+    unless you need custom settings (timeouts, circuit breaker, etc.).
+    """
+    global _default_registry
+    if _default_registry is not None:
+        return _default_registry
+
+    # Auto-configure from environment — same provider-discovery logic
+    # that the engine's run_graph() uses.
+    logger.info(
+        "No explicit qm.configure() — auto-discovering providers from environment"
+    )
+    registry = ProviderRegistry()
+    registered: list[str] = []
+
+    # Cloud providers: register whichever API keys are present.
+    _CLOUD_PROVIDERS = {
+        "anthropic": "quartermaster_providers.providers.anthropic:AnthropicProvider",
+        "openai": "quartermaster_providers.providers.openai:OpenAIProvider",
+        "groq": "quartermaster_providers.providers.groq:GroqProvider",
+        "xai": "quartermaster_providers.providers.xai:XAIProvider",
+    }
+    import importlib
+
+    for name, cls_path in _CLOUD_PROVIDERS.items():
+        api_key = os.environ.get(f"{name.upper()}_API_KEY", "")
+        if not api_key:
+            continue
+        module_path, cls_name = cls_path.rsplit(":", 1)
+        try:
+            module = importlib.import_module(module_path)
+            provider_cls = getattr(module, cls_name)
+            registry.register(name, provider_cls, api_key=api_key)
+            registered.append(name)
+        except (ImportError, Exception) as exc:
+            logger.debug("Auto-register %s failed: %s", name, exc)
+
+    # Local: Ollama (no API key needed).
+    try:
+        registry.register_local("ollama")
+        registered.append("ollama")
+    except Exception as exc:
+        logger.debug("Auto-register ollama failed: %s", exc)
+
+    if not registered:
         raise RuntimeError(
-            "No default provider registry configured. Call "
-            "quartermaster_sdk.configure(provider='ollama', default_model=...) "
-            "once at app boot, or pass provider_registry= explicitly to run()."
+            "No providers available. Set API keys in the environment "
+            "(ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.) or run `ollama serve`, "
+            "then either let auto-discovery find them or call "
+            "qm.configure(provider=..., default_model=...) explicitly."
         )
+
+    _default_registry = registry
+    logger.info("Auto-configured providers: %s", ", ".join(registered))
     return _default_registry
 
 

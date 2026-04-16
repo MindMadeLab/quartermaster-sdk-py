@@ -31,6 +31,10 @@ def main():
     )
     args = parser.parse_args()
 
+    # No qm.configure() needed — qm.run() auto-discovers providers from
+    # environment variables (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.) and
+    # local Ollama. The model/provider are set per-node below.
+
     # The graph loops natively via .back():
     #   Start → User (stdin) → Agent (LLM) → Back → Start → User → ...
     # No external while-loop required.
