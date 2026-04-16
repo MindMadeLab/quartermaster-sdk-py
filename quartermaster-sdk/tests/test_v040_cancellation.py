@@ -1,4 +1,4 @@
-"""Tests for v0.4.0 stream cancellation (Sorex round-2 P1.2).
+"""Tests for v0.4.0 stream cancellation.
 
 Three new surfaces:
 

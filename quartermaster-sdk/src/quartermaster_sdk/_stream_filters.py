@@ -78,7 +78,7 @@ class _Stream:
     The wrapper is single-pass: whichever consumer starts reading
     first wins, and any second consumer raises :class:`RuntimeError`.
 
-    **v0.4.0 context-manager protocol (Sorex round-2 P1.2).** The
+    **v0.4.0 context-manager protocol.** The
     wrapper implements ``__enter__`` / ``__exit__`` so consumers can
     write ``with qm.run.stream(...) as s: ...`` — on exit (normal,
     ``break``, ``return``, exception) the ``_on_exit`` callback fires,
@@ -257,7 +257,7 @@ class _AsyncStream:
     materialising the whole stream first. Same single-pass guarantee
     as the sync variant — :class:`RuntimeError` on double consumption.
 
-    **v0.4.0 async context-manager protocol (Sorex round-2 P1.2).**
+    **v0.4.0 async context-manager protocol.**
     Implements ``__aenter__`` / ``__aexit__`` so ``async with
     qm.arun.stream(graph, user_input) as s: ...`` cancels the flow on
     any exit path. The on-exit callback is ``async`` because the

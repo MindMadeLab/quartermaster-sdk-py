@@ -1,4 +1,4 @@
-"""Regression tests for the v0.4.0 per-node tool scoping feature (Sorex P3.3).
+"""Regression tests for the v0.4.0 per-node tool scoping feature.
 
 Surface under test:
 

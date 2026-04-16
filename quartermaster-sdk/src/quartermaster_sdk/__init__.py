@@ -148,7 +148,7 @@ __all__ = [
     "ChatResult",
     "ProviderRegistry",
     "register_local",
-    # v0.4.0 circuit breaker (Sorex P3.4)
+    # v0.4.0 circuit breaker
     "CircuitBreaker",
     "CircuitOpenError",
     "get_default_registry",

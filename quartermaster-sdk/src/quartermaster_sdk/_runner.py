@@ -324,7 +324,7 @@ def assert_traces_equal(
     ``result.trace.as_jsonl()`` and replay it later to detect silent
     tool-call drift.
 
-    Added in v0.4.0 (Sorex P2.3).
+    Added in v0.4.0.
     """
     ignore_set = set(ignore or [])
 
@@ -409,7 +409,7 @@ class _RunCallable:
                 When provided alongside *session_id*, the runner loads
                 prior turns, folds them into *user_input*, and appends
                 the new user + assistant turns after the run. Added in
-                v0.4.0 (Sorex P2.4).
+                v0.4.0.
             session_id: Session key for the session store.  Required
                 when *session* is set; ignored otherwise.
         """

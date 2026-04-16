@@ -51,7 +51,7 @@ class ExecutionContext:
     on_progress: Callable[[str, float | None, dict], None] | None = None
     on_custom: Callable[[str, dict], None] | None = None
 
-    # v0.4.0 cooperative cancellation (Sorex round-2 P1.2).
+    # v0.4.0 cooperative cancellation.
     #
     # Populated by :class:`FlowRunner` with the per-flow cancellation
     # :class:`threading.Event`; every :class:`ExecutionContext` the

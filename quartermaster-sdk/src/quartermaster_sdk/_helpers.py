@@ -4,7 +4,7 @@ These wrap a single-node graph so callers never touch ``Graph``,
 ``FlowRunner``, or ``register_local`` for the 90% of use-cases that are
 just ``prompt → text`` or ``prompt → typed JSON``.
 
-The docs / Sorex feedback called this "the thing we'd actually write";
+The docs / downstream feedback called this "the thing we'd actually write";
 v0.2.0 ships it as the primary recommended API for non-agentic calls.
 """
 
@@ -68,7 +68,7 @@ def _extract_last_json_object(raw: str) -> Any:
     2. If the stripped text is itself valid JSON, return it.
     3. Otherwise walk the text looking for ``{`` / ``[`` positions and
        attempt :meth:`json.JSONDecoder.raw_decode` at each candidate.
-       Keep the **last** successful decode — Sorex's ``extract_json``
+       Keep the **last** successful decode — the downstream ``extract_json``
        uses the same heuristic: reasoning models emit a bullet preamble
        then the final JSON, so the trailing object is the answer.
 

@@ -1,4 +1,4 @@
-"""Circuit breaker for LLM provider calls (Sorex round-2 P3.4).
+"""Circuit breaker for LLM provider calls (v0.4.0).
 
 When a provider (e.g. Ollama) locks up under parallel load, every LLM
 call in the window times out individually.  A circuit breaker skips the

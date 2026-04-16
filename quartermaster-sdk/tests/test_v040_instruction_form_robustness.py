@@ -1,14 +1,14 @@
 """v0.4.0 regressions for :func:`qm.instruction_form` robustness.
 
-Covers two Sorex round-2 items:
+Covers two v0.4.0 items:
 
 * **P1.3 (T4)** — Gemma-family reasoning models emit a bullet preamble
   before the fenced JSON. The pre-0.4.0 helper stripped the fence but
   then choked because the stripped text still started with the bullets.
   v0.4.0 introduces ``_extract_last_json_object`` which walks every
   ``{`` / ``[`` position via :func:`json.JSONDecoder.raw_decode` and
-  keeps the LAST valid decode — matching the heuristic that Sorex
-  already ships in ``services.extract_json``.
+  keeps the LAST valid decode — matching the heuristic that downstream
+  integrators already ship in ``services.extract_json``.
 
 * **P3.2 (T5)** — Accept ``schema`` as a dict (JSON Schema literal),
   not just a Pydantic ``BaseModel`` subclass. Dict-schema validation
@@ -108,7 +108,7 @@ class TestGemmaPreambleParser:
 
     def test_picks_last_json_when_multiple(self):
         """Multiple JSON objects in the text → the LAST one wins. Matches
-        Sorex's documented ``services.extract_json`` heuristic: when a
+        The downstream ``services.extract_json`` heuristic: when a
         model thinks aloud with interim JSON sketches, the final object
         is the answer."""
         canned = (

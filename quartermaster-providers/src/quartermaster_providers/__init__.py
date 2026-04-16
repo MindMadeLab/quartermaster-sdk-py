@@ -89,7 +89,7 @@ __all__ = [
     "register_local",
     # Sync chat shim result type
     "ChatResult",
-    # Circuit breaker (v0.4.0 — Sorex P3.4)
+    # Circuit breaker (v0.4.0)
     "CircuitBreaker",
     "CircuitBreakerState",
     "CircuitBreakerWrapper",

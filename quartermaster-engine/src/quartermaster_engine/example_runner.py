@@ -519,7 +519,7 @@ def _execute_tool_call(
     ``raw`` + ``error`` fields are only observed by the agent loop and
     the ``ToolCallFinished`` event downstream, never fed back to the LLM.
 
-    v0.4.0 (Sorex P3.3): if *allowed_tools* is not ``None`` the normalised
+    v0.4.0: if *allowed_tools* is not ``None`` the normalised
     tool name MUST appear in the list — otherwise the call is rejected
     with a structured error before it ever reaches the registry. This
     is the per-node tool scoping enforcement: when a graph node declares
@@ -658,7 +658,7 @@ class AgentExecutor(NodeExecutor):
         program_ids = context.get_meta("program_version_ids", []) or []
         tools = _tool_definitions(per_node_tools) if program_ids else None
 
-        # v0.4.0 per-node tool scoping (Sorex P3.3): the list of tool names
+        # v0.4.0 per-node tool scoping: the list of tool names
         # declared in ``.agent(tools=[...])`` becomes the HARD allow-list.
         # A hallucinated out-of-list tool call hits the
         # ``[ERROR: tool 'X' is not allowed for this agent node...]`` branch

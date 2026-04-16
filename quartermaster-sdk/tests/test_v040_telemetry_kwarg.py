@@ -1,7 +1,7 @@
 """v0.4.0 regression: ``qm.configure(telemetry=True)`` is sugar for
 ``qm.configure(...); qm.telemetry.instrument()``.
 
-Sorex round-2 wishlist P2.1 ("Telemetry as a configure kwarg") —
+Round-2 wishlist ("Telemetry as a configure kwarg") —
 two boot-time calls collapse to one.
 """
 

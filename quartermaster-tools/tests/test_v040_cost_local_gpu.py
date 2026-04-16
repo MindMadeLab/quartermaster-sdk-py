@@ -1,5 +1,5 @@
 """
-Tests for v0.4.0 (Sorex round-2 P3.5) — local-GPU cost pricing
+Tests for v0.4.0 — local-GPU cost pricing
 in the Cost tracker tool.
 
 Covers:

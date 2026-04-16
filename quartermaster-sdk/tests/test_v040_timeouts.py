@@ -1,6 +1,6 @@
 """Tests for v0.4.0 application-level LLM timeouts + stream deadlines.
 
-Sorex round-2 P1.1: today ``qm.configure(timeout=...)`` raises
+Production feedback (v0.4.0): today ``qm.configure(timeout=...)`` raises
 TypeError and there's no application-level deadline — an Ollama
 instance wedging mid-stream hangs the worker until Celery's blunt
 ``CELERY_TASK_TIME_LIMIT`` kills it. v0.4.0 adds:
@@ -78,7 +78,7 @@ def _reset_config():
 
 class TestConfigureTimeoutKwarg:
     def test_configure_timeout_kwarg_no_longer_raises(self):
-        """Sorex round-2 regression — pre-0.4.0 this raised TypeError."""
+        """v0.4.0 regression — pre-0.4.0 this raised TypeError."""
         # No exception should fire.
         qm.configure(provider="ollama", default_model="x", timeout=30)
         # And the resolved defaults make it through to the accessor.
@@ -185,7 +185,7 @@ class TestConfigureDefaultReachesProvider:
 
 class TestPerCallOverrides:
     def test_per_call_read_timeout_overrides_default(self):
-        """Sorex's 5-min research loop use case: ``qm.configure(timeout=60)``
+        """5-min research loop use case: ``qm.configure(timeout=60)``
         applies everywhere EXCEPT one long-running call that passes
         ``read_timeout=300``."""
         reg, mock = _mock_registry()

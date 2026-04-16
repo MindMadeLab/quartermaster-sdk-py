@@ -4,7 +4,7 @@ LLM API cost tracking tool.
 Tracks token usage and calculates costs based on built-in pricing tables
 for common models. Accumulates costs across calls for budget monitoring.
 
-v0.4.0 (Sorex round-2 P3.5) extends the tool with **local-GPU pricing**:
+v0.4.0 extends the tool with **local-GPU pricing**:
 callers running an on-prem Ollama/vLLM/etc. model can pass
 ``duration_seconds`` and ``local_gpu_cost_per_hour`` to approximate real
 spend (electricity + amortisation) when no per-token cloud price exists.

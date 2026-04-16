@@ -1,4 +1,4 @@
-"""v0.4.0 — native ``/api/chat`` transport for OllamaProvider (Sorex P1.4).
+"""v0.4.0 — native ``/api/chat`` transport for OllamaProvider.
 
 These tests guard the v0.4.0 regression surface:
 

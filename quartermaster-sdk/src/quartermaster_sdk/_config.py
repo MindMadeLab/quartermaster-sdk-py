@@ -53,7 +53,7 @@ _default_model: str | None = None
 # resolution path.
 _default_connect_timeout: float | None = None
 _default_read_timeout: float | None = None
-# v0.4.0 auto-redact PII mode (Sorex P2.2). When enabled, every
+# v0.4.0 auto-redact PII mode. When enabled, every
 # ``user_input`` is piped through DetectPIITool + RedactPIITool before
 # the LLM sees it. ``_auto_redact_policy`` controls which entity types
 # are stripped; ``"all"`` means every type the detector supports.
@@ -171,7 +171,7 @@ def configure(
             register_kwargs["tool_protocol"] = ollama_tool_protocol
         _default_registry = register_local(provider, **register_kwargs)
 
-    # v0.4.0 circuit breaker (Sorex P3.4): wrap the provider instance
+    # v0.4.0 circuit breaker: wrap the provider instance
     # with a CircuitBreakerWrapper so every generate_* call is gated.
     if circuit_breaker is not None:
         provider_name = (

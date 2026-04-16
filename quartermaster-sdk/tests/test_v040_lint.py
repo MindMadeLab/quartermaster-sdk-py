@@ -1,4 +1,4 @@
-"""Tests for the v0.4.0 semantic-change lint tool (Sorex P3.1).
+"""Tests for the v0.4.0 semantic-change lint tool.
 
 Covers the ``quartermaster_sdk.lint`` public surface:
 

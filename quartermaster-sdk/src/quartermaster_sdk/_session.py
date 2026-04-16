@@ -1,4 +1,4 @@
-"""SessionStore protocol for multi-turn chat history (Sorex P2.4).
+"""SessionStore protocol for multi-turn chat history (v0.4.0).
 
 Multi-turn chat history is caller-managed by design, but the boilerplate
 to fold history into ``user_input`` is identical across integrators. This

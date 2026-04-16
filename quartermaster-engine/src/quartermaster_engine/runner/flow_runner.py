@@ -196,7 +196,7 @@ class FlowRunner:
         self._traverse_out = TraverseOutGate()
         self._message_router = MessageRouter(self.store)
         self._stopped: set[UUID] = set()
-        # v0.4.0 per-flow cancellation events (Sorex round-2 P1.2).
+        # v0.4.0 per-flow cancellation events.
         # Every ExecutionContext this runner builds for a given flow
         # shares the same ``threading.Event``; :meth:`stop` sets it so
         # tools polling ``ctx.cancelled`` observe the abort and can

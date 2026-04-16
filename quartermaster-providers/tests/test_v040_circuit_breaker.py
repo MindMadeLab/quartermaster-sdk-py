@@ -1,4 +1,4 @@
-"""v0.4.0 -- circuit breaker for provider calls (Sorex round-2 P3.4).
+"""v0.4.0 -- circuit breaker for provider calls.
 
 Tests cover the full 3-state machine (Closed -> Open -> Half-Open) and
 the ``CircuitBreakerWrapper`` that gates ``generate_*`` calls through
