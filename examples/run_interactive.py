@@ -31,10 +31,9 @@ def main():
     )
     args = parser.parse_args()
 
-    # Configure the provider — qm.run() requires this (unlike the legacy
-    # run_graph() which auto-configured). For cloud providers the API key
-    # comes from the environment (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.).
-    qm.configure(provider=args.provider, default_model=args.model)
+    # No qm.configure() needed — qm.run() auto-discovers providers from
+    # environment variables (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.) and
+    # local Ollama. The model/provider are set per-node below.
 
     # The graph loops natively via .back():
     #   Start → User (stdin) → Agent (LLM) → Back → Start → User → ...
