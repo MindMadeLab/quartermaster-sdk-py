@@ -47,6 +47,12 @@ _default_model: str | None = None
 # resolution path.
 _default_connect_timeout: float | None = None
 _default_read_timeout: float | None = None
+# v0.4.0 auto-redact PII mode (Sorex P2.2). When enabled, every
+# ``user_input`` is piped through DetectPIITool + RedactPIITool before
+# the LLM sees it. ``_auto_redact_policy`` controls which entity types
+# are stripped; ``"all"`` means every type the detector supports.
+_auto_redact_pii: bool = False
+_auto_redact_policy: str = "all"
 
 
 def configure(
@@ -60,6 +66,8 @@ def configure(
     timeout: float | None = None,
     connect_timeout: float | None = None,
     read_timeout: float | None = None,
+    auto_redact_pii: bool = False,
+    auto_redact_policy: str = "all",
     telemetry: bool = False,
 ) -> ProviderRegistry:
     """Bind a default provider registry for subsequent ``qm.*`` calls.
@@ -96,6 +104,7 @@ def configure(
     """
     global _default_registry, _default_model
     global _default_connect_timeout, _default_read_timeout
+    global _auto_redact_pii, _auto_redact_policy
 
     # Validate the Ollama tool-protocol knob here — we want a clear
     # ``ValueError`` at boot rather than a cryptic ``TypeError`` when
@@ -158,6 +167,8 @@ def configure(
     _default_model = resolved_default_model
     _default_connect_timeout = resolved_connect
     _default_read_timeout = resolved_read
+    _auto_redact_pii = auto_redact_pii
+    _auto_redact_policy = auto_redact_policy
     logger.info(
         "quartermaster_sdk configured: provider=%s default_model=%s "
         "ollama_tool_protocol=%s connect_timeout=%s read_timeout=%s",
@@ -234,18 +245,31 @@ def get_default_timeouts() -> dict[str, float | None]:
     }
 
 
+def get_auto_redact_config() -> tuple[bool, str]:
+    """Return ``(auto_redact_pii, auto_redact_policy)`` from configure().
+
+    v0.4.0 plumbing — the redaction helper reads this to decide whether
+    to strip PII before the LLM sees user input.
+    """
+    return _auto_redact_pii, _auto_redact_policy
+
+
 def reset_config() -> None:
     """Clear the configured registry — used by tests to start fresh."""
     global _default_registry, _default_model
     global _default_connect_timeout, _default_read_timeout
+    global _auto_redact_pii, _auto_redact_policy
     _default_registry = None
     _default_model = None
     _default_connect_timeout = None
     _default_read_timeout = None
+    _auto_redact_pii = False
+    _auto_redact_policy = "all"
 
 
 __all__ = [
     "configure",
+    "get_auto_redact_config",
     "get_default_registry",
     "get_default_model",
     "get_default_timeouts",

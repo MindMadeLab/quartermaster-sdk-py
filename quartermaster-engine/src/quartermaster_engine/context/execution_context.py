@@ -139,7 +139,7 @@ class ExecutionContext:
 
     def emit_custom(
         self,
-        name: str,
+        name_or_event: str | Any,
         payload: dict[str, Any] | None = None,
     ) -> None:
         """Emit an application-defined structured event.
@@ -151,15 +151,33 @@ class ExecutionContext:
 
         No-op when no runner is attached.
 
+        **v0.4.0:** Accepts a :class:`TypedEvent` instance in addition
+        to the original ``(name: str, payload: dict)`` form. When a
+        ``TypedEvent`` is passed, the ``name`` and ``payload`` are
+        extracted from the model automatically::
+
+            ctx.emit_custom(SearchResultsEvent(count=5, query=q))
+
         Args:
-            name: Caller-chosen discriminator ("retrieved_docs",
-                "quota_warning", …). Used by stream consumers for
-                filtering.
+            name_or_event: Either a string discriminator or a
+                :class:`TypedEvent` instance. When a ``TypedEvent`` is
+                passed, ``payload`` must be ``None``.
             payload: Free-form dict carried with the event. Defaults
-                to an empty dict when ``None``.
+                to an empty dict when ``None``. Ignored when
+                ``name_or_event`` is a ``TypedEvent``.
         """
         if self.on_custom:
-            self.on_custom(name, dict(payload or {}))
+            # v0.4.0: duck-type check for TypedEvent — avoid importing
+            # pydantic in the engine package. TypedEvent instances have
+            # ``model_dump`` (Pydantic v2) and a ``name`` attribute.
+            if hasattr(name_or_event, "model_dump") and not isinstance(name_or_event, str):
+                event = name_or_event
+                name = event.name
+                data = event.model_dump(exclude={"name"})
+            else:
+                name = name_or_event
+                data = dict(payload or {})
+            self.on_custom(name, data)
 
     def emit_message(self, content: str) -> None:
         """Emit a complete message if a callback is registered."""
