@@ -2,11 +2,9 @@
 """Interactive agent demo -- continuous conversation with an LLM.
 
 The graph pauses at User nodes and prompts for your input via stdin.
-After the LLM responds, it loops back for your next question.
-Press Ctrl+C to exit.
-
-The instruction node specifies its own model and provider.
-The runner auto-registers all available providers from .env.
+After the LLM responds, ``.back()`` loops control back to Start so the
+User node prompts again — no Python ``while True`` needed.  The loop
+lives inside the graph itself.  Press Ctrl+C to exit.
 
 Usage:
     uv run examples/run_interactive.py
@@ -33,6 +31,9 @@ def main():
     )
     args = parser.parse_args()
 
+    # The graph loops natively via .back():
+    #   Start → User (stdin) → Instruction (LLM) → Back → Start → User → ...
+    # No external while-loop required.
     agent = (
         qm.Graph("Interactive Assistant")
         .user("You")
@@ -45,18 +46,16 @@ def main():
                 "Respond in the same language the user writes in."
             ),
         )
+        .back()  # loop back to Start → User prompts again
     )
 
     print(f"Interactive Assistant ({args.model} via {args.provider})")
     print("Ctrl+C to exit\n")
 
-    while True:
-        try:
-            result = qm.run_graph(agent)
-            if result is None:
-                break
-        except (KeyboardInterrupt, EOFError):
-            break
+    try:
+        qm.run_graph(agent)
+    except (KeyboardInterrupt, EOFError):
+        pass
 
     print("\nGoodbye!")
 
