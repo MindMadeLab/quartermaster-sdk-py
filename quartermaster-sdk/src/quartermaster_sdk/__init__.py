@@ -89,7 +89,9 @@ from ._async_runner import arun  # noqa: F401
 from ._helpers import instruction, instruction_form  # noqa: F401
 from ._result import Result  # noqa: F401
 from ._runner import StreamDeadlineExceeded, run  # noqa: F401
+from ._session import ChatTurn, InMemorySessionStore, SessionStore  # noqa: F401
 from ._trace import NodeTrace, Trace  # noqa: F401
+from ._typed_events import TypedEvent  # noqa: F401
 
 
 __all__ = [
@@ -150,4 +152,10 @@ __all__ = [
     "reset_config",
     # v0.4.0 stream deadline
     "StreamDeadlineExceeded",
+    # v0.4.0 session store protocol
+    "ChatTurn",
+    "SessionStore",
+    "InMemorySessionStore",
+    # v0.4.0 typed custom events
+    "TypedEvent",
 ]
