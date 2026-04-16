@@ -60,6 +60,7 @@ def configure(
     timeout: float | None = None,
     connect_timeout: float | None = None,
     read_timeout: float | None = None,
+    telemetry: bool = False,
 ) -> ProviderRegistry:
     """Bind a default provider registry for subsequent ``qm.*`` calls.
 
@@ -166,6 +167,13 @@ def configure(
         resolved_connect,
         resolved_read,
     )
+
+    if telemetry:
+        from . import telemetry as _telemetry
+
+        _telemetry.instrument()
+        logger.info("quartermaster_sdk.telemetry: instrumented from configure(telemetry=True)")
+
     return _default_registry
 
 
