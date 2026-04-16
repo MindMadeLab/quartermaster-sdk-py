@@ -85,9 +85,18 @@ class TestConfigure:
         with pytest.raises(ValueError, match="registry= OR base_url"):
             qm.configure(registry=reg, base_url="http://localhost:11434")
 
-    def test_get_default_registry_raises_before_configure(self):
-        with pytest.raises(RuntimeError, match="No default provider registry"):
-            qm.get_default_registry()
+    def test_get_default_registry_auto_configures_from_env(self):
+        """v0.4.0: get_default_registry() auto-discovers providers from
+        environment instead of raising.  When at least one provider is
+        available (API key in env OR Ollama running), the call succeeds
+        without an explicit qm.configure()."""
+        qm.reset_config()
+        # In the test environment at least one of: ANTHROPIC_API_KEY,
+        # OPENAI_API_KEY, or Ollama is available, so auto-discovery
+        # should succeed.  If this test fails with "No providers available"
+        # it means the CI environment has no API keys AND no Ollama.
+        registry = qm.get_default_registry()
+        assert registry is not None
 
     def test_env_default_model_picked_up(self, monkeypatch):
         monkeypatch.setenv("QM_DEFAULT_MODEL", "gemma4:26b")
