@@ -195,7 +195,8 @@ agent = (
 )
 
 # Execute with a real LLM
-qm.run(
+result = qm.run(
     agent,
     "My laptop won't connect to the VPN and I need access to the finance portal urgently",
 )
+print(result.text)

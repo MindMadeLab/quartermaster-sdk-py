@@ -183,4 +183,5 @@ agent = (
 )
 
 # Execute with a real LLM
-qm.run(agent, "What are the latest advances in quantum error correction?")
+result = qm.run(agent, "What are the latest advances in quantum error correction?")
+print(result.text)
