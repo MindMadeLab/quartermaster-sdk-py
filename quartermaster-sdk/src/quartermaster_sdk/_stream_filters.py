@@ -51,7 +51,7 @@ still pattern-match on the raw stream.
 from __future__ import annotations
 
 import logging
-from typing import AsyncIterator, Awaitable, Callable, Iterator
+from typing import Any, AsyncIterator, Awaitable, Callable, Iterator, overload
 
 from ._chunks import (
     Chunk,
@@ -60,6 +60,7 @@ from ._chunks import (
     TokenChunk,
     ToolCallChunk,
 )
+from ._typed_events import TypedEvent
 
 
 logger = logging.getLogger(__name__)
@@ -191,16 +192,43 @@ class _Stream:
         self._claim()
         return self._yield_type(ProgressChunk)
 
-    def custom(self, name: str | None = None) -> Iterator[CustomChunk]:
-        """Yield :class:`CustomChunk` events, optionally filtered by ``name``.
+    @overload
+    def custom(self, name_or_schema: type[TypedEvent]) -> Iterator[Any]: ...
+
+    @overload
+    def custom(self, name_or_schema: str | None = None) -> Iterator[CustomChunk]: ...
+
+    def custom(
+        self,
+        name_or_schema: str | type[TypedEvent] | None = None,
+        *,
+        name: str | None = None,
+    ) -> Iterator[CustomChunk] | Iterator[Any]:
+        """Yield :class:`CustomChunk` events, optionally filtered.
+
+        **v0.4.0:** Accepts a :class:`TypedEvent` subclass in addition
+        to the original ``name: str`` filter. When a ``TypedEvent``
+        subclass is passed, the stream filters by the schema's
+        ``name`` default and yields validated typed instances instead
+        of raw :class:`CustomChunk` objects::
+
+            for ev in stream.custom(SearchResultsEvent):
+                print(ev.count, ev.query)   # typed fields
 
         ``name=None`` (the default) yields every custom chunk; passing
-        a specific ``name`` yields only the matching ones so UIs can
-        subscribe to a single milestone stream without inspecting
+        a specific ``name`` string yields only the matching ones so UIs
+        can subscribe to a single milestone stream without inspecting
         every payload.
+
+        The ``name=`` keyword arg is a backwards-compatible alias for
+        the positional *name_or_schema* when passed as a string.
         """
+        # Backwards compat: ``stream.custom(name="x")`` from v0.3.0.
+        resolved = name_or_schema if name_or_schema is not None else name
         self._claim()
-        return self._yield_custom(name)
+        if isinstance(resolved, type) and issubclass(resolved, TypedEvent):
+            return self._yield_typed(resolved)
+        return self._yield_custom(resolved)
 
     # ── Internal helpers ──────────────────────────────────────────────
     def _yield_type(self, chunk_cls: type) -> Iterator:
@@ -212,6 +240,13 @@ class _Stream:
         for chunk in self._source:
             if isinstance(chunk, CustomChunk) and (name is None or chunk.name == name):
                 yield chunk
+
+    def _yield_typed(self, schema: type[TypedEvent]) -> Iterator[Any]:
+        """Yield validated typed instances for chunks matching a TypedEvent schema."""
+        expected_name = schema.model_fields["name"].default
+        for chunk in self._source:
+            if isinstance(chunk, CustomChunk) and chunk.name == expected_name:
+                yield schema(name=chunk.name, **chunk.payload)
 
 
 class _AsyncStream:
