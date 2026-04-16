@@ -122,7 +122,6 @@ graph TD
 ```python
 graph = (
     Graph("Sentiment Router")
-    .start()
     .user("Enter text to analyze")
     .instruction("Analyze sentiment", model="gpt-4o")
     .if_node("Is positive?", expression="sentiment == 'positive'")
@@ -315,7 +314,6 @@ graph TD
 
 ```python
 Graph("Orchestrator") \
-    .start() \
     .user("What do you need?") \
     .instruction("Decide task", model="gpt-4o") \
     .sub_agent("Run specialist", graph_id="specialist-flow-id") \

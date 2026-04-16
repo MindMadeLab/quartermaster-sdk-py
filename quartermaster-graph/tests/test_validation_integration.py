@@ -165,7 +165,14 @@ class TestCycleDetection:
     """Validation must detect cycles in the graph."""
 
     def test_simple_cycle(self, agent: Agent) -> None:
-        """A -> B -> A cycle produces cycle_detected error."""
+        """A -> B -> A cycle produces a cycle_detected warning.
+
+        v0.3.0: under Proposal A the default End-node semantics loop
+        back to Start implicitly, so user-defined cycles via explicit
+        edges are now a WARNING — the runtime has a loop guard
+        (``FlowRunner.max_loop_iterations``) and intentional cycles
+        are fully supported.
+        """
         start = GraphNode(type=NodeType.START, name="Start")
         a = GraphNode(type=NodeType.INSTRUCTION, name="A")
         b = GraphNode(type=NodeType.INSTRUCTION, name="B")
@@ -183,11 +190,13 @@ class TestCycleDetection:
             edges=edges,
         )
         errors = validate_graph(version)
+        warning_codes = {e.code for e in errors if e.severity == "warning"}
         error_codes = {e.code for e in errors if e.severity == "error"}
-        assert "cycle_detected" in error_codes
+        assert "cycle_detected" in warning_codes
+        assert "cycle_detected" not in error_codes
 
     def test_self_loop(self, agent: Agent) -> None:
-        """A node pointing to itself creates a cycle."""
+        """A node pointing to itself creates a cycle (warning in v0.3.0)."""
         start = GraphNode(type=NodeType.START, name="Start")
         inst = GraphNode(type=NodeType.INSTRUCTION, name="Self-Loop")
         end = GraphNode(type=NodeType.END, name="End")
@@ -203,8 +212,10 @@ class TestCycleDetection:
             edges=edges,
         )
         errors = validate_graph(version)
+        warning_codes = {e.code for e in errors if e.severity == "warning"}
         error_codes = {e.code for e in errors if e.severity == "error"}
-        assert "cycle_detected" in error_codes
+        assert "cycle_detected" in warning_codes
+        assert "cycle_detected" not in error_codes
 
 
 class TestInvalidEdges:

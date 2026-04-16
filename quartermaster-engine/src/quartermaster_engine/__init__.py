@@ -1,5 +1,6 @@
 """quartermaster-engine: Execution engine for AI agent graphs."""
 
+from quartermaster_engine.cancellation import Cancelled
 from quartermaster_engine.context.execution_context import ExecutionContext
 from quartermaster_engine.context.node_execution import NodeExecution, NodeStatus
 from quartermaster_engine.events import (
@@ -21,6 +22,7 @@ from quartermaster_engine.example_runner import (
     build_default_registry,
     run_graph,
 )
+from quartermaster_engine.images import ImageInput, prepare_images
 from quartermaster_engine.memory.flow_memory import FlowMemory
 from quartermaster_engine.memory.persistent_memory import InMemoryPersistence, PersistentMemory
 from quartermaster_engine.messaging.context_manager import ContextManager
@@ -48,6 +50,8 @@ from quartermaster_engine.types import (
 )
 
 __all__ = [
+    # Cancellation (v0.4.0)
+    "Cancelled",
     # Context
     "ExecutionContext",
     "NodeExecution",
@@ -98,6 +102,9 @@ __all__ = [
     "build_default_registry",
     "LLMExecutor",
     "AgentExecutor",
+    # Image-input helpers (v0.3.0 vision kwarg)
+    "ImageInput",
+    "prepare_images",
 ]
 
-__version__ = "0.2.1"
+__version__ = "0.4.0"

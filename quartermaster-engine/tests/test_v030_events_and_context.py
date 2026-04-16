@@ -97,9 +97,7 @@ class TestProgressEvent:
         graph, inst, registry = _build_one_node_graph(_ProgressExecutor())
 
         events: list[FlowEvent] = []
-        runner = FlowRunner(
-            graph=graph, node_registry=registry, on_event=events.append
-        )
+        runner = FlowRunner(graph=graph, node_registry=registry, on_event=events.append)
         result = runner.run("kickoff")
         assert result.success, result.error
 
@@ -150,9 +148,7 @@ class TestCustomEvent:
         graph, inst, registry = _build_one_node_graph(_CustomExecutor())
 
         events: list[FlowEvent] = []
-        runner = FlowRunner(
-            graph=graph, node_registry=registry, on_event=events.append
-        )
+        runner = FlowRunner(graph=graph, node_registry=registry, on_event=events.append)
         result = runner.run("kickoff")
         assert result.success, result.error
 
@@ -176,9 +172,7 @@ class TestCustomEvent:
         graph, _inst, registry = _build_one_node_graph(_PingExecutor())
 
         events: list[FlowEvent] = []
-        runner = FlowRunner(
-            graph=graph, node_registry=registry, on_event=events.append
-        )
+        runner = FlowRunner(graph=graph, node_registry=registry, on_event=events.append)
         result = runner.run("kickoff")
         assert result.success, result.error
 
@@ -277,9 +271,7 @@ class TestCurrentContext:
                 captured["is_same"] = seen is context
                 return NodeResult(success=True, data={}, output_text="ok")
 
-        graph, _inst, registry = _build_one_node_graph(
-            _ThreadPoolCapturingExecutor()
-        )
+        graph, _inst, registry = _build_one_node_graph(_ThreadPoolCapturingExecutor())
         runner = FlowRunner(graph=graph, node_registry=registry)
 
         async def _make_runner_call_from_async() -> Any:
@@ -405,9 +397,7 @@ class TestEmitFromTool:
                             "description": "stub",
                             "parameters": {
                                 "type": "object",
-                                "properties": {
-                                    "q": {"type": "string"}
-                                },
+                                "properties": {"q": {"type": "string"}},
                             },
                         },
                     }
@@ -431,9 +421,7 @@ class TestEmitFromTool:
                 .build()
             )
 
-            chunks = list(
-                qm.run.stream(graph, "hi", tool_registry=tool_reg)
-            )
+            chunks = list(qm.run.stream(graph, "hi", tool_registry=tool_reg))
         finally:
             qm.reset_config()
 
@@ -451,8 +439,7 @@ class TestEmitFromTool:
         progress_idx = types_seq.index("progress")
         tool_result_idx = types_seq.index("tool_result")
         assert tool_call_idx < progress_idx < tool_result_idx, (
-            f"progress chunk must sit between tool_call and tool_result; "
-            f"got order {types_seq}"
+            f"progress chunk must sit between tool_call and tool_result; got order {types_seq}"
         )
 
         progress_chunk = next(c for c in chunks if c.type == "progress")

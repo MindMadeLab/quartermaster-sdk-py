@@ -124,6 +124,37 @@ class AnthropicProvider(AbstractLLMProvider):
             raise ServiceUnavailableError(str(e), provider=self.PROVIDER_NAME) from e
         raise ProviderError(str(e), provider=self.PROVIDER_NAME) from e
 
+    def _build_user_content(
+        self,
+        prompt: str,
+        config: LLMConfig,
+    ) -> str | list[dict[str, Any]]:
+        """Build the user-turn ``content`` field for the Anthropic API.
+
+        Plain text requests use the string shortcut (``content: "..."``)
+        so we don't bloat payloads for the common case. When the caller
+        attached images via ``LLMConfig.images`` we switch to the
+        structured list form and emit an ``image`` block per attachment
+        before the text prompt — the order Anthropic documents for
+        vision tool use.
+        """
+        if not config.images:
+            return prompt
+        blocks: list[dict[str, Any]] = []
+        for b64_data, mime_type in config.images:
+            blocks.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": mime_type or "image/jpeg",
+                        "data": b64_data,
+                    },
+                }
+            )
+        blocks.append({"type": "text", "text": prompt})
+        return blocks
+
     def _build_params(
         self,
         prompt: str,
@@ -133,7 +164,7 @@ class AnthropicProvider(AbstractLLMProvider):
         """Build Anthropic API request parameters."""
         params: dict[str, Any] = {
             "model": config.model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": "user", "content": self._build_user_content(prompt, config)}],
             "max_tokens": config.max_output_tokens or DEFAULT_MAX_TOKENS,
         }
 
@@ -157,6 +188,14 @@ class AnthropicProvider(AbstractLLMProvider):
             }
             # Anthropic requires temperature=1 when thinking is enabled
             params["temperature"] = 1.0
+
+        # v0.4.0: thread timeouts through to the anthropic SDK via its
+        # per-request ``timeout=`` kwarg. Accepts a scalar float or an
+        # ``httpx.Timeout`` — ``_resolve_httpx_timeout`` picks the right
+        # shape based on which of connect_timeout / read_timeout is set.
+        timeout = self._resolve_httpx_timeout(config)
+        if timeout is not None:
+            params["timeout"] = timeout
 
         return params
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -41,9 +42,7 @@ class ExecutionContext:
     # instead of waiting for the full NodeResult. Payload shape matches
     # ``events.ToolCallStarted`` / ``ToolCallFinished``.
     on_tool_start: Callable[[str, dict, int], None] | None = None
-    on_tool_finish: (
-        Callable[[str, dict, str, Any, str | None, int], None] | None
-    ) = None
+    on_tool_finish: Callable[[str, dict, str, Any, str | None, int], None] | None = None
     # Application-emitted event hooks — populated by the runner so
     # user code calling ``emit_progress`` / ``emit_custom`` from
     # inside a tool interleaves with engine-emitted tokens on the
@@ -51,6 +50,34 @@ class ExecutionContext:
     # attached (e.g. a unit test invoking a tool directly).
     on_progress: Callable[[str, float | None, dict], None] | None = None
     on_custom: Callable[[str, dict], None] | None = None
+
+    # v0.4.0 cooperative cancellation.
+    #
+    # Populated by :class:`FlowRunner` with the per-flow cancellation
+    # :class:`threading.Event`; every :class:`ExecutionContext` the
+    # runner builds for a given flow shares the same event so when the
+    # runner is asked to :meth:`FlowRunner.stop` (from the SDK's stream
+    # context-manager exit) every tool in that flow observes
+    # ``ctx.cancelled`` flipping to ``True`` on the next check.
+    #
+    # Remains ``None`` outside a running flow (unit tests, out-of-flow
+    # helpers); the :attr:`cancelled` property returns ``False`` in
+    # that case so tool code stays safe to exercise without a runner.
+    _cancelled_event: threading.Event | None = None
+
+    @property
+    def cancelled(self) -> bool:
+        """Best-effort "the flow has been asked to stop" flag.
+
+        Tools that want to bail out cooperatively mid-work can poll this
+        and either ``raise qm.Cancelled(...)`` or early-return. The flag
+        flips to ``True`` when the SDK's stream context-manager exits
+        (break / return / exception) and calls ``runner.stop(flow_id)``,
+        which sets the per-flow event. Reading outside an active flow
+        returns ``False`` — the check is always safe.
+        """
+        event = self._cancelled_event
+        return event is not None and event.is_set()
 
     def get_meta(self, key: str, default: Any = None) -> Any:
         """Get a value from the node's metadata, falling back to graph metadata."""
@@ -67,9 +94,7 @@ class ExecutionContext:
         if self.on_token:
             self.on_token(token)
 
-    def emit_tool_start(
-        self, tool: str, arguments: dict[str, Any], iteration: int
-    ) -> None:
+    def emit_tool_start(self, tool: str, arguments: dict[str, Any], iteration: int) -> None:
         """Fire ``on_tool_start`` for the agent-executor tool loop, if wired."""
         if self.on_tool_start:
             self.on_tool_start(tool, arguments, iteration)
@@ -114,7 +139,7 @@ class ExecutionContext:
 
     def emit_custom(
         self,
-        name: str,
+        name_or_event: str | Any,
         payload: dict[str, Any] | None = None,
     ) -> None:
         """Emit an application-defined structured event.
@@ -126,15 +151,33 @@ class ExecutionContext:
 
         No-op when no runner is attached.
 
+        **v0.4.0:** Accepts a :class:`TypedEvent` instance in addition
+        to the original ``(name: str, payload: dict)`` form. When a
+        ``TypedEvent`` is passed, the ``name`` and ``payload`` are
+        extracted from the model automatically::
+
+            ctx.emit_custom(SearchResultsEvent(count=5, query=q))
+
         Args:
-            name: Caller-chosen discriminator ("retrieved_docs",
-                "quota_warning", …). Used by stream consumers for
-                filtering.
+            name_or_event: Either a string discriminator or a
+                :class:`TypedEvent` instance. When a ``TypedEvent`` is
+                passed, ``payload`` must be ``None``.
             payload: Free-form dict carried with the event. Defaults
-                to an empty dict when ``None``.
+                to an empty dict when ``None``. Ignored when
+                ``name_or_event`` is a ``TypedEvent``.
         """
         if self.on_custom:
-            self.on_custom(name, dict(payload or {}))
+            # v0.4.0: duck-type check for TypedEvent — avoid importing
+            # pydantic in the engine package. TypedEvent instances have
+            # ``model_dump`` (Pydantic v2) and a ``name`` attribute.
+            if hasattr(name_or_event, "model_dump") and not isinstance(name_or_event, str):
+                event = name_or_event
+                name = event.name
+                data = event.model_dump(exclude={"name"})
+            else:
+                name = name_or_event
+                data = dict(payload or {})
+            self.on_custom(name, data)
 
     def emit_message(self, content: str) -> None:
         """Emit a complete message if a callback is registered."""

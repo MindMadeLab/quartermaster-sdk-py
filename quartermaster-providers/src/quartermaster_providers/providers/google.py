@@ -103,6 +103,44 @@ class GoogleProvider(AbstractLLMProvider):
             system_instruction=system_instruction,
         )
 
+    def _request_options_kwargs(self, config: LLMConfig) -> dict[str, Any]:
+        """Return kwargs for ``generate_content_async`` that carry timeouts.
+
+        Added in v0.4.0. Google's SDK honours a ``request_options`` kwarg
+        on the async generation calls; the underlying gRPC channel reads
+        ``timeout`` from it. We map ``read_timeout`` (or fall back to
+        ``connect_timeout`` if that's the only one set) into that
+        field. Returns an empty dict when no timeout is configured.
+        """
+        timeout = config.read_timeout or config.connect_timeout
+        if timeout is None:
+            return {}
+        return {"request_options": {"timeout": float(timeout)}}
+
+    def _build_content_parts(self, prompt: str, config: LLMConfig) -> str | list[Any]:
+        """Build the user-turn content for Google's ``generate_content_async``.
+
+        Plain-text requests pass the prompt string directly so we don't bloat
+        small payloads. When ``LLMConfig.images`` carries one or more
+        ``(base64_data, mime_type)`` tuples we decode each back to raw bytes
+        and emit Google's image-part dict shape (``{mime_type, data}``)
+        before the text prompt — the order Gemini documents for vision.
+        """
+        if not config.images:
+            return prompt
+        import base64
+
+        parts: list[Any] = []
+        for b64_data, mime_type in config.images:
+            parts.append(
+                {
+                    "mime_type": mime_type or "image/jpeg",
+                    "data": base64.b64decode(b64_data),
+                }
+            )
+        parts.append(prompt)
+        return parts
+
     def _handle_api_error(self, e: Exception) -> NoReturn:
         """Translate Google SDK exceptions to quartermaster-providers exceptions."""
         msg = str(e).lower()
@@ -178,11 +216,13 @@ class GoogleProvider(AbstractLLMProvider):
     ) -> TokenResponse | AsyncIterator[TokenResponse]:
         model = self._get_model(config)
 
+        content = self._build_content_parts(prompt, config)
+        request_opts = self._request_options_kwargs(config)
         try:
             if config.stream:
-                return self._stream_text(model, prompt)
+                return self._stream_text(model, content, request_opts)
             else:
-                response = await model.generate_content_async(prompt)
+                response = await model.generate_content_async(content, **request_opts)
                 text = response.text if response.text else ""
                 return TokenResponse(
                     content=text,
@@ -193,9 +233,16 @@ class GoogleProvider(AbstractLLMProvider):
         except Exception as e:
             self._handle_api_error(e)
 
-    async def _stream_text(self, model: Any, prompt: str) -> AsyncIterator[TokenResponse]:
+    async def _stream_text(
+        self,
+        model: Any,
+        content: str | list[Any],
+        request_opts: dict[str, Any] | None = None,
+    ) -> AsyncIterator[TokenResponse]:
         try:
-            response = await model.generate_content_async(prompt, stream=True)
+            response = await model.generate_content_async(
+                content, stream=True, **(request_opts or {})
+            )
             async for chunk in response:
                 if chunk.text:
                     yield TokenResponse(content=chunk.text)
@@ -217,11 +264,14 @@ class GoogleProvider(AbstractLLMProvider):
         prepared = [self.prepare_tool(t) for t in tools]
 
         google_tools = [genai.types.Tool(function_declarations=prepared)]
+        content = self._build_content_parts(prompt, config)
+        request_opts = self._request_options_kwargs(config)
 
         try:
             response = await model.generate_content_async(
-                prompt,
+                content,
                 tools=google_tools,
+                **request_opts,
             )
 
             text_parts = []
@@ -269,9 +319,11 @@ class GoogleProvider(AbstractLLMProvider):
         if tools:
             prepared = [self.prepare_tool(t) for t in tools]
             kwargs["tools"] = [genai.types.Tool(function_declarations=prepared)]
+        kwargs.update(self._request_options_kwargs(config))
 
+        content = self._build_content_parts(prompt, config)
         try:
-            response = await model.generate_content_async(prompt, **kwargs)
+            response = await model.generate_content_async(content, **kwargs)
 
             text_parts = []
             tool_calls = []
@@ -325,9 +377,10 @@ class GoogleProvider(AbstractLLMProvider):
             f"{prompt}\n\nRespond with valid JSON and nothing else. "
             f"The JSON must match this schema: {json.dumps(schema_dict)}"
         )
+        content = self._build_content_parts(json_prompt, config)
 
         try:
-            response = await model.generate_content_async(json_prompt)
+            response = await model.generate_content_async(content)
             raw_output = response.text if response.text else ""
 
             try:

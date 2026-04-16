@@ -4,6 +4,23 @@
 
 Quartermaster lets you build AI agent workflows as directed graphs — define nodes (LLM calls, decisions, user input, tools), connect them with edges, and execute them with a pluggable engine.
 
+## What's new in v0.4.0
+
+- **Application timeouts** -- `qm.configure(timeout=, connect_timeout=, read_timeout=)` + per-call overrides.
+- **Stream cancellation** -- `with qm.run.stream(...) as stream:` context-manager; `qm.Cancelled` + `ctx.cancelled`.
+- **Native Ollama `/api/chat`** for tool calls (auto-detect) + `ollama_tool_protocol=` config.
+- **Per-node tool scoping** -- `agent(tools=[...])` strictly enforced; `tool_scope="permissive"` escape hatch.
+- **Inline `@tool` callables** -- `agent(tools=[my_func])` accepts bare callables.
+- **`instruction_form`** -- Gemma preamble robustness + dict-schema support.
+- **`qm.configure(telemetry=True)`** -- sugar for `qm.telemetry.instrument()`.
+- **`qm.configure(auto_redact_pii=True)`** -- automatic PII redaction policy.
+- **`Trace.from_jsonl()` / `assert_traces_equal()`** -- round-trip trace serialisation for golden-file tests.
+- **`SessionStore` protocol** -- `qm.run(graph, input, session=store, session_id=...)` + `InMemorySessionStore`.
+- **`TypedEvent`** -- Pydantic base class for typed custom events.
+- **`python -m quartermaster_sdk.lint check`** -- static graph linter (QM001--QM005).
+- **`CircuitBreaker`** -- `CircuitBreaker(failure_threshold=, recovery_timeout=)` + `CircuitOpenError`.
+- **Local-GPU cost tracker** -- `duration_seconds` + `local_gpu_cost_per_hour` support.
+
 ## Quick Install
 
 ```bash
@@ -66,15 +83,96 @@ result["notes"].output_text    # agent's free-text research
 result["data"].output_text     # extracted JSON
 ```
 
-## Streaming
+## Streaming (v0.3.0 filtered iterators)
+
+`qm.run.stream(...)` returns a wrapper you can iterate raw or pipe
+through a filter — one helper per chunk family:
+
+| Filter | Yields | Use for |
+|---|---|---|
+| `.tokens()` | `str` (the token text) | Typewriter UI — just the text |
+| `.tool_calls()` | `ToolCallChunk` | Dashboard cards: `call.tool`, `call.args` |
+| `.progress()` | `ProgressChunk` | `prog.message`, `prog.percent`, `prog.data` |
+| `.custom(name=...)` | `CustomChunk` | Application-defined milestones |
+| (raw `for chunk in ...`) | `Chunk` union | Debugging, pass-through consumers |
 
 ```python
-for chunk in qm.run.stream(qm.Graph("chat").user().agent(), "Tell me a story"):
-    if chunk.type == "token":
-        print(chunk.content, end="", flush=True)
-    elif chunk.type == "done":
-        final = chunk.result    # qm.Result
+# Typewriter effect -- tokens only.
+for token in qm.run.stream(graph, "Tell me a story").tokens():
+    print(token, end="", flush=True)
+
+# Dashboard view -- just the tool calls.
+for call in qm.run.stream(graph, "Research Slovenia").tool_calls():
+    ui.tool_card(call.tool, call.args)
+
+# Progress cards interleaved with model tokens.
+for prog in qm.run.stream(graph, "Crunch the dataset").progress():
+    ui.status(prog.message, prog.percent)
+
+# Subscribe to one milestone name only.
+for evt in qm.run.stream(graph, "Research").custom(name="source_found"):
+    ui.add_source(evt.payload["url"])
 ```
+
+Streams are **single-pass** — the wrapper owns its underlying generator,
+so picking a second filter (or raw-iterating after a filter) raises
+`RuntimeError("stream already consumed")`. Pick one consumer per stream.
+
+The async analogue is available via `qm.arun.stream(...)` with the same
+four filter helpers, returning `AsyncIterator[...]`.
+
+## Post-mortem `Result.trace`
+
+Every `Result` (sync or the terminal `DoneChunk.result` of a stream)
+carries a structured `Trace` built from the full `FlowEvent` stream:
+
+```python
+result = qm.run(graph, "Hello!")
+
+result.trace.text                        # concatenated model output
+result.trace.tool_calls                  # list[dict] across every agent node
+result.trace.progress                    # list[ProgressEvent]
+result.trace.custom(name="source_found") # filtered CustomEvent list
+result.trace.by_node["Researcher"].text  # tokens for a single node
+print(result.trace.as_jsonl())           # JSONL export for logs / fixtures
+```
+
+## Progress events from inside tools
+
+Long-running tools reach the flow's `ExecutionContext` via
+`qm.current_context()` and emit structured events that stream back to
+the UI alongside model tokens:
+
+```python
+from quartermaster_tools import tool
+
+@tool()
+def slow_research(topic: str) -> dict:
+    ctx = qm.current_context()      # None when called outside a flow -- safe
+    if ctx is not None:
+        ctx.emit_progress("Gathering sources", percent=0.25, topic=topic)
+        ctx.emit_custom("source_found", {"url": "https://example.com"})
+    # ... do real work ...
+    return {"summary": "..."}
+```
+
+## OpenTelemetry instrumentation
+
+```bash
+pip install 'quartermaster-sdk[telemetry]'
+```
+
+```python
+from quartermaster_sdk import telemetry
+
+telemetry.instrument()     # uses the global tracer provider
+qm.run(graph, "Hello!")    # every node + tool call is now a span
+```
+
+Spans follow the OpenTelemetry GenAI semantic conventions
+(`gen_ai.system`, `gen_ai.operation.name`, `gen_ai.tool.name`,
+`gen_ai.usage.input_tokens`, …). Point your exporter at Jaeger, Tempo,
+Honeycomb, Logfire, Phoenix, or any OTLP collector.
 
 ## Quick Start (cloud provider)
 

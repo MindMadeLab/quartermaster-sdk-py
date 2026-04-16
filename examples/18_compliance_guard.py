@@ -1,4 +1,4 @@
-"""Example 20 -- Privacy and compliance pipeline.
+"""Example 18 -- Privacy and compliance pipeline.
 
 Demonstrates built-in PII detection, redaction, risk classification,
 and audit logging. EU AI Act compliance tools ship with Quartermaster.
@@ -16,7 +16,7 @@ Part 2: Graph pipeline
 
 Usage:
     export ANTHROPIC_API_KEY="sk-ant-..."   # or OPENAI_API_KEY
-    uv run examples/20_compliance_guard.py
+    uv run examples/18_compliance_guard.py
 """
 
 from __future__ import annotations

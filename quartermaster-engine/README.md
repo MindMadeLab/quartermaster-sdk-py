@@ -17,6 +17,12 @@ Execution engine for AI agent graphs with pluggable storage, dispatching, and me
 - **Flow pause/resume** for user interaction nodes
 - **Sync and async execution** modes with `run()` and `run_async()`
 
+### New in v0.4.0
+
+- **Cooperative cancellation** -- `ctx.cancelled` flag + `Cancelled` exception for clean stream teardown.
+- **Per-node tool scoping** -- `agent(tools=[...])` strictly enforced at the engine level; `tool_scope="permissive"` escape.
+- **Inline `@tool` callables** -- `agent(tools=[my_func])` accepts bare callables alongside registry names.
+
 ## Installation
 
 ```bash
@@ -46,7 +52,7 @@ provider_registry = register_local(
     default_model="gemma4:26b",
 )
 
-graph = Graph("chat").start().user().agent().end().build()
+graph = Graph("chat").user().agent().end().build()
 runner = FlowRunner(graph=graph, provider_registry=provider_registry)
 result = runner.run("Pozdravljen!")
 print(result.success, result.final_output)
@@ -115,7 +121,6 @@ from quartermaster_engine.nodes import SimpleNodeRegistry
 
 graph = (
     GraphBuilder("Support Agent")
-    .start()
     .instruction("Classify", model="gpt-4o")
     .decision("Route", options=["billing", "technical"])
     .on("billing").instruction("Handle billing").end()
@@ -128,16 +133,35 @@ runner = FlowRunner(graph=graph, node_registry=registry)
 result = runner.run("I need help with my invoice")
 ```
 
-### Stream Events in Real Time
+### Stream Events in Real Time (low-level)
+
+The engine's native streaming surface is a single `on_event` callback
+that fires for every `FlowEvent`. This is the primitive layer; most
+application code uses the SDK's chunk filters layered on top (see
+below).
 
 ```python
-from quartermaster_engine import FlowRunner, FlowEvent, NodeStarted, NodeFinished, TokenGenerated, FlowError
+from quartermaster_engine import (
+    FlowRunner, FlowEvent,
+    NodeStarted, NodeFinished, TokenGenerated,
+    ToolCallStarted, ToolCallFinished,
+    ProgressEvent, CustomEvent,
+    FlowError,
+)
 
 def handle_event(event: FlowEvent):
     if isinstance(event, NodeStarted):
         print(f"[START] {event.node_name} ({event.node_type})")
     elif isinstance(event, TokenGenerated):
         print(event.token, end="", flush=True)
+    elif isinstance(event, ToolCallStarted):
+        print(f"\n[TOOL ->] {event.tool}({event.arguments})")
+    elif isinstance(event, ToolCallFinished):
+        print(f"[TOOL <-] {event.tool} = {event.result!r}")
+    elif isinstance(event, ProgressEvent):        # new in v0.3.0
+        print(f"[PROGRESS] {event.message} ({event.percent})")
+    elif isinstance(event, CustomEvent):          # new in v0.3.0
+        print(f"[{event.name}] {event.payload}")
     elif isinstance(event, NodeFinished):
         print(f"\n[DONE] Node finished: {event.result[:50]}...")
     elif isinstance(event, FlowError):
@@ -145,6 +169,43 @@ def handle_event(event: FlowEvent):
 
 runner = FlowRunner(graph=graph, node_registry=registry, on_event=handle_event)
 result = runner.run("Hello!")
+```
+
+### SDK chunk filters (high-level)
+
+The `quartermaster_sdk` package translates each `FlowEvent` into a
+typed `Chunk` via `_event_to_chunk` and wraps the iterator so consumers
+can filter by chunk family instead of writing `isinstance` ladders:
+
+```python
+import quartermaster_sdk as qm
+
+for token in qm.run.stream(graph, "Hello!").tokens():            # TokenGenerated
+    print(token, end="")
+
+for call in qm.run.stream(graph, "Research x").tool_calls():    # ToolCallStarted
+    ui.tool_card(call.tool, call.args)
+
+for prog in qm.run.stream(graph, "Crunch").progress():          # ProgressEvent
+    ui.status(prog.message, prog.percent)
+
+for evt in qm.run.stream(graph, "Research").custom(name="src"): # CustomEvent by name
+    ui.add(evt.payload)
+```
+
+### Post-mortem trace
+
+`qm.run(...)` also attaches a structured `Trace` to the returned
+`Result`, built from the same `FlowEvent` stream after the run
+finishes:
+
+```python
+result = qm.run(graph, "Hello!")
+result.trace.text                        # concatenated TokenGenerated.token
+result.trace.tool_calls                  # list[dict] from every ToolCallFinished
+result.trace.progress                    # list[ProgressEvent]
+result.trace.by_node["Researcher"].text  # per-node slice
+print(result.trace.as_jsonl())
 ```
 
 ### Async Execution
@@ -336,6 +397,10 @@ Real-time events emitted during flow execution:
 |-------|--------|-------------|
 | `NodeStarted` | `flow_id`, `node_id`, `node_type`, `node_name` | Node begins execution |
 | `TokenGenerated` | `flow_id`, `node_id`, `token` | Streaming token from LLM |
+| `ToolCallStarted` | `flow_id`, `node_id`, `tool`, `arguments`, `iteration` | Agent dispatched a tool call |
+| `ToolCallFinished` | `flow_id`, `node_id`, `tool`, `arguments`, `result`, `raw`, `error`, `iteration` | Tool call completed (or errored) |
+| `ProgressEvent` (v0.3.0) | `flow_id`, `node_id`, `message`, `percent`, `data` | `ctx.emit_progress(...)` from app code |
+| `CustomEvent` (v0.3.0) | `flow_id`, `node_id`, `name`, `payload` | `ctx.emit_custom(...)` from app code |
 | `NodeFinished` | `flow_id`, `node_id`, `result`, `output_data` | Node completed |
 | `FlowFinished` | `flow_id`, `final_output`, `output_data` | Entire flow completed |
 | `UserInputRequired` | `flow_id`, `node_id`, `prompt`, `options` | Flow paused for user input |
@@ -343,6 +408,9 @@ Real-time events emitted during flow execution:
 
 `run_graph()` uses streaming by default -- `TokenGenerated` events are printed
 as they arrive, giving real-time output from LLM nodes without extra setup.
+`ProgressEvent` and `CustomEvent` fire whenever application code calls
+`ExecutionContext.emit_progress(...)` / `emit_custom(...)`, reachable from
+inside tools via `quartermaster_engine.context.current_context()`.
 
 ### ExecutionContext
 
@@ -359,14 +427,15 @@ The runtime context passed to each node executor:
 | `metadata` | `dict[str, Any]` | Node metadata |
 | `on_token` | `Callable[[str], None] \| None` | Callback for streaming tokens |
 
-Helper methods:
+Helper methods and properties:
 
-| Method | Description |
+| Method / Property | Description |
 |--------|-------------|
 | `get_meta(key, default=None)` | Get value from node metadata, falling back to context metadata |
 | `set_meta(key, value)` | Set a metadata value on this context |
 | `emit_token(token)` | Emit a streaming token via callback |
 | `emit_message(content)` | Emit a complete message via callback |
+| `cancelled` (property, v0.4.0) | `True` when the flow has been asked to stop (cooperative cancellation) |
 
 ### Node Execution Protocol
 
