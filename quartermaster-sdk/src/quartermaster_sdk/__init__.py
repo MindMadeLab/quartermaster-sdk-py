@@ -59,6 +59,8 @@ from quartermaster_graph import (  # noqa: F401
 from quartermaster_graph.enums import NodeType  # noqa: F401
 from quartermaster_providers import (  # noqa: F401
     ChatResult,
+    CircuitBreaker,
+    CircuitOpenError,
     LLMConfig,
     ProviderRegistry,
     register_local,
@@ -88,7 +90,7 @@ from . import telemetry  # noqa: F401  — exposes ``qm.telemetry.instrument()``
 from ._async_runner import arun  # noqa: F401
 from ._helpers import instruction, instruction_form  # noqa: F401
 from ._result import Result  # noqa: F401
-from ._runner import StreamDeadlineExceeded, run  # noqa: F401
+from ._runner import StreamDeadlineExceeded, assert_traces_equal, run  # noqa: F401
 from ._session import ChatTurn, InMemorySessionStore, SessionStore  # noqa: F401
 from ._trace import NodeTrace, Trace  # noqa: F401
 from ._typed_events import TypedEvent  # noqa: F401
@@ -146,6 +148,9 @@ __all__ = [
     "ChatResult",
     "ProviderRegistry",
     "register_local",
+    # v0.4.0 circuit breaker (Sorex P3.4)
+    "CircuitBreaker",
+    "CircuitOpenError",
     "get_default_registry",
     "get_default_model",
     "get_default_timeouts",
