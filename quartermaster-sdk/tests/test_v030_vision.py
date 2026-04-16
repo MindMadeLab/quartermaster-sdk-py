@@ -3,7 +3,7 @@
 Covers ``qm.run(graph, user_input, image=...)`` / ``images=[...]``,
 ``qm.arun(...)`` equivalents, and the :func:`qm.instruction` helper's
 image forwarding. Replaces the pre-0.3.0 ``[IMAGE_BASE64::...]`` shim
-that downstream Sorex ERP used to prepend to user input.
+that a downstream integrator used to prepend to user input.
 
 The tests mock the provider via :class:`MockProvider` so nothing hits
 the network — each assertion reaches into ``mock.last_config.images``

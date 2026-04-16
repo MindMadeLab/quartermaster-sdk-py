@@ -4,7 +4,7 @@ These wrap a single-node graph so callers never touch ``Graph``,
 ``FlowRunner``, or ``register_local`` for the 90% of use-cases that are
 just ``prompt → text`` or ``prompt → typed JSON``.
 
-The docs / Sorex feedback called this "the thing we'd actually write";
+The docs / downstream feedback called this "the thing we'd actually write";
 v0.2.0 ships it as the primary recommended API for non-agentic calls.
 """
 
@@ -13,7 +13,8 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import TYPE_CHECKING, TypeVar
+import warnings
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from quartermaster_engine import ImageInput
 from quartermaster_graph import Graph
@@ -51,6 +52,83 @@ def _strip_markdown_fence(raw: str) -> str:
     text = _MD_FENCE_OPEN_RE.sub("", raw)
     text = _MD_FENCE_CLOSE_RE.sub("", text)
     return text.strip()
+
+
+# Reusable decoder — cheaper than newing one up per call-site, and
+# ``raw_decode`` is thread-safe for read-only usage.
+_JSON_DECODER = json.JSONDecoder()
+
+
+def _extract_last_json_object(raw: str) -> Any:
+    """Extract the *last* parseable JSON object (or array) from ``raw``.
+
+    Strategy:
+    1. Strip a wrapping ``` markdown fence (fast path — most models obey
+       the system prompt and wrap their JSON or return it bare).
+    2. If the stripped text is itself valid JSON, return it.
+    3. Otherwise walk the text looking for ``{`` / ``[`` positions and
+       attempt :meth:`json.JSONDecoder.raw_decode` at each candidate.
+       Keep the **last** successful decode — the downstream ``extract_json``
+       uses the same heuristic: reasoning models emit a bullet preamble
+       then the final JSON, so the trailing object is the answer.
+
+    Using the stdlib :class:`json.JSONDecoder` (rather than a hand-rolled
+    brace counter) means we get string awareness for free — escaped
+    quotes, ``}`` inside string values, nested objects, arrays inside
+    arrays, control-char handling, etc. all behave the same way as
+    :func:`json.loads`.
+
+    Raises:
+        :class:`json.JSONDecodeError` if no valid JSON can be recovered
+        from the text. Callers wrap this in a domain error (e.g.
+        ``RuntimeError`` with the raw text attached) so end-users see a
+        debuggable message.
+    """
+    cleaned = _strip_markdown_fence(raw)
+
+    # Fast path — the stripped text *is* the JSON.
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Walk every candidate start position. Objects start with ``{`` and
+    # arrays with ``[`` — we scan the original ``raw`` (not ``cleaned``)
+    # because the fence stripper can change offsets but the underlying
+    # JSON content is the same. Using ``raw`` directly also means we
+    # tolerate stray fences embedded in the text (bullet preamble +
+    # fence + JSON is the Gemma case).
+    last_decoded: Any = None
+    last_found = False
+    last_end = -1
+
+    for idx, ch in enumerate(raw):
+        if ch not in ("{", "["):
+            continue
+        try:
+            value, end = _JSON_DECODER.raw_decode(raw, idx)
+        except json.JSONDecodeError:
+            continue
+        # Keep the decode that ends LATEST in the text — that's the
+        # model's final answer when a reasoning preamble came first.
+        # Ties broken by later start (which can't happen with
+        # raw_decode since earlier starts have earlier ends for the
+        # same match), but the ``>`` guard keeps behaviour predictable.
+        if end > last_end:
+            last_decoded = value
+            last_end = end
+            last_found = True
+
+    if last_found:
+        return last_decoded
+
+    # No luck — re-raise the first parse error so the caller can surface
+    # the canonical stdlib message alongside the raw text.
+    raise json.JSONDecodeError(
+        "No valid JSON object or array could be extracted from the text",
+        raw,
+        0,
+    )
 
 
 def instruction(
@@ -146,7 +224,7 @@ def instruction(
 
 
 def instruction_form(
-    schema: type[T],
+    schema: type[T] | dict[str, Any],
     *,
     user: str,
     system: str = "",
@@ -157,21 +235,30 @@ def instruction_form(
     image: ImageInput | None = None,
     images: list[ImageInput] | None = None,
     provider_registry: ProviderRegistry | None = None,
-) -> T:
-    """Single-shot prompt → Pydantic model.
+) -> T | dict[str, Any]:
+    """Single-shot prompt → Pydantic model *or* JSON-schema-validated dict.
 
     Runs the prompt through a one-node instruction graph, then parses
-    the LLM's JSON output into *schema* via ``model_validate_json``.
-    Default temperature is 0.1 — structured extraction benefits from
-    the more-deterministic end of the range.
+    the LLM's JSON output into *schema*.  Default temperature is 0.1 —
+    structured extraction benefits from the more-deterministic end of
+    the range.
 
     The helper injects the schema into the system prompt so the LLM
     knows what JSON shape to return; callers don't need to describe
     the format themselves.
 
+    Schema forms (v0.4.0):
+
+    * A Pydantic v2 ``BaseModel`` subclass → returns an instance,
+      validated via ``model_validate`` on the parsed JSON.
+    * A :class:`dict` (literal JSON Schema) → returns the parsed dict.
+      Validation runs via :mod:`jsonschema` if the package is installed
+      (a soft/optional dep); otherwise the raw parsed dict is returned
+      after emitting a single :class:`UserWarning`.
+
     Args:
-        schema: A Pydantic v2 ``BaseModel`` subclass describing the
-            output shape.  **Required.**
+        schema: Either a Pydantic ``BaseModel`` subclass **or** a JSON
+            Schema ``dict``.  **Required.**
         user: The user message / prompt.  **Required.**
         system: Instruction steering the extraction (e.g. "Classify
             this email...").  The schema description is appended
@@ -181,10 +268,12 @@ def instruction_form(
             determinism.
 
     Returns:
-        An instance of *schema* populated from the LLM's output.
+        An instance of *schema* (Pydantic path) or a validated dict
+        (JSON Schema path) populated from the LLM's output.
 
     Raises:
-        ValueError: ``schema`` isn't a Pydantic ``BaseModel`` subclass.
+        TypeError: ``schema`` is neither a Pydantic ``BaseModel``
+            subclass nor a ``dict``.
         RuntimeError: the underlying flow failed, or the model's output
             couldn't be parsed into *schema* (raises a
             ``ValidationError``-wrapping ``RuntimeError`` with the raw
@@ -209,19 +298,40 @@ def instruction_form(
             "instruction_form() requires pydantic. Install with `pip install pydantic`."
         ) from exc
 
-    if not (isinstance(schema, type) and issubclass(schema, BaseModel)):
-        raise ValueError(
+    is_pydantic_schema = isinstance(schema, type) and issubclass(schema, BaseModel)
+    is_dict_schema = isinstance(schema, dict)
+
+    if not (is_pydantic_schema or is_dict_schema):
+        # v0.4.0: upgraded from ValueError to TypeError — this is a
+        # programmer error about the *type* of the argument, not its
+        # value. Matches the pattern used elsewhere in the SDK.
+        raise TypeError(
             f"instruction_form(schema=...) must be a pydantic.BaseModel "
-            f"subclass; got {type(schema).__name__}"
+            f"subclass or a dict (JSON Schema); got {type(schema).__name__}"
         )
 
     # Inject a JSON-schema hint into the system prompt so the model
     # knows what fields are expected.  Keep this short — bloating the
     # system prompt with a giant schema eats context.
-    try:
-        schema_json = json.dumps(schema.model_json_schema(), separators=(",", ":"))
-    except Exception:
-        schema_json = str(schema.__name__)
+    if is_pydantic_schema:
+        try:
+            schema_json = json.dumps(schema.model_json_schema(), separators=(",", ":"))
+        except Exception:
+            schema_json = str(schema.__name__)
+        schema_label = schema.__name__
+    else:
+        # Dict-schema path: encode the literal JSON Schema. We keep the
+        # separators tight (matches the Pydantic path) so we don't blow
+        # the system prompt up more than necessary.
+        try:
+            schema_json = json.dumps(schema, separators=(",", ":"))
+        except (TypeError, ValueError):
+            # Dict isn't JSON-encodable — fall back to ``str`` so we at
+            # least tell the model *something*. The caller will see the
+            # failure downstream when validation tries to apply the
+            # unusable schema.
+            schema_json = str(schema)
+        schema_label = "<dict schema>"
 
     full_system = (
         f"{system}\n\n"
@@ -244,19 +354,58 @@ def instruction_form(
         provider_registry=provider_registry,
     )
 
-    # Strip fences in case the model insists on markdown despite instructions.
-    # Uses a regex-anchored pattern — the pre-0.2.0 ``str.strip("`")`` ate
-    # backticks out of string values (code snippets, regex examples) and
-    # corrupted the JSON before parsing could see it.
-    cleaned = _strip_markdown_fence(raw)
+    # v0.4.0 (T4): tolerate reasoning-model preambles by walking the
+    # text for the LAST valid JSON object. Pre-0.4.0 code only stripped
+    # a wrapping fence — Gemma-family models often emit a bullet list
+    # before the fenced JSON, which broke ``model_validate_json``.
+    try:
+        parsed = _extract_last_json_object(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"instruction_form(): model output did not contain parseable "
+            f"JSON for schema {schema_label}. Raw output:\n{raw}\n\n"
+            f"Parse error:\n{exc}"
+        ) from exc
+
+    if is_pydantic_schema:
+        try:
+            return schema.model_validate(parsed)
+        except ValidationError as exc:
+            raise RuntimeError(
+                f"instruction_form(): model output did not match schema "
+                f"{schema.__name__}. Raw output:\n{raw}\n\nValidation errors:\n{exc}"
+            ) from exc
+
+    # Dict-schema path: try to validate with jsonschema (soft dep) and
+    # fall back to returning the raw parsed dict with a warning if the
+    # package isn't installed.
+    try:
+        import jsonschema  # type: ignore[import-not-found]
+    except ImportError:
+        warnings.warn(
+            "instruction_form(schema=<dict>): jsonschema is not installed, "
+            "so the returned dict is not validated against the provided "
+            "schema. Install with `pip install jsonschema` to enable "
+            "validation.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return parsed
 
     try:
-        return schema.model_validate_json(cleaned)
-    except ValidationError as exc:
+        jsonschema.validate(instance=parsed, schema=schema)
+    except jsonschema.ValidationError as exc:
         raise RuntimeError(
-            f"instruction_form(): model output did not match schema "
-            f"{schema.__name__}. Raw output:\n{raw}\n\nValidation errors:\n{exc}"
+            f"instruction_form(): model output did not match the provided "
+            f"JSON Schema. Raw output:\n{raw}\n\nValidation error:\n{exc}"
         ) from exc
+    except jsonschema.SchemaError as exc:
+        raise RuntimeError(
+            f"instruction_form(): the provided JSON Schema is invalid.\n"
+            f"Schema error:\n{exc}"
+        ) from exc
+
+    return parsed
 
 
 __all__ = ["instruction", "instruction_form"]

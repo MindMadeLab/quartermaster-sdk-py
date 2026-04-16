@@ -63,9 +63,14 @@ telemetry = [
     "opentelemetry-sdk>=1.25",
 ]
 
+# JSON Schema validation for ``qm.instruction_form(schema=<dict>)`` — soft
+# optional dep: without it, dict-schema callers get back the parsed dict
+# with a one-time UserWarning and no validation.
+jsonschema = ["jsonschema>=4.0"]
+
 # Everything
 all = [
-    "quartermaster-sdk[providers-all,tools-all,mcp,code-runner,telemetry]",
+    "quartermaster-sdk[providers-all,tools-all,mcp,code-runner,telemetry,jsonschema]",
 ]
 
 # Development

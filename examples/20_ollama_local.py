@@ -58,7 +58,7 @@ def search_knowledge(query: str) -> dict:
     kb = [
         {
             "title": "Quartermaster",
-            "fact": "AI agent orchestration framework by MindMade",
+            "fact": "AI agent orchestration framework",
         },
         {
             "title": "Gemma 4",

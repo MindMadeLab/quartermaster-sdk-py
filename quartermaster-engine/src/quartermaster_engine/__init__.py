@@ -1,5 +1,6 @@
 """quartermaster-engine: Execution engine for AI agent graphs."""
 
+from quartermaster_engine.cancellation import Cancelled
 from quartermaster_engine.context.execution_context import ExecutionContext
 from quartermaster_engine.context.node_execution import NodeExecution, NodeStatus
 from quartermaster_engine.events import (
@@ -49,6 +50,8 @@ from quartermaster_engine.types import (
 )
 
 __all__ = [
+    # Cancellation (v0.4.0)
+    "Cancelled",
     # Context
     "ExecutionContext",
     "NodeExecution",

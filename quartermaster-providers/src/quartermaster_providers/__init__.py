@@ -17,6 +17,12 @@ Example:
 """
 
 from quartermaster_providers.base import AbstractLLMProvider
+from quartermaster_providers.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerState,
+    CircuitBreakerWrapper,
+    CircuitOpenError,
+)
 from quartermaster_providers.config import LLMConfig
 from quartermaster_providers.providers.local import ChatResult
 from quartermaster_providers.exceptions import (
@@ -83,4 +89,9 @@ __all__ = [
     "register_local",
     # Sync chat shim result type
     "ChatResult",
+    # Circuit breaker (v0.4.0)
+    "CircuitBreaker",
+    "CircuitBreakerState",
+    "CircuitBreakerWrapper",
+    "CircuitOpenError",
 ]

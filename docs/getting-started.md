@@ -152,7 +152,29 @@ Streams are single-pass -- pick one consumer per stream. See
 [engine.md](engine.md) for the low-level `FlowEvent` API that the SDK
 chunk filters are built on top of.
 
-### Step 5b: OpenTelemetry (optional)
+### Step 5b: Timeouts and cancellation (v0.4.0)
+
+Set application-level LLM timeouts so slow providers don't hang forever:
+
+```python
+qm.configure(
+    provider="ollama",
+    default_model="gemma4:26b",
+    timeout=30,          # 30 s for both connect + read
+)
+```
+
+Cancel a stream cleanly with the context-manager protocol:
+
+```python
+with qm.run.stream(graph, "Hello!") as stream:
+    for token in stream.tokens():
+        print(token, end="")
+        if should_stop():
+            break  # triggers cooperative cancellation (ctx.cancelled)
+```
+
+### Step 5c: OpenTelemetry (optional)
 
 For production observability, install the telemetry extra and flip it
 on with a single call:

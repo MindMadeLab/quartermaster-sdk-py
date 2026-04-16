@@ -384,12 +384,18 @@ def test_trace_as_jsonl_roundtrips():
 
     # Every line must parse as JSON.
     lines = jsonl.splitlines()
-    assert len(lines) == len(result.trace.events), (
-        f"line count {len(lines)} != event count {len(result.trace.events)}"
+    # v0.4.0: as_jsonl() may prepend a header line when user_input is set
+    # (e.g. {"_meta": "trace_header", "user_input": "hi"}). Filter it out
+    # for the event-count assertion.
+    event_lines = [line for line in lines if not json.loads(line).get("_meta")]
+    assert len(event_lines) == len(result.trace.events), (
+        f"event line count {len(event_lines)} != event count {len(result.trace.events)}"
     )
     for line in lines:
         parsed = json.loads(line)
         assert isinstance(parsed, dict), f"line not a JSON object: {line}"
+        if parsed.get("_meta"):
+            continue  # header line — no flow_id expected
         # ``flow_id`` is required on every FlowEvent (it's the only
         # base-class field) — its presence is the cheapest sanity check
         # that ``asdict`` serialised the dataclass correctly.

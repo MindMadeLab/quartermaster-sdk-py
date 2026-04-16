@@ -42,8 +42,9 @@ for flow-level setup) land in ``"_flow"`` as well.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
-from typing import TYPE_CHECKING
+from dataclasses import asdict, dataclass, field, fields
+from typing import Any
+from uuid import UUID
 
 from quartermaster_engine import (
     CustomEvent,
@@ -59,8 +60,87 @@ from quartermaster_engine import (
     UserInputRequired,
 )
 
-if TYPE_CHECKING:
-    pass
+
+# ── Event (de)serialisation helpers ────────────────────────────────────
+
+#: Registry mapping ``_event_type`` discriminator strings to their
+#: :class:`FlowEvent` subclasses.  Used by :func:`_event_from_dict` to
+#: reconstruct the correct subclass when loading JSONL.
+_EVENT_CLASSES: dict[str, type[FlowEvent]] = {
+    cls.__name__: cls
+    for cls in (
+        NodeStarted,
+        NodeFinished,
+        TokenGenerated,
+        FlowFinished,
+        FlowError,
+        UserInputRequired,
+        ToolCallStarted,
+        ToolCallFinished,
+        ProgressEvent,
+        CustomEvent,
+    )
+}
+
+
+def _coerce_field(cls: type, name: str, value: Any) -> Any:
+    """Best-effort coercion of a JSON-deserialised *value* back to the
+    type expected by the dataclass *cls* for field *name*.
+
+    Handles the most common cases — ``UUID`` from string, enum from
+    value — and returns *value* unchanged when no coercion is needed.
+    """
+    field_map = {f.name: f for f in fields(cls)}
+    if name not in field_map:
+        return value
+
+    ftype = field_map[name].type
+    # Resolve string annotations produced by ``from __future__ import annotations``.
+    if isinstance(ftype, str):
+        # Simple resolution for the types we actually encounter.
+        if ftype == "UUID" or ftype == "uuid.UUID":
+            ftype = UUID
+        else:
+            return value
+
+    if ftype is UUID and isinstance(value, str):
+        return UUID(value)
+    # Enum fields (e.g. NodeType) — attempt by-value reconstruction.
+    if isinstance(ftype, type) and issubclass(ftype, __import__("enum").Enum):
+        try:
+            return ftype(value)
+        except (ValueError, KeyError):
+            return value
+    return value
+
+
+def _event_from_dict(d: dict[str, Any]) -> FlowEvent:
+    """Reconstruct a :class:`FlowEvent` subclass instance from a dict
+    produced by :meth:`Trace.as_jsonl`.
+
+    The dict must carry an ``"_event_type"`` key whose value is the
+    class name of the original event (e.g. ``"NodeStarted"``).
+
+    Raises:
+        ValueError: if ``_event_type`` is missing or unknown.
+    """
+    d = dict(d)  # shallow copy — we pop from it
+    event_type = d.pop("_event_type", None)
+    if event_type is None:
+        raise ValueError("Cannot reconstruct FlowEvent: dict has no '_event_type' key")
+    cls = _EVENT_CLASSES.get(event_type)
+    if cls is None:
+        raise ValueError(
+            f"Unknown _event_type {event_type!r}; known types: {sorted(_EVENT_CLASSES)}"
+        )
+    # Only pass keys that the dataclass actually declares — extra keys
+    # (e.g. from future schema evolution) are silently dropped.
+    valid_names = {f.name for f in fields(cls)}
+    kwargs = {}
+    for k, v in d.items():
+        if k in valid_names:
+            kwargs[k] = _coerce_field(cls, k, v)
+    return cls(**kwargs)
 
 
 #: Synthetic bucket key for events that don't belong to any single node
@@ -177,6 +257,7 @@ class Trace:
     events: list[FlowEvent] = field(default_factory=list)
     by_node: dict[str, NodeTrace] = field(default_factory=dict)
     duration_seconds: float = 0.0
+    user_input: str | None = None
 
     @property
     def text(self) -> str:
@@ -222,18 +303,33 @@ class Trace:
             if isinstance(event, CustomEvent) and (name is None or event.name == name)
         ]
 
-    def as_jsonl(self) -> str:
+    def as_jsonl(self, *, user_input: str | None = None) -> str:
         """Return the trace serialised as JSONL (one event per line).
 
         Uses ``dataclasses.asdict`` to flatten each event, then
         ``json.dumps(..., default=str)`` to coerce ``UUID`` /
-        ``datetime`` / enum values to strings.  The output is suitable
-        for log shipping and test fixtures — every line is an
-        independent JSON object keyed by the dataclass field names.
+        ``datetime`` / enum values to strings.  Each event dict
+        carries an ``"_event_type"`` discriminator key (the class
+        name) so that :meth:`from_jsonl` can reconstruct the correct
+        :class:`FlowEvent` subclass.
+
+        When *user_input* is given (or was stashed on the trace via
+        :attr:`user_input`), a synthetic header line is prepended::
+
+            {"_meta": "trace_header", "user_input": "..."}
+
+        The output is suitable for log shipping, test fixtures, and
+        replay workflows via :meth:`from_jsonl`.
         """
-        lines = []
+        lines: list[str] = []
+        # Resolve user_input: explicit kwarg > stashed attribute.
+        ui = user_input if user_input is not None else self.user_input
+        if ui is not None:
+            lines.append(json.dumps({"_meta": "trace_header", "user_input": ui}))
         for event in self.events:
-            lines.append(json.dumps(asdict(event), default=str))
+            d = asdict(event)
+            d["_event_type"] = type(event).__name__
+            lines.append(json.dumps(d, default=str))
         return "\n".join(lines)
 
     @classmethod

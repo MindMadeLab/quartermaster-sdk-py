@@ -9,7 +9,24 @@ Modular AI agent orchestration framework. Build agent workflows as directed grap
 
 Built by [MindMade](https://mindmade.io) in Slovenia.
 
-## What's new in v0.3.0
+## What's new in v0.4.0
+
+- **Application timeouts** -- `qm.configure(timeout=, connect_timeout=, read_timeout=)` with per-call overrides via `qm.run(..., read_timeout=)`.
+- **Stream cancellation** -- `with qm.run.stream(graph, input) as stream:` context-manager protocol; break/return/exception triggers cooperative cancellation. `qm.Cancelled` exception + `ctx.cancelled` polling flag for tools.
+- **Native Ollama tool calls** -- auto-detects Ollama and uses `/api/chat` natively, eliminating tool-name hallucinations on Gemma models. Configure with `ollama_tool_protocol=`.
+- **Per-node tool scoping** -- `agent(tools=[...])` is now strictly enforced; unknown tool names raise at build time. Escape hatch: `tool_scope="permissive"`.
+- **Inline `@tool` callables** -- `agent(tools=[my_func])` accepts bare callables alongside registry names.
+- **`instruction_form` robustness** -- Gemma preamble handling + dict-schema support (pass a plain dict instead of a Pydantic model).
+- **`qm.configure(telemetry=True)`** -- sugar for `qm.telemetry.instrument()`.
+- **`qm.configure(auto_redact_pii=True)`** -- automatic PII redaction policy.
+- **`Trace.from_jsonl()` / `assert_traces_equal()`** -- round-trip trace serialisation with header; useful for golden-file tests.
+- **`SessionStore` protocol** -- `qm.run(graph, input, session=store, session_id=...)` + `InMemorySessionStore` for multi-turn chat.
+- **`TypedEvent`** -- Pydantic base class for typed custom events with `extra="forbid"` validation.
+- **`python -m quartermaster_sdk.lint check`** -- static linter with 5 rules (QM001--QM005) for graph definitions.
+- **`CircuitBreaker`** -- `CircuitBreaker(failure_threshold=, recovery_timeout=)` + `CircuitOpenError` for provider resilience.
+- **Local-GPU cost tracker** -- `cost_tracker` tool now supports `duration_seconds` + `local_gpu_cost_per_hour`.
+
+### What shipped in v0.3.0
 
 - **Filtered stream iterators** -- `qm.run.stream(...).tokens()` / `.tool_calls()` / `.progress()` / `.custom(name=...)` replace the old `chunk.type`-matching boilerplate.
 - **Live progress signals** -- tools reach `qm.current_context()` and call `ctx.emit_progress(message, percent, **data)` or `ctx.emit_custom(name, payload)`. UIs render "Searching... 3/5" cards alongside streamed tokens.

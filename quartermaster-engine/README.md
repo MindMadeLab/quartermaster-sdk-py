@@ -17,6 +17,12 @@ Execution engine for AI agent graphs with pluggable storage, dispatching, and me
 - **Flow pause/resume** for user interaction nodes
 - **Sync and async execution** modes with `run()` and `run_async()`
 
+### New in v0.4.0
+
+- **Cooperative cancellation** -- `ctx.cancelled` flag + `Cancelled` exception for clean stream teardown.
+- **Per-node tool scoping** -- `agent(tools=[...])` strictly enforced at the engine level; `tool_scope="permissive"` escape.
+- **Inline `@tool` callables** -- `agent(tools=[my_func])` accepts bare callables alongside registry names.
+
 ## Installation
 
 ```bash
@@ -421,14 +427,15 @@ The runtime context passed to each node executor:
 | `metadata` | `dict[str, Any]` | Node metadata |
 | `on_token` | `Callable[[str], None] \| None` | Callback for streaming tokens |
 
-Helper methods:
+Helper methods and properties:
 
-| Method | Description |
+| Method / Property | Description |
 |--------|-------------|
 | `get_meta(key, default=None)` | Get value from node metadata, falling back to context metadata |
 | `set_meta(key, value)` | Set a metadata value on this context |
 | `emit_token(token)` | Emit a streaming token via callback |
 | `emit_message(content)` | Emit a complete message via callback |
+| `cancelled` (property, v0.4.0) | `True` when the flow has been asked to stop (cooperative cancellation) |
 
 ### Node Execution Protocol
 

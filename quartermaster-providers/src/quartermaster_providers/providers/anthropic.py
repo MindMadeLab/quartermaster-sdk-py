@@ -189,6 +189,14 @@ class AnthropicProvider(AbstractLLMProvider):
             # Anthropic requires temperature=1 when thinking is enabled
             params["temperature"] = 1.0
 
+        # v0.4.0: thread timeouts through to the anthropic SDK via its
+        # per-request ``timeout=`` kwarg. Accepts a scalar float or an
+        # ``httpx.Timeout`` — ``_resolve_httpx_timeout`` picks the right
+        # shape based on which of connect_timeout / read_timeout is set.
+        timeout = self._resolve_httpx_timeout(config)
+        if timeout is not None:
+            params["timeout"] = timeout
+
         return params
 
     def _parse_usage(self, usage: Any) -> TokenUsage:

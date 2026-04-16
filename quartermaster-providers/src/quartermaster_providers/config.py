@@ -36,6 +36,15 @@ class LLMConfig:
         top_k: Top-k sampling parameter.
         frequency_penalty: Penalty for repeating tokens (OpenAI).
         presence_penalty: Penalty for new tokens (OpenAI).
+        connect_timeout: Connect-phase timeout in seconds — fail fast if
+            the provider endpoint is unreachable. ``None`` means use the
+            SDK's underlying HTTP client default. Added in v0.4.0.
+        read_timeout: Read-phase timeout in seconds — ceiling for waiting
+            on a single streaming token / complete response. ``None``
+            means use the SDK's underlying HTTP client default. Added
+            in v0.4.0 so Celery / worker tasks no longer depend on
+            blunt ``CELERY_TASK_TIME_LIMIT`` kills when an Ollama
+            instance wedges mid-stream.
     """
 
     model: str
@@ -54,6 +63,13 @@ class LLMConfig:
     top_k: int | None = None
     frequency_penalty: float | None = None
     presence_penalty: float | None = None
+    # v0.4.0 timeouts — threaded through to each provider's HTTP client
+    # when the SDK's ``qm.configure(timeout=/connect_timeout=/read_timeout=)``
+    # or per-call ``qm.run(..., read_timeout=)`` kwargs are used.
+    # ``None`` on both leaves the provider SDK's own default behaviour
+    # untouched (backwards-compat with v0.3.x callers).
+    connect_timeout: float | None = None
+    read_timeout: float | None = None
 
     def validate(self) -> None:
         """Validate configuration parameters.
@@ -90,6 +106,12 @@ class LLMConfig:
 
         if self.presence_penalty is not None and not -2.0 <= self.presence_penalty <= 2.0:
             raise ValueError("presence_penalty must be between -2.0 and 2.0")
+
+        if self.connect_timeout is not None and self.connect_timeout <= 0:
+            raise ValueError("connect_timeout must be > 0")
+
+        if self.read_timeout is not None and self.read_timeout <= 0:
+            raise ValueError("read_timeout must be > 0")
 
     @classmethod
     def from_dict(cls, config_dict: dict) -> "LLMConfig":
@@ -134,4 +156,6 @@ class LLMConfig:
             "top_k": self.top_k,
             "frequency_penalty": self.frequency_penalty,
             "presence_penalty": self.presence_penalty,
+            "connect_timeout": self.connect_timeout,
+            "read_timeout": self.read_timeout,
         }

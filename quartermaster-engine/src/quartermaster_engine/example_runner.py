@@ -44,6 +44,7 @@ from quartermaster_graph import GraphSpec
 from quartermaster_graph.enums import NodeType
 from quartermaster_providers import LLMConfig, ProviderRegistry
 
+from quartermaster_engine.cancellation import Cancelled
 from quartermaster_engine.context.execution_context import ExecutionContext
 from quartermaster_engine.context.node_execution import NodeStatus
 from quartermaster_engine.events import (
@@ -312,6 +313,17 @@ def _build_llm_config(
     # no-op on graphs that don't declare a ``.vision()`` node.
     images = _user_images(context) if vision_enabled else []
 
+    # v0.4.0: read configure-time / per-call timeouts from flow memory.
+    # ``__llm_timeouts__`` is populated by :meth:`FlowRunner.run`; the
+    # SDK's runner puts the merged defaults there before dispatching.
+    timeouts = context.memory.get("__llm_timeouts__", {}) or {}
+    connect_timeout = context.get_meta("llm_connect_timeout", None)
+    if connect_timeout is None:
+        connect_timeout = timeouts.get("connect_timeout")
+    read_timeout = context.get_meta("llm_read_timeout", None)
+    if read_timeout is None:
+        read_timeout = timeouts.get("read_timeout")
+
     return LLMConfig(
         model=model,
         provider=provider_name,
@@ -324,6 +336,8 @@ def _build_llm_config(
         images=images,
         thinking_enabled=thinking_enabled,
         thinking_budget=thinking_budget,
+        connect_timeout=float(connect_timeout) if connect_timeout is not None else None,
+        read_timeout=float(read_timeout) if read_timeout is not None else None,
     )
 
 
@@ -488,7 +502,12 @@ class _ToolInvocation:
     error: str | None
 
 
-def _execute_tool_call(tool_registry: Any, tool_name: str, parameters: dict) -> _ToolInvocation:
+def _execute_tool_call(
+    tool_registry: Any,
+    tool_name: str,
+    parameters: dict,
+    allowed_tools: list[str] | None = None,
+) -> _ToolInvocation:
     """Run one tool from the registry and return both the LLM-facing
     string and the structured payload for live streaming.
 
@@ -499,6 +518,15 @@ def _execute_tool_call(tool_registry: Any, tool_name: str, parameters: dict) -> 
     to any user who can read the model's reasoning). The structured
     ``raw`` + ``error`` fields are only observed by the agent loop and
     the ``ToolCallFinished`` event downstream, never fed back to the LLM.
+
+    v0.4.0: if *allowed_tools* is not ``None`` the normalised
+    tool name MUST appear in the list — otherwise the call is rejected
+    with a structured error before it ever reaches the registry. This
+    is the per-node tool scoping enforcement: when a graph node declares
+    ``.agent(tools=["web_search"])`` the model cannot hallucinate a call
+    to some other registered tool and have it silently execute. Passing
+    ``allowed_tools=None`` (the default) keeps the legacy permissive
+    behaviour for callers that don't opt in.
     """
     if tool_registry is None:
         msg = f"[ERROR: no tool registry available to execute '{tool_name}']"
@@ -508,6 +536,26 @@ def _execute_tool_call(tool_registry: Any, tool_name: str, parameters: dict) -> 
     # registry lookup would miss a tool that's registered under the bare
     # name — a recurring integrator complaint before v0.2.0.
     normalised = _normalise_tool_name(tool_name)
+    # v0.4.0 per-node scoping check — runs AFTER prefix-stripping so that
+    # ``default_api:A`` matches an allow-list entry of ``A`` (preserves the
+    # v0.2.1 prefix-stripping contract), but BEFORE the registry lookup so
+    # an out-of-scope tool never actually executes.
+    if allowed_tools is not None and normalised not in allowed_tools:
+        allowed_display = ", ".join(allowed_tools) if allowed_tools else "<none>"
+        msg = (
+            f"[ERROR: tool '{normalised}' is not allowed for this agent node. "
+            f"Allowed: {allowed_display}]"
+        )
+        logger.info(
+            "Tool %r rejected by per-node allow-list (allowed=%r)",
+            normalised,
+            allowed_tools,
+        )
+        return _ToolInvocation(
+            prompt_text=msg,
+            raw=None,
+            error=f"not allowed: {normalised}",
+        )
     try:
         tool = tool_registry.get(normalised)
     except Exception as exc:
@@ -520,6 +568,12 @@ def _execute_tool_call(tool_registry: Any, tool_name: str, parameters: dict) -> 
         return _ToolInvocation(prompt_text=msg, raw=None, error="no run() method")
     try:
         result = safe_run(**parameters)
+    except Cancelled:
+        # v0.4.0: let the cooperative-abort signal escape so
+        # AgentExecutor can stamp the node result with
+        # ``error="cancelled"`` — SDK consumers rely on that sentinel
+        # to tell a deliberate abort apart from a genuine tool crash.
+        raise
     except Exception as exc:
         logger.warning("Tool %r raised during execution: %s", normalised, exc)
         msg = f"[ERROR: tool '{normalised}' execution failed]"
@@ -603,6 +657,26 @@ class AgentExecutor(NodeExecutor):
         per_node_tools = context.get_meta("_tool_registry") or self._tools
         program_ids = context.get_meta("program_version_ids", []) or []
         tools = _tool_definitions(per_node_tools) if program_ids else None
+
+        # v0.4.0 per-node tool scoping: the list of tool names
+        # declared in ``.agent(tools=[...])`` becomes the HARD allow-list.
+        # A hallucinated out-of-list tool call hits the
+        # ``[ERROR: tool 'X' is not allowed for this agent node...]`` branch
+        # in ``_execute_tool_call`` and the model gets a chance to correct
+        # itself on the next iteration instead of silently executing a
+        # tool the graph author never authorised. ``tool_scope="permissive"``
+        # opts back into the pre-v0.4.0 behaviour (any tool registered on
+        # the shared registry is reachable) — intended only as a
+        # migration escape hatch for integrators that relied on the leak.
+        tool_scope = str(context.get_meta("tool_scope", "strict") or "strict").lower()
+        if tool_scope == "strict":
+            # ``program_version_ids`` is the canonical allow-list — a list
+            # of bare tool names set by ``agent(tools=[...])`` in the
+            # builder. Empty list ⇒ NO tools are reachable (the node
+            # opted in to tool-calling semantics without listing any).
+            allowed_tools: list[str] | None = list(program_ids)
+        else:
+            allowed_tools = None
 
         # Match the canonical Quartermaster semantics: 0 = no cap, negative
         # values fall back to the documented default.
@@ -716,7 +790,37 @@ class AgentExecutor(NodeExecutor):
                 public_name = _normalise_tool_name(tool_name)
                 context.emit_tool_start(public_name, dict(params), iteration)
 
-                invocation = _execute_tool_call(per_node_tools, tool_name, params)
+                try:
+                    invocation = _execute_tool_call(
+                        per_node_tools,
+                        tool_name,
+                        params,
+                        allowed_tools=allowed_tools,
+                    )
+                except Cancelled:
+                    # v0.4.0 cooperative cancel — bubble out as a
+                    # distinct node failure so SDK consumers see
+                    # ``ErrorChunk(error="cancelled", ...)`` instead of
+                    # the generic tool-crash string. Fire a paired
+                    # ``tool_finish`` event first so UIs don't leave a
+                    # spinner on the "called" tool card.
+                    logger.info(
+                        "AgentExecutor: tool %r raised Cancelled — aborting agent loop",
+                        public_name,
+                    )
+                    context.emit_tool_finish(
+                        public_name,
+                        dict(params),
+                        "[CANCELLED]",
+                        None,
+                        "cancelled",
+                        iteration,
+                    )
+                    return NodeResult(
+                        success=False,
+                        data={"cancelled": True},
+                        error="cancelled",
+                    )
 
                 context.emit_tool_finish(
                     public_name,

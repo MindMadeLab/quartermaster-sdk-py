@@ -51,6 +51,36 @@ git push origin develop
 
 This step is what makes the *next* release PR (`develop → master`) clean — without it, develop slowly drifts behind on version bumps and you get noisy merge conflicts.
 
+### Step 5 — open a release-notes Discussion
+
+Every release gets its own thread in [Discussions → General](https://github.com/MindMadeLab/quartermaster-sdk-py/discussions/categories/general). This is where users find the changelog, known issues, and migration notes — the PR description and tag annotations are not enough.
+
+Create one thread per release with:
+
+- **Title:** `Release vX.Y.Z — <one-line headline>` (e.g. `Release v0.3.1 — End-node revert, .back() node, telemetry auto-import`)
+- **Body sections:** TL;DR with `pip install` line · what shipped (table) · breaking changes / known issues · migration notes (from previous version + from earlier majors) · test count delta · "what we learned" if there's a story to tell · open questions for the community
+
+```bash
+# Drop the body in /tmp/release_vX.Y.Z.md, then:
+gh api graphql \
+  -F repoId="R_kgDOPGPFkQ" \
+  -F catId="DIC_kwDOPGPFkc4C64Zv"  `# General category` \
+  -F title="Release vX.Y.Z — <headline>" \
+  -F body="@/tmp/release_vX.Y.Z.md" \
+  -f query='mutation($repoId:ID!,$catId:ID!,$title:String!,$body:String!){
+    createDiscussion(input:{
+      repositoryId:$repoId,
+      categoryId:$catId,
+      title:$title,
+      body:$body
+    }){discussion{number url}}
+  }'
+```
+
+Cross-link adjacent releases (the `vX.Y.Z` thread should mention `vX.Y.(Z-1)` for migration context, and vice versa for "did you mean to install the newer one?"). Edit existing threads with `updateDiscussion(input:{discussionId:..., body:...})`.
+
+If the release ships a known wart that warrants users skipping the version, say so in the TL;DR and pin the next release's thread above it. (Examples: [#21 v0.3.0](https://github.com/MindMadeLab/quartermaster-sdk-py/discussions/21) → [#22 v0.3.1](https://github.com/MindMadeLab/quartermaster-sdk-py/discussions/22).)
+
 ## Common mistakes
 
 | Symptom | Cause | Fix |
