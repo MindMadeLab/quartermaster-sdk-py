@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -49,6 +50,34 @@ class ExecutionContext:
     # attached (e.g. a unit test invoking a tool directly).
     on_progress: Callable[[str, float | None, dict], None] | None = None
     on_custom: Callable[[str, dict], None] | None = None
+
+    # v0.4.0 cooperative cancellation (Sorex round-2 P1.2).
+    #
+    # Populated by :class:`FlowRunner` with the per-flow cancellation
+    # :class:`threading.Event`; every :class:`ExecutionContext` the
+    # runner builds for a given flow shares the same event so when the
+    # runner is asked to :meth:`FlowRunner.stop` (from the SDK's stream
+    # context-manager exit) every tool in that flow observes
+    # ``ctx.cancelled`` flipping to ``True`` on the next check.
+    #
+    # Remains ``None`` outside a running flow (unit tests, out-of-flow
+    # helpers); the :attr:`cancelled` property returns ``False`` in
+    # that case so tool code stays safe to exercise without a runner.
+    _cancelled_event: threading.Event | None = None
+
+    @property
+    def cancelled(self) -> bool:
+        """Best-effort "the flow has been asked to stop" flag.
+
+        Tools that want to bail out cooperatively mid-work can poll this
+        and either ``raise qm.Cancelled(...)`` or early-return. The flag
+        flips to ``True`` when the SDK's stream context-manager exits
+        (break / return / exception) and calls ``runner.stop(flow_id)``,
+        which sets the per-flow event. Reading outside an active flow
+        returns ``False`` — the check is always safe.
+        """
+        event = self._cancelled_event
+        return event is not None and event.is_set()
 
     def get_meta(self, key: str, default: Any = None) -> Any:
         """Get a value from the node's metadata, falling back to graph metadata."""
