@@ -839,10 +839,15 @@ class FlowRunner:
             start_node = self.graph.get_start_node()
             if start_node is None:
                 return
+            # Pass empty user_input on loop iterations so that User nodes
+            # downstream of Start pause for fresh stdin (wait_for_user)
+            # instead of reusing the stale input from the first iteration.
+            # The UserExecutor checks ``msg.content`` truthiness — empty
+            # string falls through to the interactive prompt path.
             self.dispatcher.dispatch(
                 flow_id,
                 start_node.id,
-                lambda fid, nid: self._execute_node(fid, nid, user_input),
+                lambda fid, nid: self._execute_node(fid, nid, ""),
             )
             return
 
