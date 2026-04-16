@@ -73,4 +73,5 @@ agent = (
     )
 )
 
-qm.run(agent, "Alice")
+result = qm.run(agent, "Alice")
+print(result.text)
