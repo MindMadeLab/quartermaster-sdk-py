@@ -61,4 +61,5 @@ agent = (
     # No merge -- decision picks one language branch, they converge on the (implicit) end.
 )
 
-qm.run(agent, "Bonjour, comment allez-vous aujourd'hui?")
+result = qm.run(agent, "Bonjour, comment allez-vous aujourd'hui?")
+print(result.text)

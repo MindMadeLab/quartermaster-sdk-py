@@ -193,7 +193,7 @@ built = trial.build()
 print(f"Graph: {len(built.nodes)} nodes, {len(built.edges)} edges")
 print()
 
-qm.run(
+result = qm.run(
     built,
     "Dr. Sarah Chen, a senior AI engineer, left TechCorp after 5 years "
     "to co-found NeuralStart. TechCorp alleges she copied proprietary "
@@ -202,3 +202,4 @@ qm.run(
     "The defense argues the non-compete is overly broad and the code "
     "comes from open-source frameworks.",
 )
+print(result.text)

@@ -45,4 +45,5 @@ agent = (
     )
 )
 
-qm.run(agent, "I absolutely love this product, it changed my life!")
+result = qm.run(agent, "I absolutely love this product, it changed my life!")
+print(result.text)
