@@ -129,14 +129,11 @@ def _event_from_dict(d: dict[str, Any]) -> FlowEvent:
     d = dict(d)  # shallow copy — we pop from it
     event_type = d.pop("_event_type", None)
     if event_type is None:
-        raise ValueError(
-            "Cannot reconstruct FlowEvent: dict has no '_event_type' key"
-        )
+        raise ValueError("Cannot reconstruct FlowEvent: dict has no '_event_type' key")
     cls = _EVENT_CLASSES.get(event_type)
     if cls is None:
         raise ValueError(
-            f"Unknown _event_type {event_type!r}; "
-            f"known types: {sorted(_EVENT_CLASSES)}"
+            f"Unknown _event_type {event_type!r}; known types: {sorted(_EVENT_CLASSES)}"
         )
     # Only pass keys that the dataclass actually declares — extra keys
     # (e.g. from future schema evolution) are silently dropped.
@@ -330,9 +327,7 @@ class Trace:
         # Resolve user_input: explicit kwarg > stashed attribute.
         ui = user_input if user_input is not None else self.user_input
         if ui is not None:
-            lines.append(
-                json.dumps({"_meta": "trace_header", "user_input": ui})
-            )
+            lines.append(json.dumps({"_meta": "trace_header", "user_input": ui}))
         for event in self.events:
             d = asdict(event)
             d["_event_type"] = type(event).__name__
