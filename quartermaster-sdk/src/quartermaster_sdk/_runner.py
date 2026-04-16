@@ -57,8 +57,9 @@ from ._chunks import (
     ToolCallChunk,
     ToolResultChunk,
 )
-from ._config import get_default_registry, get_default_timeouts
+from ._config import get_auto_redact_config, get_default_registry, get_default_timeouts
 from ._result import Result
+from ._session import ChatTurn, SessionStore
 from ._stream_filters import _Stream
 from ._trace import Trace
 
@@ -278,6 +279,79 @@ class _InlineToolRegistry:
         return self._collect_schemas("to_mcp_tools")
 
 
+def _apply_pii_redaction(text: str, policy: str) -> str:
+    """Apply PII redaction to *text* using the built-in privacy tools.
+
+    Called when ``qm.configure(auto_redact_pii=True)`` is set.  The
+    ``policy`` string controls which entity types are redacted — ``"all"``
+    (default) strips every detected PII class; a comma-separated list
+    (``"email,phone,credit_card"``) restricts to those types.
+
+    If ``quartermaster-tools`` isn't installed or the privacy tools fail,
+    falls back to the original text with a warning — never crashes the
+    flow just because redaction couldn't run.
+    """
+    try:
+        from quartermaster_tools.builtin.privacy.redact import RedactPIITool
+    except ImportError:
+        logger.warning(
+            "auto_redact_pii enabled but quartermaster-tools is not installed; "
+            "skipping redaction"
+        )
+        return text
+    try:
+        result = RedactPIITool.run(text=text, strategy="redact")
+        return result.data.get("redacted_text", text) if result.success else text
+    except Exception:
+        logger.warning("PII redaction failed; passing original text", exc_info=True)
+        return text
+
+
+def assert_traces_equal(
+    actual: Trace,
+    recorded: Trace,
+    *,
+    ignore: list[str] | None = None,
+) -> None:
+    """Assert that *actual* and *recorded* traces match on tool calls.
+
+    Compares the sequence of tool calls (tool name + arguments) between
+    two traces.  Fields listed in *ignore* are excluded from comparison
+    — common values: ``"timestamps"``, ``"node_ids"``, ``"results"``.
+
+    Raises ``AssertionError`` with a diff when traces diverge.  Designed
+    for regression tests that capture a known-good trace via
+    ``result.trace.as_jsonl()`` and replay it later to detect silent
+    tool-call drift.
+
+    Added in v0.4.0 (Sorex P2.3).
+    """
+    ignore_set = set(ignore or [])
+
+    def _extract_calls(trace: Trace) -> list[dict]:
+        calls = []
+        for tc in trace.tool_calls:
+            entry = {"tool": tc.get("tool"), "arguments": tc.get("arguments")}
+            if "results" not in ignore_set:
+                entry["result"] = tc.get("result")
+            calls.append(entry)
+        return calls
+
+    actual_calls = _extract_calls(actual)
+    recorded_calls = _extract_calls(recorded)
+
+    if actual_calls != recorded_calls:
+        import json
+
+        raise AssertionError(
+            f"Trace tool-call drift detected.\n"
+            f"  Recorded ({len(recorded_calls)} calls): "
+            f"{json.dumps(recorded_calls, indent=2, default=str)}\n"
+            f"  Actual   ({len(actual_calls)} calls): "
+            f"{json.dumps(actual_calls, indent=2, default=str)}"
+        )
+
+
 class _RunCallable:
     """Callable + ``.stream`` method exposed as ``qm.run``.
 
@@ -297,6 +371,8 @@ class _RunCallable:
         timeout: float | None = None,
         connect_timeout: float | None = None,
         read_timeout: float | None = None,
+        session: SessionStore | None = None,
+        session_id: str | None = None,
     ) -> Result:
         """Execute *graph* against *user_input* and return a :class:`Result`.
 
@@ -329,7 +405,32 @@ class _RunCallable:
                 Added in v0.4.0.
             read_timeout: Per-call override for the read phase (per-
                 LLM-call ceiling). Added in v0.4.0.
+            session: Optional :class:`SessionStore` for multi-turn chat.
+                When provided alongside *session_id*, the runner loads
+                prior turns, folds them into *user_input*, and appends
+                the new user + assistant turns after the run. Added in
+                v0.4.0 (Sorex P2.4).
+            session_id: Session key for the session store.  Required
+                when *session* is set; ignored otherwise.
         """
+        # ── v0.4.0 session: load history ──────────────────────────────
+        if session is not None:
+            if session_id is None:
+                raise ValueError("run(): session= requires session_id=")
+            history: list[ChatTurn] = session.load(session_id)
+            if history:
+                parts = [
+                    f"{t.role.capitalize()}: {t.content}"
+                    for t in history
+                ]
+                parts.append(f"User: {user_input}")
+                user_input = "\n".join(parts)
+
+        # ── v0.4.0 auto-redact PII ───────────────────────────────────
+        auto_redact, redact_policy = get_auto_redact_config()
+        if auto_redact:
+            user_input = _apply_pii_redaction(user_input, redact_policy)
+
         inline_tools = _extract_inline_tools(graph)
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
@@ -377,6 +478,13 @@ class _RunCallable:
             trace_events,
             duration_seconds=fr.duration_seconds or elapsed,
         )
+        result.trace.user_input = user_input
+
+        # ── v0.4.0 session: persist new turns ────────────────────────
+        if session is not None and session_id is not None:
+            session.append(session_id, ChatTurn(role="user", content=user_input))
+            session.append(session_id, ChatTurn(role="assistant", content=result.text))
+
         return result
 
     def stream(
