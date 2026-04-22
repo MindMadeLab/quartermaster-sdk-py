@@ -471,12 +471,15 @@ def _normalise_tool_name(tool_name: str) -> str:
     """Strip provider-specific namespace prefixes from a tool call's name.
 
     Models return tool names with various prefixes — ``default_api:``,
-    ``functions:``, ``google_search:``, ``mcp:``, etc. Instead of
-    maintaining a brittle allow-list, strip everything before the LAST
-    colon. Handles every current and future prefix pattern.
+    ``default_api.``, ``functions:``, ``functions.``, ``google_search:``,
+    ``mcp:``, etc. Instead of maintaining a brittle allow-list, strip
+    everything before the LAST ``:`` or ``.`` separator. Handles every
+    current and future prefix pattern regardless of which delimiter the
+    model chose.
     """
-    if ":" in tool_name:
-        return tool_name.rsplit(":", 1)[1]
+    idx = max(tool_name.rfind(":"), tool_name.rfind("."))
+    if idx >= 0:
+        return tool_name[idx + 1 :]
     return tool_name
 
 
