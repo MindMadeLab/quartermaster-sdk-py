@@ -146,7 +146,7 @@ def build_web_scrape_graph(url: str, site_name: str) -> qm.GraphBuilder:
         .agent(
             f"Fetch {site_name}",
             tools=[scrape_url],
-            max_iterations=2,
+            max_iterations=5,
             # model + provider inherited from qm.configure() — no need
             # to repeat them on every node.
             system_instruction=(
