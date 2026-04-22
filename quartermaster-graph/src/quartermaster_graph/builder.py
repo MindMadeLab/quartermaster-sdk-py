@@ -331,6 +331,52 @@ class _BranchBuilder:
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
+    def instruction_form(
+        self,
+        name: str,
+        schema: type | dict | None = None,
+        model: str = "",
+        provider: str = "",
+        temperature: float = 0.1,
+        system_instruction: str = "",
+        **kwargs: Any,
+    ) -> _BranchBuilder:
+        """Add an InstructionForm node — LLM returns typed JSON.
+
+        The schema is injected into the system prompt so the LLM knows
+        the target shape. The executor validates the response and stores
+        the parsed dict in ``NodeResult.data["parsed"]``.
+
+        Args:
+            schema: Pydantic BaseModel subclass or dict JSON Schema.
+        """
+        import json as _json
+
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+
+        schema_json = ""
+        if schema is not None:
+            if isinstance(schema, type) and hasattr(schema, "model_json_schema"):
+                schema_json = _json.dumps(schema.model_json_schema(), separators=(",", ":"))
+            elif isinstance(schema, dict):
+                schema_json = _json.dumps(schema, separators=(",", ":"))
+
+        meta = _llm_meta(
+            model=model, provider=provider, temperature=temperature,
+            system_instruction=system_instruction, **kwargs,
+        )
+        meta["schema_json"] = schema_json
+        meta["schema_class"] = (
+            f"{schema.__module__}.{schema.__qualname__}" if isinstance(schema, type) else ""
+        )
+
+        node = GraphNode(
+            type=NodeType.INSTRUCTION_FORM, name=name, metadata=meta,
+            message_type=MessageType.ASSISTANT,
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
     def summarize(
         self,
         name: str,
@@ -1465,6 +1511,47 @@ class GraphBuilder:
         )
         node = GraphNode(
             type=NodeType.INSTRUCTION, name=name, metadata=meta, message_type=MessageType.ASSISTANT
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
+    def instruction_form(
+        self,
+        name: str,
+        schema: type | dict | None = None,
+        model: str = "",
+        provider: str = "",
+        temperature: float = 0.1,
+        system_instruction: str = "",
+        **kwargs: Any,
+    ) -> GraphBuilder:
+        """Add an InstructionForm node — LLM returns typed JSON.
+
+        See :meth:`_BranchBuilder.instruction_form`.
+        """
+        import json as _json
+
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+
+        schema_json = ""
+        if schema is not None:
+            if isinstance(schema, type) and hasattr(schema, "model_json_schema"):
+                schema_json = _json.dumps(schema.model_json_schema(), separators=(",", ":"))
+            elif isinstance(schema, dict):
+                schema_json = _json.dumps(schema, separators=(",", ":"))
+
+        meta = _llm_meta(
+            model=model, provider=provider, temperature=temperature,
+            system_instruction=system_instruction, **kwargs,
+        )
+        meta["schema_json"] = schema_json
+        meta["schema_class"] = (
+            f"{schema.__module__}.{schema.__qualname__}" if isinstance(schema, type) else ""
+        )
+
+        node = GraphNode(
+            type=NodeType.INSTRUCTION_FORM, name=name, metadata=meta,
+            message_type=MessageType.ASSISTANT,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)

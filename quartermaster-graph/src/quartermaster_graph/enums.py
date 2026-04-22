@@ -17,6 +17,7 @@ class NodeType(str, Enum):
     FLOW_MEMORY = "FlowMemory1"
     IF = "If1"
     INSTRUCTION = "Instruction1"
+    INSTRUCTION_FORM = "InstructionForm1"
     INSTRUCTION_IMAGE_VISION = "InstructionImageVision1"
     INSTRUCTION_PARAMETERS = "InstructionParameters1"
     INSTRUCTION_PROGRAM = "InstructionProgram1"
