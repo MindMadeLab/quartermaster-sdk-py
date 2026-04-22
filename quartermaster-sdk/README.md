@@ -8,7 +8,6 @@ Quartermaster lets you build AI agent workflows as directed graphs — define no
 
 - **Application timeouts** -- `qm.configure(timeout=, connect_timeout=, read_timeout=)` + per-call overrides.
 - **Stream cancellation** -- `with qm.run.stream(...) as stream:` context-manager; `qm.Cancelled` + `ctx.cancelled`.
-- **Native Ollama `/api/chat`** for tool calls (auto-detect) + `ollama_tool_protocol=` config.
 - **Per-node tool scoping** -- `agent(tools=[...])` strictly enforced; `tool_scope="permissive"` escape hatch.
 - **Inline `@tool` callables** -- `agent(tools=[my_func])` accepts bare callables.
 - **`instruction_form`** -- Gemma preamble robustness + dict-schema support.
@@ -183,24 +182,6 @@ agent = (
     .instruction("Respond", model="gpt-4o", system_instruction="You are a helpful assistant.")
 )
 result = qm.run(agent, "How does photosynthesis work?")
-```
-
-## Sync chat shim (no graph needed)
-
-For one-shot LLM calls from sync code (Celery workers, Django views, CLI scripts) —
-no `asgiref.async_to_sync` wrapper required:
-
-```python
-from quartermaster_providers.providers.local import OllamaProvider
-
-provider = OllamaProvider(default_model="gemma4:26b")
-result = provider.chat(
-    messages=[{"role": "user", "content": "Pozdravljen!"}],
-    max_output_tokens=128,
-    thinking_level="off",
-)
-print(result.content)        # promoted from `reasoning` if `content` is empty
-print(result.usage)          # {prompt_tokens, completion_tokens, total_tokens}
 ```
 
 ## Packages

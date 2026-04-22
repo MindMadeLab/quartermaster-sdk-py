@@ -58,7 +58,6 @@ from quartermaster_graph import (  # noqa: F401
 )
 from quartermaster_graph.enums import NodeType  # noqa: F401
 from quartermaster_providers import (  # noqa: F401
-    ChatResult,
     CircuitBreaker,
     CircuitOpenError,
     LLMConfig,
@@ -143,9 +142,8 @@ __all__ = [
     "AgentExecutor",
     "build_default_registry",
     "run_graph",
-    # Providers — config, sync chat result, registry helpers
+    # Providers — config, registry helpers
     "LLMConfig",
-    "ChatResult",
     "ProviderRegistry",
     "register_local",
     # v0.4.0 circuit breaker

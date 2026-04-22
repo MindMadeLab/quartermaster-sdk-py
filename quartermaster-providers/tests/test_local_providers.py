@@ -30,7 +30,9 @@ class TestOllamaProvider:
         p = OllamaProvider()
         assert p.base_url == "http://localhost:11434/v1"
 
-    def test_default_no_auth(self):
+    def test_default_no_auth(self, monkeypatch):
+        monkeypatch.delenv("OLLAMA_USER", raising=False)
+        monkeypatch.delenv("OLLAMA_PASS", raising=False)
         p = OllamaProvider()
         assert p.auth_method == "none"
 

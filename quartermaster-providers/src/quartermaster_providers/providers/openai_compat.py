@@ -58,13 +58,25 @@ class OpenAICompatibleProvider(OpenAIProvider):
                 "api_key": self.api_key,
                 "base_url": self.base_url,
             }
-            if self.auth_method == "basic" and self.auth_credentials:
+
+            extra_headers = getattr(self, "_extra_headers", None)
+            needs_http_client = bool(
+                (self.auth_method == "basic" and self.auth_credentials) or extra_headers
+            )
+
+            if needs_http_client:
                 import httpx
 
-                kwargs["http_client"] = httpx.AsyncClient(
-                    auth=(self.auth_credentials[0], self.auth_credentials[1]),
-                )
-                kwargs["api_key"] = "unused"
+                client_kwargs: dict[str, Any] = {}
+                if self.auth_method == "basic" and self.auth_credentials:
+                    client_kwargs["auth"] = (
+                        self.auth_credentials[0],
+                        self.auth_credentials[1],
+                    )
+                    kwargs["api_key"] = "unused"
+                if extra_headers:
+                    client_kwargs["headers"] = dict(extra_headers)
+                kwargs["http_client"] = httpx.AsyncClient(**client_kwargs)
 
             self._client = openai.AsyncOpenAI(**kwargs)
         return self._client

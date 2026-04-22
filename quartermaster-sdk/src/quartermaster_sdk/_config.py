@@ -68,7 +68,6 @@ def configure(
     api_key: str | None = None,
     default_model: str | None = None,
     registry: ProviderRegistry | None = None,
-    ollama_tool_protocol: str = "auto",
     timeout: float | None = None,
     connect_timeout: float | None = None,
     read_timeout: float | None = None,
@@ -95,17 +94,6 @@ def configure(
         registry: Hand in a fully-built registry instead of having
             ``configure`` build one.  Mutually exclusive with
             ``base_url`` / ``api_key``.
-        ollama_tool_protocol: v0.4.0 Ollama-only transport knob for
-            tool-calling requests — only consulted when
-            ``provider="ollama"``.  ``"auto"`` (default) probes
-            ``/api/tags`` and picks native ``/api/chat`` for models
-            that advertise tool support, falling back to the OpenAI-
-            compat shim for older models.  ``"native"`` forces every
-            request through ``/api/chat``.  ``"openai_compat"``
-            forces the pre-v0.4.0 behaviour (always
-            ``/v1/chat/completions``).  Introduced to kill the
-            Gemma-4 ``list_orders_v2`` / ``default_api:`` tool-name
-            hallucinations the compat shim produces.
 
     Returns:
         The bound :class:`ProviderRegistry` — useful for tests that
@@ -114,17 +102,6 @@ def configure(
     global _default_registry, _default_model
     global _default_connect_timeout, _default_read_timeout
     global _auto_redact_pii, _auto_redact_policy
-
-    # Validate the Ollama tool-protocol knob here — we want a clear
-    # ``ValueError`` at boot rather than a cryptic ``TypeError`` when
-    # ``OllamaNativeProvider.__init__`` sees an unknown value.
-    from quartermaster_providers.providers.ollama import VALID_TOOL_PROTOCOLS
-
-    if ollama_tool_protocol not in VALID_TOOL_PROTOCOLS:
-        raise ValueError(
-            f"configure(): ollama_tool_protocol={ollama_tool_protocol!r} is invalid. "
-            f"Expected one of {sorted(VALID_TOOL_PROTOCOLS)}."
-        )
 
     # v0.4.0: resolve timeouts first so a validation failure doesn't
     # leave the module half-configured. The shortcut and split forms
@@ -175,10 +152,6 @@ def configure(
             register_kwargs["auth"] = auth
         if headers is not None:
             register_kwargs["headers"] = headers
-        # Forward ``tool_protocol`` only to Ollama — other local
-        # engines don't know the kwarg and would reject it.
-        if provider == "ollama":
-            register_kwargs["tool_protocol"] = ollama_tool_protocol
         _default_registry = register_local(provider, **register_kwargs)
 
     # v0.4.0 circuit breaker: wrap the provider instance
@@ -201,10 +174,9 @@ def configure(
     _auto_redact_policy = auto_redact_policy
     logger.info(
         "quartermaster_sdk configured: provider=%s default_model=%s "
-        "ollama_tool_protocol=%s connect_timeout=%s read_timeout=%s",
+        "connect_timeout=%s read_timeout=%s",
         provider,
         resolved_default_model,
-        ollama_tool_protocol if provider == "ollama" else "n/a",
         resolved_connect,
         resolved_read,
     )
