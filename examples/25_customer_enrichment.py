@@ -6,7 +6,7 @@ customer data (just a name + country) into a full contact profile.
 Architecture::
 
     ┌─── web_scrape_graph (sub-graph, reused 3x) ──────────┐
-    │  static(url) → tool(web_scraper) → instruction(extract)│
+    │  static(url) → agent(scrape_url) → extract info        │
     └───────────────────────────────────────────────────────┘
 
     ┌─── main graph ────────────────────────────────────────┐
@@ -14,22 +14,24 @@ Architecture::
     │  → web_scrape_graph(bizi.si)                           │
     │  → web_scrape_graph(google maps)                       │
     │  → web_scrape_graph(company website)                   │
-    │  → agent(tools=[duckduckgo_search, web_scraper])       │
-    │  → instruction_form(schema=CustomerProfile)            │
+    │  → agent(tools=[search_web, scrape_url])               │
+    │  → instruction("Compile Notes")                        │
     └───────────────────────────────────────────────────────┘
+    → qm.instruction_form(schema=CustomerProfile)
 
-The sub-graph scrapes a known URL and extracts relevant info. The main
-graph runs three static scrapes (business registry, maps, company site),
-then lets an agent do dynamic research with search + scraping tools,
-and finally an instruction_form node extracts the structured profile.
+Reads provider config from .env:
+    OLLAMA_API_URL     — Ollama endpoint (may be behind auth proxy)
+    OLLAMA_AI_MODEL    — model name (default: gemma4:26b)
+    OLLAMA_USERNAME    — HTTP Basic Auth username (optional)
+    OLLAMA_PASSWORD    — HTTP Basic Auth password (optional)
 
 Usage:
-    export ANTHROPIC_API_KEY="sk-ant-..."
     uv run examples/25_customer_enrichment.py
 """
 
 from __future__ import annotations
 
+import os
 from pydantic import BaseModel, Field
 from typing import Literal
 
@@ -145,6 +147,8 @@ def build_web_scrape_graph(url: str, site_name: str) -> qm.GraphBuilder:
             f"Fetch {site_name}",
             tools=[scrape_url],
             max_iterations=2,
+            # model + provider inherited from qm.configure() — no need
+            # to repeat them on every node.
             system_instruction=(
                 f"You are a web scraper. Fetch the content from this URL: {url}\n"
                 "Use the scrape_url tool to get the page content. "
@@ -224,18 +228,38 @@ def build_enrichment_graph(
 # ── Run ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    # ── Configure Ollama from .env ────────────────────────────────
+    # Reads: OLLAMA_API_URL, OLLAMA_AI_MODEL, OLLAMA_USERNAME, OLLAMA_PASSWORD
+    ollama_url = os.environ.get("OLLAMA_API_URL", "http://localhost:11434/v1")
+    ollama_model = os.environ.get("OLLAMA_AI_MODEL", "gemma4:26b")
+    ollama_user = os.environ.get("OLLAMA_USERNAME")
+    ollama_pass = os.environ.get("OLLAMA_PASSWORD")
+
+    auth = (ollama_user, ollama_pass) if ollama_user and ollama_pass else None
+
+    qm.configure(
+        provider="ollama",
+        base_url=ollama_url,
+        default_model=ollama_model,
+        auth=auth,
+        timeout=120,
+    )
+
     # Example: enrich a Slovenian company with known registry URLs
     company_name = "Kolibri d.o.o."
     country = "Slovenia"
 
     # Known URLs where we expect to find info
     known_urls = [
-        (f"https://www.bizi.si/KOLIBRI-D-O-O/", "Bizi.si"),
-        (f"https://www.google.com/maps/search/Kolibri+d.o.o.+Slovenia", "Google Maps"),
+        ("https://www.bizi.si/KOLIBRI-D-O-O/", "Bizi.si"),
+        ("https://www.google.com/maps/search/Kolibri+d.o.o.+Slovenia", "Google Maps"),
     ]
 
     print("=" * 60)
     print("  Customer Enrichment Pipeline")
+    print(f"  Provider: ollama @ {ollama_url}")
+    print(f"  Model: {ollama_model}")
+    print(f"  Auth: {'basic' if auth else 'none'}")
     print(f"  Company: {company_name}")
     print(f"  Country: {country}")
     print(f"  Static sources: {len(known_urls)}")
