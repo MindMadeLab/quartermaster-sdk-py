@@ -1172,6 +1172,234 @@ class MemoryReadExecutor(NodeExecutor):
         return NodeResult(success=True, data={}, output_text=str(value))
 
 
+class InstructionFormExecutor(NodeExecutor):
+    """LLM node that returns typed JSON validated against a schema.
+
+    Reads ``schema_json`` from node metadata (injected by the builder),
+    appends it to the system instruction so the LLM knows the target
+    shape, then calls the LLM and validates the response. The parsed
+    dict lives in ``NodeResult.data["parsed"]``.
+    """
+
+    def __init__(self, provider_registry: ProviderRegistry):
+        self._registry = provider_registry
+
+    async def execute(self, context: ExecutionContext) -> NodeResult:
+        import json
+        import re
+
+        system_instruction = context.get_meta("llm_system_instruction", "")
+        schema_json = context.get_meta("schema_json", "")
+
+        # Inject schema into system prompt
+        full_system = (
+            f"{system_instruction}\n\n"
+            "Respond with a single JSON object matching this schema. "
+            "Do not wrap the JSON in markdown code fences. Do not emit any "
+            "text outside the JSON object.\n\n"
+            f"Schema: {schema_json}"
+        ).strip() if schema_json else system_instruction
+
+        provider_name, model = _resolve_provider_and_model(
+            self._registry,
+            context.get_meta("llm_provider", ""),
+            context.get_meta("llm_model", ""),
+        )
+
+        try:
+            provider = self._registry.get(provider_name) if provider_name else None
+        except Exception:
+            provider = None
+        if provider is None:
+            return NodeResult(
+                success=False, data={},
+                error=f"Provider '{provider_name}' not registered.",
+            )
+
+        config = _build_llm_config(
+            context,
+            provider_name=provider_name,
+            model=model,
+            stream=False,
+            system_message=full_system,
+        )
+
+        conversation = _get_conversation(context)
+        user_input = str(context.memory.get("__user_input__", ""))
+        prompt = _format_conversation(conversation, user_input)
+
+        try:
+            response = await provider.generate_native_response(prompt, None, config)
+        except Exception as exc:
+            return NodeResult(success=False, data={}, error=str(exc))
+
+        raw_text = getattr(response, "text_content", "") or ""
+        context.emit_token(raw_text)
+
+        # Strip markdown fences
+        cleaned = re.sub(r"\A\s*```[A-Za-z0-9_-]*\s*\n?", "", raw_text)
+        cleaned = re.sub(r"\n?\s*```\s*\Z", "", cleaned).strip()
+
+        # Try to parse JSON — walk brace positions if direct parse fails
+        parsed = None
+        try:
+            parsed = json.loads(cleaned)
+        except (json.JSONDecodeError, ValueError):
+            # Gemma preamble fallback: find last valid JSON object
+            decoder = json.JSONDecoder()
+            last_good = None
+            for i, ch in enumerate(cleaned):
+                if ch in "{[":
+                    try:
+                        obj, end = decoder.raw_decode(cleaned, i)
+                        if end > (last_good[1] if last_good else 0):
+                            last_good = (obj, end)
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+            if last_good:
+                parsed = last_good[0]
+
+        if parsed is None:
+            return NodeResult(
+                success=False, data={"raw_text": raw_text},
+                error=f"Could not parse JSON from LLM response",
+                output_text=raw_text,
+            )
+
+        # Validate against Pydantic schema if class is available
+        schema_class = context.get_meta("schema_class", "")
+        if schema_class:
+            try:
+                module_path, class_name = schema_class.rsplit(".", 1)
+                import importlib
+                mod = importlib.import_module(module_path)
+                cls = getattr(mod, class_name)
+                validated = cls.model_validate(parsed)
+                parsed = validated.model_dump()
+            except Exception as exc:
+                logger.warning("InstructionForm schema validation failed: %s", exc)
+
+        node_name = context.current_node.name if context.current_node else "InstructionForm"
+        _append_to_conversation(conversation, node_name, json.dumps(parsed, default=str))
+
+        return NodeResult(
+            success=True,
+            data={
+                "memory_updates": {"__conversation__": conversation},
+                "parsed": parsed,
+            },
+            output_text=json.dumps(parsed, indent=2, default=str),
+        )
+
+
+class ProgramRunnerExecutor(NodeExecutor):
+    """Execute a registered tool with static parameters — no LLM involved.
+
+    Reads the tool name from ``metadata["program"]`` and the arguments
+    from the remaining metadata keys.  Calls the tool directly via the
+    tool registry and returns the result as ``output_text``.
+
+    This is the correct node type for "scrape this URL" or "call this
+    API" with predetermined parameters — zero agent iterations, zero
+    LLM overhead, full tracing.
+
+    Builder usage::
+
+        graph.program_runner(
+            "Scrape Bizi.si",
+            program="web_extract",
+            url="https://bizi.si/KOLIBRI/",
+            what="email, phone, VAT ID",
+        )
+    """
+
+    def __init__(self, tool_registry: Any | None = None):
+        self._tools = tool_registry
+
+    async def execute(self, context: ExecutionContext) -> NodeResult:
+        program = context.get_meta("program", "")
+        if not program:
+            return NodeResult(
+                success=False, data={},
+                error="ProgramRunner node has no 'program' in metadata",
+            )
+
+        # Collect arguments: everything in metadata except reserved keys
+        reserved = {"program", "capture_as", "show_output"}
+        args = {
+            k: v
+            for k, v in context.current_node.metadata.items()
+            if k not in reserved
+        }
+
+        # Resolve the tool
+        per_node_tools = context.get_meta("_tool_registry") or self._tools
+        normalised = _normalise_tool_name(program)
+
+        if per_node_tools is None:
+            return NodeResult(
+                success=False, data={},
+                error=f"No tool registry available for ProgramRunner '{normalised}'",
+            )
+
+        try:
+            tool_obj = per_node_tools.get(normalised)
+        except Exception as exc:
+            return NodeResult(
+                success=False, data={},
+                error=f"Tool '{normalised}' not found: {exc}",
+            )
+
+        safe_run = getattr(tool_obj, "safe_run", None) or getattr(tool_obj, "run", None)
+        if safe_run is None:
+            return NodeResult(
+                success=False, data={},
+                error=f"Tool '{normalised}' has no run() method",
+            )
+
+        # Emit progress
+        context.emit_progress(f"Running {normalised}({args})")
+
+        # Execute the tool
+        try:
+            result = safe_run(**args)
+        except Exception as exc:
+            logger.warning("ProgramRunner %r raised: %s", normalised, exc)
+            return NodeResult(
+                success=False, data={},
+                error=f"Tool '{normalised}' failed: {exc}",
+            )
+
+        # Format result as text
+        if hasattr(result, "data"):
+            text = str(result.data)
+        elif isinstance(result, dict):
+            text = str(result)
+        else:
+            text = str(result)
+
+        # Append to conversation
+        conversation = _get_conversation(context)
+        node_name = context.current_node.name if context.current_node else normalised
+        _append_to_conversation(conversation, node_name, text)
+
+        return NodeResult(
+            success=True,
+            data={
+                "memory_updates": {"__conversation__": conversation},
+                "tool_calls": [{
+                    "tool": normalised,
+                    "arguments": args,
+                    "result": text[:500],
+                    "raw": result if isinstance(result, dict) else None,
+                    "error": None,
+                    "iteration": 0,
+                }],
+            },
+            output_text=text,
+        )
+
+
 class PassthroughExecutor(NodeExecutor):
     """Does nothing — passes through for nodes that don't need execution."""
 
@@ -1346,6 +1574,8 @@ def build_default_registry(
 
     # Plain LLM nodes — single-shot text completion.
     reg.register(NodeType.INSTRUCTION.value, llm)
+    instruction_form = InstructionFormExecutor(provider_registry)
+    reg.register(NodeType.INSTRUCTION_FORM.value, instruction_form)
     reg.register(NodeType.SUMMARIZE.value, llm)
     reg.register(NodeType.INSTRUCTION_IMAGE_VISION.value, llm)
 
@@ -1372,7 +1602,8 @@ def build_default_registry(
     reg.register(NodeType.CODE.value, passthrough)
 
     # Program runner (passthrough for now)
-    reg.register(NodeType.PROGRAM_RUNNER.value, passthrough)
+    program_runner = ProgramRunnerExecutor(tool_registry=tool_registry)
+    reg.register(NodeType.PROGRAM_RUNNER.value, program_runner)
     reg.register(NodeType.STATIC_PROGRAM_PARAMETERS.value, passthrough)
 
     # Memory nodes
