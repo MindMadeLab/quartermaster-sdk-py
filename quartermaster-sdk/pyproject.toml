@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quartermaster-sdk"
-version = "0.4.5"
+version = "0.4.6"
 description = "Quartermaster — modular AI agent orchestration framework. Install this to get all packages."
 readme = "README.md"
 license = "Apache-2.0"
@@ -29,11 +29,11 @@ classifiers = [
 ]
 
 dependencies = [
-    "quartermaster-graph>=0.4.5",
-    "quartermaster-providers>=0.4.5",
-    "quartermaster-tools>=0.4.5",
-    "quartermaster-nodes>=0.4.5",
-    "quartermaster-engine>=0.4.5",
+    "quartermaster-graph>=0.4.6",
+    "quartermaster-providers>=0.4.6",
+    "quartermaster-tools>=0.4.6",
+    "quartermaster-nodes>=0.4.6",
+    "quartermaster-engine>=0.4.6",
 ]
 
 [project.optional-dependencies]
@@ -54,8 +54,8 @@ observability = ["quartermaster-tools[observability]"]
 tools-all = ["quartermaster-tools[all]"]
 
 # Standalone packages (not included by default)
-mcp = ["quartermaster-mcp-client>=0.4.5"]
-code-runner = ["quartermaster-code-runner>=0.4.5"]
+mcp = ["quartermaster-mcp-client>=0.4.6"]
+code-runner = ["quartermaster-code-runner>=0.4.6"]
 
 # OpenTelemetry instrumentation (qm.telemetry.instrument())
 telemetry = [
