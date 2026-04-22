@@ -473,6 +473,10 @@ _TOOL_NAME_PREFIXES: tuple[str, ...] = (
     "functions:",
     "functions.",
     "mcp:",
+    "google:",
+    "google.",
+    "tools:",
+    "tools.",
 )
 
 
