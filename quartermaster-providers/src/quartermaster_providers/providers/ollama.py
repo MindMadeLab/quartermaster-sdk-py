@@ -377,14 +377,19 @@ class OllamaNativeProvider(_OpenAICompatOllamaProvider):
         if not tools:
             return None
         prepared: list[dict[str, Any]] = []
-        for tool in tools:
+        for td in tools:
+            # Tool definitions arrive in OpenAI format from _tool_definitions():
+            #   {"type": "function", "function": {"name", "description", "parameters"}}
+            # OR in flat format from some registries:
+            #   {"name", "description", "input_schema"/"parameters"}
+            fn = td.get("function") or td
             prepared.append(
                 {
                     "type": "function",
                     "function": {
-                        "name": tool.get("name", ""),
-                        "description": tool.get("description", ""),
-                        "parameters": tool.get("input_schema", {}),
+                        "name": fn.get("name", ""),
+                        "description": fn.get("description", ""),
+                        "parameters": fn.get("parameters", fn.get("input_schema", {})),
                     },
                 }
             )
