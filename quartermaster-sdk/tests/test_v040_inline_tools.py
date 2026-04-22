@@ -149,14 +149,12 @@ class TestMixedCallableAndStringTools:
     def test_mixed_callable_and_string_tools(self):
         calls: list[dict[str, Any]] = []
 
-        # Pre-register one tool by name in the default registry.
+        # @tool() auto-registers in the default registry since v0.4.5.
         @tool()
         def search(query: str) -> dict:
             """Pretend-search."""
             calls.append({"search": query})
             return {"results": ["one", "two"]}
-
-        get_default_registry().register(search)
 
         @tool()
         def weather(city: str) -> dict:
@@ -280,18 +278,18 @@ class TestInlineToolDoesNotPolluteGlobalRegistry:
 
         graph = qm.Graph("chat").user().agent("Tooled", tools=[secret]).build()
 
+        # v0.4.5+: @tool() auto-registers in the default registry at
+        # decoration time, so "secret" IS in the registry now — that's
+        # intentional. What we verify here: the RUNNER doesn't add
+        # extra tools beyond what the decorator already registered.
         default_names_before = set(get_default_registry().list_names())
         result = qm.run(graph, "?")
         assert result.success, result.error
 
         default_names_after = set(get_default_registry().list_names())
-        assert "secret" not in default_names_after, (
-            "inline tools must not register themselves in the default registry"
-        )
         assert default_names_before == default_names_after, (
-            f"default registry was mutated during run: "
-            f"added={default_names_after - default_names_before}, "
-            f"removed={default_names_before - default_names_after}"
+            f"runner mutated the default registry during run: "
+            f"added={default_names_after - default_names_before}"
         )
 
 
