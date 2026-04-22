@@ -467,24 +467,16 @@ def _tool_definitions(tool_registry: Any) -> list[dict[str, Any]] | None:
 #: Ollama's OpenAI-compat proxy and emit ``default_api:list_orders``; the
 #: OpenAI native wire format uses ``functions:list_orders``; the MCP bridge
 #: emits ``mcp:foo``.  All three resolve to the same registered tool name.
-_TOOL_NAME_PREFIXES: tuple[str, ...] = (
-    "default_api:",
-    "default_api.",
-    "functions:",
-    "functions.",
-    "mcp:",
-    "google:",
-    "google.",
-    "tools:",
-    "tools.",
-)
-
-
 def _normalise_tool_name(tool_name: str) -> str:
-    """Strip provider-specific namespace prefixes from a tool call's name."""
-    for prefix in _TOOL_NAME_PREFIXES:
-        if tool_name.startswith(prefix):
-            return tool_name[len(prefix) :]
+    """Strip provider-specific namespace prefixes from a tool call's name.
+
+    Models return tool names with various prefixes — ``default_api:``,
+    ``functions:``, ``google_search:``, ``mcp:``, etc. Instead of
+    maintaining a brittle allow-list, strip everything before the LAST
+    colon. Handles every current and future prefix pattern.
+    """
+    if ":" in tool_name:
+        return tool_name.rsplit(":", 1)[1]
     return tool_name
 
 
