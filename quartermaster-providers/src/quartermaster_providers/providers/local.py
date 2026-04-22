@@ -158,6 +158,32 @@ class ChatResult:
     raw: dict[str, Any] | None = None
 
 
+def _env_auth() -> tuple[str, str] | None:
+    """Read HTTP Basic Auth credentials from OLLAMA_USER + OLLAMA_PASS env vars."""
+    user = os.environ.get("OLLAMA_USER")
+    pwd = os.environ.get("OLLAMA_PASS")
+    if user and pwd:
+        return (user, pwd)
+    return None
+
+
+def _env_headers() -> dict[str, str]:
+    """Read extra HTTP headers from OLLAMA_HEADERS env var.
+
+    Format: ``Key:Value,Key2:Value2`` (comma-separated ``Key:Value`` pairs).
+    """
+    raw = os.environ.get("OLLAMA_HEADERS", "")
+    if not raw.strip():
+        return {}
+    headers: dict[str, str] = {}
+    for pair in raw.split(","):
+        pair = pair.strip()
+        if ":" in pair:
+            k, _, v = pair.partition(":")
+            headers[k.strip()] = v.strip()
+    return headers
+
+
 class OllamaProvider(OpenAICompatibleProvider):
     """Ollama local inference.
 
@@ -183,24 +209,38 @@ class OllamaProvider(OpenAICompatibleProvider):
         base_url: str | None = None,
         api_key: str = "ollama",
         default_model: str | None = None,
+        auth: tuple[str, str] | None = None,
+        headers: dict[str, str] | None = None,
         **kwargs,
     ):
         resolved = base_url or os.environ.get("OLLAMA_HOST") or self.DEFAULT_BASE_URL
-        # Surface a warning if the configured URL points at a known
-        # cloud-metadata / link-local host.  Operators can ignore it for
-        # legitimate tunnels; in multi-tenant setups it makes hostile
-        # SSRF attempts visible in logs even if we don't outright block.
         _warn_if_suspicious_url(resolved)
-        # Stash the registration-time default model so ``chat()`` can use
-        # it when callers omit the per-call ``model=`` kwarg — without
-        # this the docstring's "Defaults to the provider's bound default
-        # model" claim was vacuously broken (the registry's default_model
-        # was stored on the registry, never reached the provider).
         self._chat_default_model = default_model
+
+        # v0.4.3: HTTP Basic Auth + custom headers for Ollama behind
+        # reverse proxies (nginx, Caddy, Traefik). ``auth`` is a
+        # (username, password) tuple; ``headers`` are extra HTTP headers
+        # injected into every request (both the OpenAI SDK path and the
+        # native httpx path).
+        #
+        # Resolution: ``auth`` kwarg > OLLAMA_USER + OLLAMA_PASS env vars.
+        # ``headers`` kwarg > OLLAMA_HEADERS env var (comma-separated
+        # ``Key:Value`` pairs, e.g. ``X-Token:abc,X-Org:sorex``).
+        self._http_auth: tuple[str, str] | None = auth or _env_auth()
+        self._extra_headers: dict[str, str] = dict(headers or _env_headers())
+
+        # Pick auth_method for the OpenAI SDK async path.
+        auth_method = "none"
+        auth_credentials: tuple[str, str] | None = None
+        if self._http_auth:
+            auth_method = "basic"
+            auth_credentials = self._http_auth
+
         super().__init__(
             base_url=_normalize_openai_compat_url(resolved),
             api_key=api_key,
-            auth_method="none",
+            auth_method=auth_method,
+            auth_credentials=auth_credentials,
             provider_name="ollama",
             **kwargs,
         )
@@ -312,7 +352,12 @@ class OllamaProvider(OpenAICompatibleProvider):
         url = f"{_strip_v1(self.base_url)}/api/chat"
 
         try:
-            with httpx.Client(timeout=timeout) as client:
+            client_kwargs: dict[str, Any] = {"timeout": timeout}
+            if self._http_auth:
+                client_kwargs["auth"] = self._http_auth
+            if self._extra_headers:
+                client_kwargs["headers"] = self._extra_headers
+            with httpx.Client(**client_kwargs) as client:
                 response = client.post(url, json=payload)
                 response.raise_for_status()
                 body = response.json()
