@@ -160,6 +160,22 @@ class OllamaNativeProvider(_OpenAICompatOllamaProvider):
             **kwargs,
         )
 
+    # ── Auth helpers ──────────────────────────────────────────────────
+
+    def _httpx_kwargs(self, timeout: float = 10.0) -> dict[str, Any]:
+        """Build kwargs for httpx.Client/AsyncClient with auth + headers.
+
+        Centralises the auth wiring so every native httpx call
+        (capability detection, /api/chat sync+async, streaming)
+        goes through the configured credentials.
+        """
+        kwargs: dict[str, Any] = {"timeout": timeout}
+        if getattr(self, "_http_auth", None):
+            kwargs["auth"] = self._http_auth
+        if getattr(self, "_extra_headers", None):
+            kwargs["headers"] = dict(self._extra_headers)
+        return kwargs
+
     # ── Capability detection ─────────────────────────────────────────
 
     def _fetch_tags(self) -> dict[str, Any]:
@@ -184,7 +200,7 @@ class OllamaNativeProvider(_OpenAICompatOllamaProvider):
 
         url = f"{_strip_v1(self.base_url)}/api/tags"
         try:
-            with httpx.Client(timeout=10.0) as client:
+            with httpx.Client(**self._httpx_kwargs(timeout=10.0)) as client:
                 response = client.get(url)
                 response.raise_for_status()
                 body = response.json()
@@ -441,7 +457,7 @@ class OllamaNativeProvider(_OpenAICompatOllamaProvider):
 
         url = self._native_chat_url()
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(**self._httpx_kwargs(timeout=timeout)) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
                 return response.json()
@@ -477,7 +493,7 @@ class OllamaNativeProvider(_OpenAICompatOllamaProvider):
         url = self._native_chat_url()
         try:
             async with (
-                httpx.AsyncClient(timeout=timeout) as client,
+                httpx.AsyncClient(**self._httpx_kwargs(timeout=timeout)) as client,
                 client.stream("POST", url, json=streaming_payload) as response,
             ):
                 response.raise_for_status()
