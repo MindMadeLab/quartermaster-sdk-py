@@ -1193,12 +1193,16 @@ class InstructionFormExecutor(NodeExecutor):
 
         # Inject schema into system prompt
         full_system = (
-            f"{system_instruction}\n\n"
-            "Respond with a single JSON object matching this schema. "
-            "Do not wrap the JSON in markdown code fences. Do not emit any "
-            "text outside the JSON object.\n\n"
-            f"Schema: {schema_json}"
-        ).strip() if schema_json else system_instruction
+            (
+                f"{system_instruction}\n\n"
+                "Respond with a single JSON object matching this schema. "
+                "Do not wrap the JSON in markdown code fences. Do not emit any "
+                "text outside the JSON object.\n\n"
+                f"Schema: {schema_json}"
+            ).strip()
+            if schema_json
+            else system_instruction
+        )
 
         provider_name, model = _resolve_provider_and_model(
             self._registry,
@@ -1212,7 +1216,8 @@ class InstructionFormExecutor(NodeExecutor):
             provider = None
         if provider is None:
             return NodeResult(
-                success=False, data={},
+                success=False,
+                data={},
                 error=f"Provider '{provider_name}' not registered.",
             )
 
@@ -1261,7 +1266,8 @@ class InstructionFormExecutor(NodeExecutor):
 
         if parsed is None:
             return NodeResult(
-                success=False, data={"raw_text": raw_text},
+                success=False,
+                data={"raw_text": raw_text},
                 error=f"Could not parse JSON from LLM response",
                 output_text=raw_text,
             )
@@ -1272,6 +1278,7 @@ class InstructionFormExecutor(NodeExecutor):
             try:
                 module_path, class_name = schema_class.rsplit(".", 1)
                 import importlib
+
                 mod = importlib.import_module(module_path)
                 cls = getattr(mod, class_name)
                 validated = cls.model_validate(parsed)
@@ -1320,17 +1327,14 @@ class ProgramRunnerExecutor(NodeExecutor):
         program = context.get_meta("program", "")
         if not program:
             return NodeResult(
-                success=False, data={},
+                success=False,
+                data={},
                 error="ProgramRunner node has no 'program' in metadata",
             )
 
         # Collect arguments: everything in metadata except reserved keys
         reserved = {"program", "capture_as", "show_output"}
-        args = {
-            k: v
-            for k, v in context.current_node.metadata.items()
-            if k not in reserved
-        }
+        args = {k: v for k, v in context.current_node.metadata.items() if k not in reserved}
 
         # Resolve the tool
         per_node_tools = context.get_meta("_tool_registry") or self._tools
@@ -1338,7 +1342,8 @@ class ProgramRunnerExecutor(NodeExecutor):
 
         if per_node_tools is None:
             return NodeResult(
-                success=False, data={},
+                success=False,
+                data={},
                 error=f"No tool registry available for ProgramRunner '{normalised}'",
             )
 
@@ -1346,14 +1351,16 @@ class ProgramRunnerExecutor(NodeExecutor):
             tool_obj = per_node_tools.get(normalised)
         except Exception as exc:
             return NodeResult(
-                success=False, data={},
+                success=False,
+                data={},
                 error=f"Tool '{normalised}' not found: {exc}",
             )
 
         safe_run = getattr(tool_obj, "safe_run", None) or getattr(tool_obj, "run", None)
         if safe_run is None:
             return NodeResult(
-                success=False, data={},
+                success=False,
+                data={},
                 error=f"Tool '{normalised}' has no run() method",
             )
 
@@ -1366,7 +1373,8 @@ class ProgramRunnerExecutor(NodeExecutor):
         except Exception as exc:
             logger.warning("ProgramRunner %r raised: %s", normalised, exc)
             return NodeResult(
-                success=False, data={},
+                success=False,
+                data={},
                 error=f"Tool '{normalised}' failed: {exc}",
             )
 
@@ -1387,17 +1395,47 @@ class ProgramRunnerExecutor(NodeExecutor):
             success=True,
             data={
                 "memory_updates": {"__conversation__": conversation},
-                "tool_calls": [{
-                    "tool": normalised,
-                    "arguments": args,
-                    "result": text[:500],
-                    "raw": result if isinstance(result, dict) else None,
-                    "error": None,
-                    "iteration": 0,
-                }],
+                "tool_calls": [
+                    {
+                        "tool": normalised,
+                        "arguments": args,
+                        "result": text[:500],
+                        "raw": result if isinstance(result, dict) else None,
+                        "error": None,
+                        "iteration": 0,
+                    }
+                ],
             },
             output_text=text,
         )
+
+
+class ViewMetadataExecutor(NodeExecutor):
+    """Debug node that dumps flow memory and conversation as text."""
+
+    async def execute(self, context: ExecutionContext) -> NodeResult:
+        import json
+
+        sections = []
+        sections.append("=== Flow Memory ===")
+        for k, v in sorted(context.memory.items()):
+            if k.startswith("__"):
+                continue
+            sections.append(f"  {k}: {str(v)[:200]}")
+
+        conversation = context.memory.get("__conversation__", [])
+        if conversation:
+            sections.append("\n=== Conversation ===")
+            for entry in conversation:
+                sections.append(f"  [{entry.get('role', '?')}]: {str(entry.get('text', ''))[:200]}")
+
+        sections.append(f"\n=== Node: {context.current_node.name} ===")
+        sections.append(
+            f"  metadata: {json.dumps(dict(context.current_node.metadata), default=str)[:500]}"
+        )
+
+        text = "\n".join(sections)
+        return NodeResult(success=True, data={}, output_text=text)
 
 
 class PassthroughExecutor(NodeExecutor):
@@ -1605,6 +1643,7 @@ def build_default_registry(
     program_runner = ProgramRunnerExecutor(tool_registry=tool_registry)
     reg.register(NodeType.PROGRAM_RUNNER.value, program_runner)
     reg.register(NodeType.STATIC_PROGRAM_PARAMETERS.value, passthrough)
+    reg.register(NodeType.VIEW_METADATA.value, ViewMetadataExecutor())
 
     # Memory nodes
     reg.register(NodeType.WRITE_MEMORY.value, mem_write)

@@ -362,8 +362,11 @@ class _BranchBuilder:
                 schema_json = _json.dumps(schema, separators=(",", ":"))
 
         meta = _llm_meta(
-            model=model, provider=provider, temperature=temperature,
-            system_instruction=system_instruction, **kwargs,
+            model=model,
+            provider=provider,
+            temperature=temperature,
+            system_instruction=system_instruction,
+            **kwargs,
         )
         meta["schema_json"] = schema_json
         meta["schema_class"] = (
@@ -371,7 +374,9 @@ class _BranchBuilder:
         )
 
         node = GraphNode(
-            type=NodeType.INSTRUCTION_FORM, name=name, metadata=meta,
+            type=NodeType.INSTRUCTION_FORM,
+            name=name,
+            metadata=meta,
             message_type=MessageType.ASSISTANT,
         )
         _apply_flow_config(node, flow_cfg)
@@ -446,6 +451,89 @@ class _BranchBuilder:
         meta["tool_scope"] = tool_scope
         node = GraphNode(
             type=NodeType.AGENT, name=name, metadata=meta, message_type=MessageType.ASSISTANT
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
+    def instruction_program(
+        self,
+        name: str,
+        model: str = "",
+        provider: str = "",
+        system_instruction: str = "",
+        tools: list[Any] | None = None,
+        **kwargs: Any,
+    ) -> _BranchBuilder:
+        """Add an InstructionProgram node — LLM emits tool calls in one round.
+
+        Unlike ``agent()`` which loops (call tools → feed results → call
+        again), this node makes ONE LLM call that produces tool-call
+        parameters. The tools execute, and the combined result is the
+        node's output. Use this when the LLM should decide WHICH tool
+        to call and with what arguments, but you don't need a multi-turn
+        reasoning loop.
+        """
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        meta = _llm_meta(
+            model=model,
+            provider=provider,
+            system_instruction=system_instruction,
+            **kwargs,
+        )
+        if tools:
+            meta["program_version_ids"] = _normalise_agent_tools(tools, self._graph._inline_tools)
+        node = GraphNode(
+            type=NodeType.INSTRUCTION_PROGRAM,
+            name=name,
+            metadata=meta,
+            message_type=MessageType.ASSISTANT,
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
+    def user_program_form(
+        self,
+        name: str,
+        parameters: list[dict] | None = None,
+        tools: list[Any] | None = None,
+        **kwargs: Any,
+    ) -> _BranchBuilder:
+        """Add a UserProgramForm node — form that collects tool parameters from the user.
+
+        Combines a user form (structured input fields) with tool
+        invocation: the user fills in the parameters, the tools execute
+        with those values.
+
+        Args:
+            parameters: Form field definitions (same as ``user_form``).
+            tools: Tools to invoke with the collected parameters.
+        """
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        meta: dict[str, Any] = {"parameters": parameters or []}
+        if tools:
+            meta["program_version_ids"] = _normalise_agent_tools(tools, self._graph._inline_tools)
+        meta.update(kwargs)
+        node = GraphNode(
+            type=NodeType.USER_PROGRAM_FORM,
+            name=name,
+            metadata=meta,
+            message_type=MessageType.USER,
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
+    def view_metadata(self, name: str = "View Metadata", **kwargs: Any) -> _BranchBuilder:
+        """Add a ViewMetadata node — debug/inspection node that exposes flow state.
+
+        Outputs the current flow memory, node metadata, and conversation
+        history as text. Useful for debugging graph execution.
+        """
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        node = GraphNode(
+            type=NodeType.VIEW_METADATA,
+            name=name,
+            metadata=dict(kwargs),
+            message_type=MessageType.ASSISTANT,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1541,8 +1629,11 @@ class GraphBuilder:
                 schema_json = _json.dumps(schema, separators=(",", ":"))
 
         meta = _llm_meta(
-            model=model, provider=provider, temperature=temperature,
-            system_instruction=system_instruction, **kwargs,
+            model=model,
+            provider=provider,
+            temperature=temperature,
+            system_instruction=system_instruction,
+            **kwargs,
         )
         meta["schema_json"] = schema_json
         meta["schema_class"] = (
@@ -1550,7 +1641,9 @@ class GraphBuilder:
         )
 
         node = GraphNode(
-            type=NodeType.INSTRUCTION_FORM, name=name, metadata=meta,
+            type=NodeType.INSTRUCTION_FORM,
+            name=name,
+            metadata=meta,
             message_type=MessageType.ASSISTANT,
         )
         _apply_flow_config(node, flow_cfg)
@@ -1629,6 +1722,74 @@ class GraphBuilder:
         meta["tool_scope"] = tool_scope
         node = GraphNode(
             type=NodeType.AGENT, name=name, metadata=meta, message_type=MessageType.ASSISTANT
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
+    def instruction_program(
+        self,
+        name: str,
+        model: str = "",
+        provider: str = "",
+        system_instruction: str = "",
+        tools: list[Any] | None = None,
+        **kwargs: Any,
+    ) -> GraphBuilder:
+        """Add an InstructionProgram node — single-round LLM tool dispatch.
+
+        See :meth:`_BranchBuilder.instruction_program`.
+        """
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        meta = _llm_meta(
+            model=model,
+            provider=provider,
+            system_instruction=system_instruction,
+            **kwargs,
+        )
+        if tools:
+            meta["program_version_ids"] = _normalise_agent_tools(tools, self._inline_tools)
+        node = GraphNode(
+            type=NodeType.INSTRUCTION_PROGRAM,
+            name=name,
+            metadata=meta,
+            message_type=MessageType.ASSISTANT,
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
+    def user_program_form(
+        self,
+        name: str,
+        parameters: list[dict] | None = None,
+        tools: list[Any] | None = None,
+        **kwargs: Any,
+    ) -> GraphBuilder:
+        """Add a UserProgramForm node — form + tool execution.
+
+        See :meth:`_BranchBuilder.user_program_form`.
+        """
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        meta: dict[str, Any] = {"parameters": parameters or []}
+        if tools:
+            meta["program_version_ids"] = _normalise_agent_tools(tools, self._inline_tools)
+        meta.update(kwargs)
+        node = GraphNode(
+            type=NodeType.USER_PROGRAM_FORM,
+            name=name,
+            metadata=meta,
+            message_type=MessageType.USER,
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
+    def view_metadata(self, name: str = "View Metadata", **kwargs: Any) -> GraphBuilder:
+        """Add a ViewMetadata debug node. See :meth:`_BranchBuilder.view_metadata`."""
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        node = GraphNode(
+            type=NodeType.VIEW_METADATA,
+            name=name,
+            metadata=dict(kwargs),
+            message_type=MessageType.ASSISTANT,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
