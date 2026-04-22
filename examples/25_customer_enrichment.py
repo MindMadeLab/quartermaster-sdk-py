@@ -272,6 +272,16 @@ if __name__ == "__main__":
     print("--- Running enrichment ---\n")
     result = qm.run(graph, f"{company_name}, {country}")
 
+    print(f"\nGraph result: success={result.success}, error={result.error}")
+    print(f"Captures: {list(result.captures.keys())}")
+    print(f"Text (first 200 chars): {result.text[:200]!r}")
+    if not result.success:
+        print(f"\nERROR: {result.error}")
+        print("Trace events:")
+        for ev in result.trace.events:
+            print(f"  {type(ev).__name__}: {str(ev)[:100]}")
+        raise SystemExit(1)
+
     # The graph produced research notes; now extract structured profile
     # via a separate instruction_form call (Pydantic-validated output).
     research_notes = result["notes"].output_text or result.text
