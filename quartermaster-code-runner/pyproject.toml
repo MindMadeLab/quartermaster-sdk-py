@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quartermaster-code-runner"
-version = "0.4.10"
+version = "0.4.11"
 description = "Secure sandboxed code execution service supporting Python, Node.js, Go, Rust, Deno, and Bun via Docker containers"
 readme = "README.md"
 license = "Apache-2.0"
