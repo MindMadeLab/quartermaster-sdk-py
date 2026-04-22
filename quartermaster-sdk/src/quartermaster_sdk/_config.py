@@ -72,6 +72,8 @@ def configure(
     timeout: float | None = None,
     connect_timeout: float | None = None,
     read_timeout: float | None = None,
+    auth: tuple[str, str] | None = None,
+    headers: dict[str, str] | None = None,
     auto_redact_pii: bool = False,
     auto_redact_policy: str = "all",
     telemetry: bool = False,
@@ -165,6 +167,14 @@ def configure(
             "api_key": api_key,
             "default_model": resolved_default_model,
         }
+        # Forward auth + headers to local providers for reverse-proxy
+        # setups (nginx basic auth, Caddy tokens, etc.). Falls back to
+        # OLLAMA_USER/OLLAMA_PASS + OLLAMA_HEADERS env vars inside the
+        # provider constructor when kwargs are None.
+        if auth is not None:
+            register_kwargs["auth"] = auth
+        if headers is not None:
+            register_kwargs["headers"] = headers
         # Forward ``tool_protocol`` only to Ollama — other local
         # engines don't know the kwarg and would reject it.
         if provider == "ollama":
