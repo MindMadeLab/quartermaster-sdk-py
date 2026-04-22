@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quartermaster-nodes"
-version = "0.4.2"
+version = "0.4.3"
 description = "Library of composable node types for building AI agent graphs"
 readme = "README.md"
 license = "Apache-2.0"
@@ -26,8 +26,8 @@ classifiers = [
 ]
 dependencies = [
     "jinja2>=3.1",
-    "quartermaster-graph>=0.4.2",
-    "quartermaster-providers>=0.4.2",
+    "quartermaster-graph>=0.4.3",
+    "quartermaster-providers>=0.4.3",
     "simpleeval>=1.0.5",
 ]
 
