@@ -13,7 +13,6 @@ Built by [MindMade](https://mindmade.io) in Slovenia.
 
 - **Application timeouts** -- `qm.configure(timeout=, connect_timeout=, read_timeout=)` with per-call overrides via `qm.run(..., read_timeout=)`.
 - **Stream cancellation** -- `with qm.run.stream(graph, input) as stream:` context-manager protocol; break/return/exception triggers cooperative cancellation. `qm.Cancelled` exception + `ctx.cancelled` polling flag for tools.
-- **Native Ollama tool calls** -- auto-detects Ollama and uses `/api/chat` natively, eliminating tool-name hallucinations on Gemma models. Configure with `ollama_tool_protocol=`.
 - **Per-node tool scoping** -- `agent(tools=[...])` is now strictly enforced; unknown tool names raise at build time. Escape hatch: `tool_scope="permissive"`.
 - **Inline `@tool` callables** -- `agent(tools=[my_func])` accepts bare callables alongside registry names.
 - **`instruction_form` robustness** -- Gemma preamble handling + dict-schema support (pass a plain dict instead of a Pydantic model).
@@ -149,33 +148,6 @@ result.trace.custom(name="source_found")  # filtered CustomEvent list
 result.trace.by_node["Researcher"].text   # tokens for a single node
 print(result.trace.as_jsonl())           # JSONL export for logs / fixtures
 ```
-
-### Sync `OllamaProvider.chat()` for non-graph callers
-
-For email classification, OCR pipelines, Celery workers, Django views — anything
-where you'd rather call an LLM than build a graph — use the synchronous native
-shim. Talks Ollama's `/api/chat` directly via `httpx`, no `async_to_sync` wrapper:
-
-```python
-from quartermaster_providers.providers.local import OllamaProvider
-
-provider = OllamaProvider(default_model="gemma4:26b")  # honours $OLLAMA_HOST
-result = provider.chat(
-    messages=[
-        {"role": "system", "content": "Respond in Slovenian. Keep it short."},
-        {"role": "user", "content": "Pozdravljen, koliko je ura?"},
-    ],
-    max_output_tokens=128,        # honoured — capped at Ollama's `num_predict`
-    thinking_level="off",         # off / low / medium / high
-)
-print(result.content)             # promoted from `reasoning` if `content` is empty
-print(result.tool_calls)          # list[ToolCall]
-print(result.usage)               # {prompt_tokens, completion_tokens, total_tokens}
-```
-
-`ServiceUnavailableError` raises on connection failures (instead of silently
-returning an empty result), and `ProviderError` on HTTP errors with status code
-attached.
 
 ### Decision Routing
 

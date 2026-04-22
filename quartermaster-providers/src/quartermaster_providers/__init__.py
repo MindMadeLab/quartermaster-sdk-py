@@ -24,7 +24,6 @@ from quartermaster_providers.circuit_breaker import (
     CircuitOpenError,
 )
 from quartermaster_providers.config import LLMConfig
-from quartermaster_providers.providers.local import ChatResult
 from quartermaster_providers.exceptions import (
     AuthenticationError,
     ContentFilterError,
@@ -87,8 +86,6 @@ __all__ = [
     "infer_provider",
     "get_default_registry",
     "register_local",
-    # Sync chat shim result type
-    "ChatResult",
     # Circuit breaker (v0.4.0)
     "CircuitBreaker",
     "CircuitBreakerState",

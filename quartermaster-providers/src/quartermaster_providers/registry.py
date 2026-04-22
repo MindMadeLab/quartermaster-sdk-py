@@ -247,13 +247,6 @@ class ProviderRegistry:
                 ctor_kwargs["base_url"] = _normalize_openai_compat_url(base_url)
             if api_key:
                 ctor_kwargs["api_key"] = api_key
-            # Pass default_model through so providers that expose a sync
-            # facade (currently OllamaProvider.chat()) can fall back to
-            # it when callers omit ``model=`` per call.  Only forwarded
-            # when the provider class accepts it, to stay backwards-
-            # compatible with engines that don't.
-            if default_model and "default_model" in cls.__init__.__code__.co_varnames:
-                ctor_kwargs["default_model"] = default_model
             self._factories[provider_name] = (cls, ctor_kwargs)
         else:
             raise ProviderError(
