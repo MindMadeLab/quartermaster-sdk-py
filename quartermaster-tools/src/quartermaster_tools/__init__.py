@@ -76,7 +76,7 @@ from quartermaster_tools.types import (
     ToolResult,
 )
 
-__version__ = "0.4.7"
+__version__ = "0.4.8"
 __all__ = [
     "AbstractLocalTool",
     "AbstractTool",
