@@ -26,10 +26,10 @@ class LLMConfig:
             alongside the prompt for vision-capable models. ``base64_data``
             is the raw image bytes encoded as ASCII base64 (no ``data:``
             URI prefix); ``mime_type`` is e.g. ``"image/jpeg"`` /
-            ``"image/png"`` / ``"image/webp"``. Populated by the v0.3.0
-            engine path that reads ``flow_memory["__user_images__"]``;
-            providers that support vision consume this list when building
-            the request payload. Empty/``None`` means a text-only request.
+            ``"image/png"`` / ``"image/webp"``. Populated by the engine
+            path that reads ``flow_memory["__user_images__"]``; providers
+            that support vision consume this list when building the
+            request payload. Empty/``None`` means a text-only request.
         thinking_enabled: Whether to enable extended thinking mode (e.g., Claude thinking).
         thinking_budget: Maximum tokens allowed for thinking/reasoning.
         top_p: Nucleus sampling parameter (alternative to temperature).

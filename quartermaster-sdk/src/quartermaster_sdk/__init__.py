@@ -31,9 +31,6 @@ __version__ = "0.5.1"
 # * ``configure(provider="ollama", default_model=...)`` — boot once
 # * ``instruction(system=..., user=...)`` — single-shot prompt → text
 # * ``instruction_form(schema, system=..., user=...)`` — prompt → typed JSON
-#
-# Legacy v0.1.x exports (``FlowRunner``, ``build_default_registry``, …)
-# remain available for integrators who need the low-level surface.
 from quartermaster_engine import (  # noqa: F401
     AgentExecutor,
     Cancelled,

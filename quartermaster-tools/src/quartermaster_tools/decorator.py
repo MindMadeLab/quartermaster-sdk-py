@@ -207,9 +207,9 @@ def is_quartermaster_tool(obj: Any) -> bool:
     * :class:`FunctionTool` instances produced by :func:`tool`
     * Any other :class:`AbstractTool` subclass instance
 
-    Used by the SDK runner (v0.4.0) to detect already-wrapped callables
-    in ``.agent(tools=[...])`` so they can be pulled through to the
-    run-time tool registry without a manual ``register()`` step.
+    Used by the SDK runner to detect already-wrapped callables in
+    ``.agent(tools=[...])`` so they can be pulled through to the run-time
+    tool registry without a manual ``register()`` step.
     """
     return isinstance(obj, (FunctionTool, AbstractTool))
 
@@ -217,9 +217,9 @@ def is_quartermaster_tool(obj: Any) -> bool:
 def auto_decorate(func: Callable[..., Any]) -> FunctionTool:
     """Wrap a plain callable as a :class:`FunctionTool` on the fly.
 
-    Used by the SDK runner (v0.4.0) when ``.agent(tools=[...])`` is
-    handed a bare ``def`` function that the caller forgot — or chose not
-    — to decorate with :func:`tool`.  The result has the same shape as
+    Used by the SDK runner when ``.agent(tools=[...])`` is handed a bare
+    ``def`` function that the caller forgot — or chose not — to decorate
+    with :func:`tool`.  The result has the same shape as
     ``@tool()`` would have produced: the function's ``__name__`` becomes
     the tool name, the signature becomes the parameter list, and the
     docstring populates short/long descriptions.
