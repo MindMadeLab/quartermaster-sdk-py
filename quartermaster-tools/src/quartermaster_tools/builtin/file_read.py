@@ -118,7 +118,3 @@ def read_file(path: str, encoding: str = "utf-8") -> dict:
         encoding: Text encoding to use when reading the file.
     """
     return _read_file_impl(path, encoding=encoding)
-
-
-# Backward-compatible alias
-ReadFileTool = read_file

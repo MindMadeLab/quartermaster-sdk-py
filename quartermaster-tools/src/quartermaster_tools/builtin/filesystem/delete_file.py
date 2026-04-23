@@ -42,7 +42,3 @@ def delete_file(path: str, confirm: bool) -> dict:
         return {"error": f"Delete failed: {e}"}
 
     return {"path": path, "deleted": True}
-
-
-# Backward-compatible alias
-DeleteFileTool = delete_file

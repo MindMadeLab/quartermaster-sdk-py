@@ -1,4 +1,4 @@
-"""Tests for the NodeRegistry."""
+"""Tests for the NodeCatalog."""
 
 import pytest
 
@@ -11,7 +11,7 @@ from quartermaster_nodes.enums import (
     AvailableTraversingOut,
 )
 from quartermaster_nodes.exceptions import NodeNotFoundError
-from quartermaster_nodes.registry import NodeRegistry, register_node
+from quartermaster_nodes.registry import NodeCatalog, register_node
 
 
 class DummyNode(AbstractAssistantNode):
@@ -76,40 +76,40 @@ class DummyNodeV2(AbstractAssistantNode):
         pass
 
 
-class TestNodeRegistry:
+class TestNodeCatalog:
     def test_register_and_get(self):
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         registry.register(DummyNode)
         assert registry.get("DummyNode") is DummyNode
 
     def test_get_with_version(self):
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         registry.register(DummyNode)
         assert registry.get("DummyNode", "1.0") is DummyNode
 
     def test_get_nonexistent_raises(self):
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         with pytest.raises(NodeNotFoundError):
             registry.get("NonExistent")
 
     def test_get_wrong_version_raises(self):
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         registry.register(DummyNode)
         with pytest.raises(NodeNotFoundError):
             registry.get("DummyNode", "99.0")
 
     def test_has_returns_true(self):
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         registry.register(DummyNode)
         assert registry.has("DummyNode")
         assert registry.has("DummyNode", "1.0")
 
     def test_has_returns_false(self):
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         assert not registry.has("NonExistent")
 
     def test_multiple_versions(self):
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         registry.register(DummyNode)
         registry.register(DummyNodeV2)
 
@@ -119,7 +119,7 @@ class TestNodeRegistry:
         assert registry.get("DummyNode") is DummyNodeV2
 
     def test_count(self):
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         assert registry.count == 0
         registry.register(DummyNode)
         assert registry.count == 1
@@ -127,7 +127,7 @@ class TestNodeRegistry:
         assert registry.count == 2
 
     def test_list_nodes(self):
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         registry.register(DummyNode)
         nodes = registry.list_nodes()
 
@@ -140,14 +140,14 @@ class TestNodeRegistry:
         assert "metadata_schema" in nodes[0]
 
     def test_catalog_json(self):
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         registry.register(DummyNode)
         catalog = registry.catalog_json()
         assert len(catalog) == 1
         assert catalog[0]["name"] == "DummyNode"
 
     def test_register_node_decorator(self):
-        registry = NodeRegistry()
+        registry = NodeCatalog()
 
         @register_node(registry)
         class DecoratedNode(AbstractAssistantNode):
@@ -184,11 +184,11 @@ class TestNodeRegistry:
         assert registry.get("DecoratedNode") is DecoratedNode
 
     def test_discover_nodes(self):
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         count = registry.discover("quartermaster_nodes.nodes")
         assert count > 0  # Should find all our node implementations
 
     def test_discover_nonexistent_package(self):
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         count = registry.discover("nonexistent.package")
         assert count == 0

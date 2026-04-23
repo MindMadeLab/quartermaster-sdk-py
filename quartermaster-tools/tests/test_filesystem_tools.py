@@ -12,14 +12,14 @@ import tempfile
 import pytest
 
 from quartermaster_tools.builtin.filesystem import (
-    CopyFileTool,
-    CreateDirectoryTool,
-    DeleteFileTool,
-    FileInfoTool,
-    FindFilesTool,
-    GrepTool,
-    ListDirectoryTool,
-    MoveFileTool,
+    copy_file,
+    create_directory,
+    delete_file,
+    file_info,
+    find_files,
+    grep,
+    list_directory,
+    move_file,
 )
 
 
@@ -42,46 +42,46 @@ def tmp(tmp_path):
 
 
 # ===================================================================
-# ListDirectoryTool
+# list_directory
 # ===================================================================
 
 
 class TestListDirectoryTool:
     def test_basic_listing(self, tmp):
-        result = ListDirectoryTool.run(path=str(tmp))
+        result = list_directory.run(path=str(tmp))
         assert result.success
         names = [e["name"] for e in result.data["entries"]]
         assert "a.txt" in names
         assert "sub" in names
 
     def test_hidden_excluded_by_default(self, tmp):
-        result = ListDirectoryTool.run(path=str(tmp))
+        result = list_directory.run(path=str(tmp))
         names = [e["name"] for e in result.data["entries"]]
         assert ".hidden" not in names
 
     def test_hidden_included(self, tmp):
-        result = ListDirectoryTool.run(path=str(tmp), include_hidden=True)
+        result = list_directory.run(path=str(tmp), include_hidden=True)
         names = [e["name"] for e in result.data["entries"]]
         assert ".hidden" in names
 
     def test_pattern_filter(self, tmp):
-        result = ListDirectoryTool.run(path=str(tmp), pattern="*.py")
+        result = list_directory.run(path=str(tmp), pattern="*.py")
         names = [e["name"] for e in result.data["entries"]]
         assert "b.py" in names
         assert "a.txt" not in names
 
     def test_recursive(self, tmp):
-        result = ListDirectoryTool.run(path=str(tmp), recursive=True)
+        result = list_directory.run(path=str(tmp), recursive=True)
         names = [e["name"] for e in result.data["entries"]]
         assert any("c.txt" in n for n in names)
 
     def test_not_a_directory(self, tmp):
-        result = ListDirectoryTool.run(path=str(tmp / "a.txt"))
+        result = list_directory.run(path=str(tmp / "a.txt"))
         assert not result.success
         assert "Not a directory" in result.error
 
     def test_blocked_path(self):
-        result = ListDirectoryTool.run(path="/etc/passwd")
+        result = list_directory.run(path="/etc/passwd")
         assert not result.success
         assert "Access denied" in result.error
 
@@ -95,135 +95,135 @@ class TestListDirectoryTool:
 
 
 # ===================================================================
-# FindFilesTool
+# find_files
 # ===================================================================
 
 
 class TestFindFilesTool:
     def test_glob_star(self, tmp):
-        result = FindFilesTool.run(root_path=str(tmp), pattern="**/*.py")
+        result = find_files.run(root_path=str(tmp), pattern="**/*.py")
         assert result.success
         assert result.data["count"] >= 2
 
     def test_simple_glob(self, tmp):
-        result = FindFilesTool.run(root_path=str(tmp), pattern="*.txt")
+        result = find_files.run(root_path=str(tmp), pattern="*.txt")
         assert result.success
         assert any("a.txt" in f for f in result.data["files"])
 
     def test_name_pattern_regex(self, tmp):
-        result = FindFilesTool.run(root_path=str(tmp), pattern="**/*", name_pattern=r"^[cd]\.")
+        result = find_files.run(root_path=str(tmp), pattern="**/*", name_pattern=r"^[cd]\.")
         assert result.success
         names = [os.path.basename(f) for f in result.data["files"]]
         assert all(n.startswith(("c", "d")) for n in names)
 
     def test_invalid_regex(self, tmp):
-        result = FindFilesTool.run(root_path=str(tmp), pattern="*", name_pattern="[invalid")
+        result = find_files.run(root_path=str(tmp), pattern="*", name_pattern="[invalid")
         assert not result.success
         assert "Invalid regex" in result.error
 
     def test_not_a_directory(self, tmp):
-        result = FindFilesTool.run(root_path=str(tmp / "a.txt"), pattern="*")
+        result = find_files.run(root_path=str(tmp / "a.txt"), pattern="*")
         assert not result.success
 
     def test_blocked_path(self):
-        result = FindFilesTool.run(root_path="/proc/self", pattern="*")
+        result = find_files.run(root_path="/proc/self", pattern="*")
         assert not result.success
 
     def test_missing_params(self):
-        result = FindFilesTool.run(root_path="", pattern="*")
+        result = find_files.run(root_path="", pattern="*")
         assert not result.success
 
 
 # ===================================================================
-# GrepTool
+# grep
 # ===================================================================
 
 
 class TestGrepTool:
     def test_basic_search(self, tmp):
-        result = GrepTool.run(path=str(tmp / "a.txt"), pattern="hello")
+        result = grep.run(path=str(tmp / "a.txt"), pattern="hello")
         assert result.success
         assert result.data["total_matches"] == 1
         assert result.data["matches"][0]["line_number"] == 1
 
     def test_regex_search(self, tmp):
-        result = GrepTool.run(path=str(tmp / "a.txt"), pattern=r"fo+\s")
+        result = grep.run(path=str(tmp / "a.txt"), pattern=r"fo+\s")
         assert result.success
         assert result.data["total_matches"] == 1
 
     def test_recursive_directory(self, tmp):
-        result = GrepTool.run(path=str(tmp), pattern="import")
+        result = grep.run(path=str(tmp), pattern="import")
         assert result.success
         assert result.data["total_matches"] >= 1
 
     def test_context_lines(self, tmp):
-        result = GrepTool.run(path=str(tmp / "a.txt"), pattern="foo", context_lines=1)
+        result = grep.run(path=str(tmp / "a.txt"), pattern="foo", context_lines=1)
         assert result.success
         match = result.data["matches"][0]
         assert len(match["context"]) == 3  # line before, match, line after
 
     def test_no_match(self, tmp):
-        result = GrepTool.run(path=str(tmp / "a.txt"), pattern="zzzzz")
+        result = grep.run(path=str(tmp / "a.txt"), pattern="zzzzz")
         assert result.success
         assert result.data["total_matches"] == 0
 
     def test_invalid_regex(self, tmp):
-        result = GrepTool.run(path=str(tmp / "a.txt"), pattern="[bad")
+        result = grep.run(path=str(tmp / "a.txt"), pattern="[bad")
         assert not result.success
         assert "Invalid regex" in result.error
 
     def test_blocked_path(self):
-        result = GrepTool.run(path="/etc/passwd", pattern="root")
+        result = grep.run(path="/etc/passwd", pattern="root")
         assert not result.success
         assert "Access denied" in result.error
 
     def test_non_recursive(self, tmp):
-        result = GrepTool.run(path=str(tmp), pattern="nested", recursive=False)
+        result = grep.run(path=str(tmp), pattern="nested", recursive=False)
         assert result.success
         assert result.data["total_matches"] == 0  # nested file is in sub/
 
 
 # ===================================================================
-# FileInfoTool
+# file_info
 # ===================================================================
 
 
 class TestFileInfoTool:
     def test_file_info(self, tmp):
-        result = FileInfoTool.run(path=str(tmp / "a.txt"))
+        result = file_info.run(path=str(tmp / "a.txt"))
         assert result.success
         assert result.data["type"] == "file"
         assert result.data["size"] > 0
         assert "permissions" in result.data
 
     def test_directory_info(self, tmp):
-        result = FileInfoTool.run(path=str(tmp / "sub"))
+        result = file_info.run(path=str(tmp / "sub"))
         assert result.success
         assert result.data["type"] == "directory"
 
     def test_mime_type(self, tmp):
-        result = FileInfoTool.run(path=str(tmp / "b.py"))
+        result = file_info.run(path=str(tmp / "b.py"))
         assert result.success
         # Python files are typically text/x-python
         assert result.data["mime_type"] is not None
 
     def test_not_found(self, tmp):
-        result = FileInfoTool.run(path=str(tmp / "nonexistent"))
+        result = file_info.run(path=str(tmp / "nonexistent"))
         assert not result.success
         assert "not found" in result.error.lower()
 
     def test_blocked_path(self):
-        result = FileInfoTool.run(path="/etc/shadow")
+        result = file_info.run(path="/etc/shadow")
         assert not result.success
         assert "Access denied" in result.error
 
     def test_missing_path_param(self):
-        result = FileInfoTool.run()
+        result = file_info.run()
         assert not result.success
 
 
 # ===================================================================
-# MoveFileTool
+# move_file
 # ===================================================================
 
 
@@ -231,7 +231,7 @@ class TestMoveFileTool:
     def test_move_file(self, tmp):
         src = str(tmp / "a.txt")
         dst = str(tmp / "moved.txt")
-        result = MoveFileTool.run(source=src, destination=dst)
+        result = move_file.run(source=src, destination=dst)
         assert result.success
         assert os.path.exists(dst)
         assert not os.path.exists(src)
@@ -239,19 +239,19 @@ class TestMoveFileTool:
     def test_rename_file(self, tmp):
         src = str(tmp / "b.py")
         dst = str(tmp / "renamed.py")
-        result = MoveFileTool.run(source=src, destination=dst)
+        result = move_file.run(source=src, destination=dst)
         assert result.success
 
     def test_source_not_found(self, tmp):
-        result = MoveFileTool.run(source=str(tmp / "nope"), destination=str(tmp / "x"))
+        result = move_file.run(source=str(tmp / "nope"), destination=str(tmp / "x"))
         assert not result.success
 
     def test_missing_source_param(self, tmp):
-        result = MoveFileTool.run(source="", destination=str(tmp / "x"))
+        result = move_file.run(source="", destination=str(tmp / "x"))
         assert not result.success
 
     def test_blocked_destination(self, tmp):
-        result = MoveFileTool.run(source=str(tmp / "a.txt"), destination="/etc/evil")
+        result = move_file.run(source=str(tmp / "a.txt"), destination="/etc/evil")
         assert not result.success
         assert "Access denied" in result.error
 
@@ -265,44 +265,44 @@ class TestMoveFileTool:
 
 
 # ===================================================================
-# DeleteFileTool
+# delete_file
 # ===================================================================
 
 
 class TestDeleteFileTool:
     def test_delete_file(self, tmp):
         target = str(tmp / "a.txt")
-        result = DeleteFileTool.run(path=target, confirm=True)
+        result = delete_file.run(path=target, confirm=True)
         assert result.success
         assert not os.path.exists(target)
 
     def test_delete_without_confirm(self, tmp):
-        result = DeleteFileTool.run(path=str(tmp / "a.txt"), confirm=False)
+        result = delete_file.run(path=str(tmp / "a.txt"), confirm=False)
         assert not result.success
         assert "not confirmed" in result.error.lower()
         assert os.path.exists(str(tmp / "a.txt"))
 
     def test_delete_directory(self, tmp):
-        result = DeleteFileTool.run(path=str(tmp / "sub"), confirm=True)
+        result = delete_file.run(path=str(tmp / "sub"), confirm=True)
         assert result.success
         assert not os.path.exists(str(tmp / "sub"))
 
     def test_delete_not_found(self, tmp):
-        result = DeleteFileTool.run(path=str(tmp / "nope"), confirm=True)
+        result = delete_file.run(path=str(tmp / "nope"), confirm=True)
         assert not result.success
 
     def test_blocked_path(self):
-        result = DeleteFileTool.run(path="/etc/passwd", confirm=True)
+        result = delete_file.run(path="/etc/passwd", confirm=True)
         assert not result.success
         assert "Access denied" in result.error
 
     def test_missing_path(self):
-        result = DeleteFileTool.run(path="", confirm=True)
+        result = delete_file.run(path="", confirm=True)
         assert not result.success
 
 
 # ===================================================================
-# CopyFileTool
+# copy_file
 # ===================================================================
 
 
@@ -310,82 +310,82 @@ class TestCopyFileTool:
     def test_copy_file(self, tmp):
         src = str(tmp / "a.txt")
         dst = str(tmp / "copy_a.txt")
-        result = CopyFileTool.run(source=src, destination=dst)
+        result = copy_file.run(source=src, destination=dst)
         assert result.success
         assert os.path.exists(dst)
         assert os.path.exists(src)  # original still exists
 
     def test_copy_directory(self, tmp):
         dst = str(tmp / "sub_copy")
-        result = CopyFileTool.run(source=str(tmp / "sub"), destination=dst)
+        result = copy_file.run(source=str(tmp / "sub"), destination=dst)
         assert result.success
         assert os.path.isdir(dst)
 
     def test_source_not_found(self, tmp):
-        result = CopyFileTool.run(source=str(tmp / "nope"), destination=str(tmp / "x"))
+        result = copy_file.run(source=str(tmp / "nope"), destination=str(tmp / "x"))
         assert not result.success
 
     def test_missing_params(self):
-        result = CopyFileTool.run(source="", destination="foo")
+        result = copy_file.run(source="", destination="foo")
         assert not result.success
 
     def test_blocked_source(self, tmp):
-        result = CopyFileTool.run(source="/etc/passwd", destination=str(tmp / "x"))
+        result = copy_file.run(source="/etc/passwd", destination=str(tmp / "x"))
         assert not result.success
         assert "Access denied" in result.error
 
     def test_blocked_destination(self, tmp):
-        result = CopyFileTool.run(source=str(tmp / "a.txt"), destination="/etc/evil")
+        result = copy_file.run(source=str(tmp / "a.txt"), destination="/etc/evil")
         assert not result.success
 
     def test_copy_within_allowed_base(self, tmp):
         """Copy within the same base directory succeeds."""
         src = str(tmp / "a.txt")
         dst = str(tmp / "copy2.txt")
-        result = CopyFileTool.run(source=src, destination=dst)
+        result = copy_file.run(source=src, destination=dst)
         assert result.success
 
 
 # ===================================================================
-# CreateDirectoryTool
+# create_directory
 # ===================================================================
 
 
 class TestCreateDirectoryTool:
     def test_create_simple(self, tmp):
         target = str(tmp / "newdir")
-        result = CreateDirectoryTool.run(path=target)
+        result = create_directory.run(path=target)
         assert result.success
         assert os.path.isdir(target)
 
     def test_create_nested(self, tmp):
         target = str(tmp / "a" / "b" / "c")
-        result = CreateDirectoryTool.run(path=target, parents=True)
+        result = create_directory.run(path=target, parents=True)
         assert result.success
         assert os.path.isdir(target)
 
     def test_no_parents_fails(self, tmp):
         target = str(tmp / "x" / "y" / "z")
-        result = CreateDirectoryTool.run(path=target, parents=False)
+        result = create_directory.run(path=target, parents=False)
         assert not result.success
 
     def test_existing_dir_with_parents(self, tmp):
         target = str(tmp / "sub")
-        result = CreateDirectoryTool.run(path=target, parents=True)
+        result = create_directory.run(path=target, parents=True)
         assert result.success  # exist_ok=True
 
     def test_existing_dir_without_parents(self, tmp):
         target = str(tmp / "sub")
-        result = CreateDirectoryTool.run(path=target, parents=False)
+        result = create_directory.run(path=target, parents=False)
         assert not result.success  # already exists
 
     def test_blocked_path(self):
-        result = CreateDirectoryTool.run(path="/etc/evil")
+        result = create_directory.run(path="/etc/evil")
         assert not result.success
         assert "Access denied" in result.error
 
     def test_missing_path(self):
-        result = CreateDirectoryTool.run(path="")
+        result = create_directory.run(path="")
         assert not result.success
 
 
@@ -399,12 +399,12 @@ class TestSecurityShared:
 
     def test_all_tools_block_proc(self, tmp):
         tools_with_path = [
-            (ListDirectoryTool, {"path": "/proc/self"}),
-            (FindFilesTool, {"root_path": "/proc/self", "pattern": "*"}),
-            (GrepTool, {"path": "/proc/version", "pattern": "x"}),
-            (FileInfoTool, {"path": "/proc/version"}),
-            (DeleteFileTool, {"path": "/proc/version", "confirm": True}),
-            (CreateDirectoryTool, {"path": "/proc/test"}),
+            (list_directory, {"path": "/proc/self"}),
+            (find_files, {"root_path": "/proc/self", "pattern": "*"}),
+            (grep, {"path": "/proc/version", "pattern": "x"}),
+            (file_info, {"path": "/proc/version"}),
+            (delete_file, {"path": "/proc/version", "confirm": True}),
+            (create_directory, {"path": "/proc/test"}),
         ]
         for tool, kwargs in tools_with_path:
             result = tool.run(**kwargs)
@@ -413,8 +413,8 @@ class TestSecurityShared:
 
     def test_all_tools_block_sys(self, tmp):
         tools_with_path = [
-            (ListDirectoryTool, {"path": "/sys/class"}),
-            (FileInfoTool, {"path": "/sys/class"}),
+            (list_directory, {"path": "/sys/class"}),
+            (file_info, {"path": "/sys/class"}),
         ]
         for tool, kwargs in tools_with_path:
             result = tool.run(**kwargs)
@@ -440,14 +440,14 @@ class TestToolInterface:
     @pytest.mark.parametrize(
         "tool",
         [
-            ListDirectoryTool,
-            FindFilesTool,
-            GrepTool,
-            FileInfoTool,
-            MoveFileTool,
-            DeleteFileTool,
-            CopyFileTool,
-            CreateDirectoryTool,
+            list_directory,
+            find_files,
+            grep,
+            file_info,
+            move_file,
+            delete_file,
+            copy_file,
+            create_directory,
         ],
     )
     def test_interface(self, tool):

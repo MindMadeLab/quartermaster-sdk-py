@@ -55,7 +55,3 @@ def file_info(path: str) -> dict:
         "permissions": stat.filemode(st.st_mode),
         "mime_type": mime_type or "application/octet-stream",
     }
-
-
-# Backward-compatible alias
-FileInfoTool = file_info

@@ -230,6 +230,3 @@ cost_tracker.get_cost_breakdown = get_cost_breakdown  # type: ignore[attr-define
 cost_tracker.clear = clear_costs  # type: ignore[attr-defined]
 cost_tracker.register_local_pricing = register_local_pricing  # type: ignore[attr-defined]
 cost_tracker.clear_local_pricing = clear_local_pricing  # type: ignore[attr-defined]
-
-# Backward-compatible alias
-CostTrackerTool = cost_tracker

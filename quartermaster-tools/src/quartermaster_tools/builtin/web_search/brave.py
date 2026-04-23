@@ -103,7 +103,3 @@ def brave_search(
         "results": results,
         "result_count": len(results),
     }
-
-
-# Backward-compatible alias
-BraveSearchTool = brave_search

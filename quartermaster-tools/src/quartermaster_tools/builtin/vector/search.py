@@ -165,8 +165,3 @@ def hybrid_search(
     results = scored[:top_k]
 
     return {"results": results, "count": len(results)}
-
-
-# Backward-compatible aliases
-VectorSearchTool = vector_search
-HybridSearchTool = hybrid_search

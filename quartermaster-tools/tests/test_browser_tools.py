@@ -11,17 +11,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from quartermaster_tools.builtin.browser.extract import (
-    BrowserExtractTool,
-    BrowserScreenshotTool,
+    browser_extract,
+    browser_screenshot,
 )
 from quartermaster_tools.builtin.browser.interact import (
-    BrowserClickTool,
-    BrowserEvalTool,
-    BrowserTypeTool,
+    browser_click,
+    browser_eval,
+    browser_type,
 )
 from quartermaster_tools.builtin.browser.navigate import (
-    BrowserNavigateTool,
-    BrowserWaitTool,
+    browser_navigate,
+    browser_wait,
 )
 from quartermaster_tools.builtin.browser.session import BrowserSessionManager
 
@@ -68,7 +68,7 @@ def browser_unavailable():
 
 
 # ---------------------------------------------------------------------------
-# BrowserNavigateTool
+# browser_navigate
 # ---------------------------------------------------------------------------
 
 
@@ -79,7 +79,7 @@ class TestBrowserNavigateTool:
         response.status = 200
         mock_page.goto.return_value = response
 
-        tool = BrowserNavigateTool
+        tool = browser_navigate
         result = tool.run(url="https://example.com")
 
         assert result.success is True
@@ -94,14 +94,14 @@ class TestBrowserNavigateTool:
         mock_page = browser_available
         mock_page.goto.side_effect = Exception("Timeout 30000ms exceeded")
 
-        tool = BrowserNavigateTool
+        tool = browser_navigate
         result = tool.run(url="https://slow.example.com", timeout=30000)
 
         assert result.success is False
         assert "Timeout" in result.error
 
     def test_navigate_missing_url(self, browser_available):
-        tool = BrowserNavigateTool
+        tool = browser_navigate
         result = tool.run()
 
         assert result.success is False
@@ -113,7 +113,7 @@ class TestBrowserNavigateTool:
         response.status = 200
         mock_page.goto.return_value = response
 
-        tool = BrowserNavigateTool
+        tool = browser_navigate
         tool.run(url="https://example.com", wait_for="networkidle", timeout=5000)
 
         mock_page.goto.assert_called_once_with(
@@ -121,14 +121,14 @@ class TestBrowserNavigateTool:
         )
 
     def test_navigate_playwright_not_installed(self, browser_unavailable):
-        tool = BrowserNavigateTool
+        tool = browser_navigate
         result = tool.run(url="https://example.com")
 
         assert result.success is False
         assert "Playwright is not installed" in result.error
 
     def test_navigate_info(self):
-        tool = BrowserNavigateTool
+        tool = browser_navigate
         info = tool.info()
         assert info.name == "browser_navigate"
         assert info.version == "1.0.0"
@@ -138,7 +138,7 @@ class TestBrowserNavigateTool:
         mock_page = browser_available
         mock_page.goto.return_value = None
 
-        tool = BrowserNavigateTool
+        tool = browser_navigate
         result = tool.run(url="about:blank")
 
         assert result.success is True
@@ -146,13 +146,13 @@ class TestBrowserNavigateTool:
 
 
 # ---------------------------------------------------------------------------
-# BrowserClickTool
+# browser_click
 # ---------------------------------------------------------------------------
 
 
 class TestBrowserClickTool:
     def test_click_success(self, browser_available):
-        tool = BrowserClickTool
+        tool = browser_click
         result = tool.run(selector="#submit-btn")
 
         assert result.success is True
@@ -163,21 +163,21 @@ class TestBrowserClickTool:
     def test_click_element_not_found(self, browser_available):
         browser_available.click.side_effect = Exception("Element not found")
 
-        tool = BrowserClickTool
+        tool = browser_click
         result = tool.run(selector="#nonexistent")
 
         assert result.success is False
         assert "Element not found" in result.error
 
     def test_click_missing_selector(self, browser_available):
-        tool = BrowserClickTool
+        tool = browser_click
         result = tool.run()
 
         assert result.success is False
         assert "selector" in result.error.lower()
 
     def test_click_playwright_not_installed(self, browser_unavailable):
-        tool = BrowserClickTool
+        tool = browser_click
         result = tool.run(selector="#btn")
 
         assert result.success is False
@@ -185,13 +185,13 @@ class TestBrowserClickTool:
 
 
 # ---------------------------------------------------------------------------
-# BrowserTypeTool
+# browser_type
 # ---------------------------------------------------------------------------
 
 
 class TestBrowserTypeTool:
     def test_type_with_clear(self, browser_available):
-        tool = BrowserTypeTool
+        tool = browser_type
         result = tool.run(selector="#input", text="hello world", clear_first=True)
 
         assert result.success is True
@@ -201,7 +201,7 @@ class TestBrowserTypeTool:
         browser_available.type.assert_called_once_with("#input", "hello world")
 
     def test_type_without_clear(self, browser_available):
-        tool = BrowserTypeTool
+        tool = browser_type
         result = tool.run(selector="#input", text="appended", clear_first=False)
 
         assert result.success is True
@@ -209,14 +209,14 @@ class TestBrowserTypeTool:
         browser_available.type.assert_called_once_with("#input", "appended")
 
     def test_type_missing_selector(self, browser_available):
-        tool = BrowserTypeTool
+        tool = browser_type
         result = tool.run(text="hello")
 
         assert result.success is False
         assert "selector" in result.error.lower()
 
     def test_type_playwright_not_installed(self, browser_unavailable):
-        tool = BrowserTypeTool
+        tool = browser_type
         result = tool.run(selector="#input", text="hello")
 
         assert result.success is False
@@ -224,7 +224,7 @@ class TestBrowserTypeTool:
 
 
 # ---------------------------------------------------------------------------
-# BrowserExtractTool
+# browser_extract
 # ---------------------------------------------------------------------------
 
 
@@ -232,7 +232,7 @@ class TestBrowserExtractTool:
     def test_extract_text_whole_page(self, browser_available):
         browser_available.inner_text.return_value = "Page text content"
 
-        tool = BrowserExtractTool
+        tool = browser_extract
         result = tool.run()
 
         assert result.success is True
@@ -243,7 +243,7 @@ class TestBrowserExtractTool:
     def test_extract_html_whole_page(self, browser_available):
         browser_available.content.return_value = "<html><body>Hi</body></html>"
 
-        tool = BrowserExtractTool
+        tool = browser_extract
         result = tool.run(format="html")
 
         assert result.success is True
@@ -255,7 +255,7 @@ class TestBrowserExtractTool:
         element.inner_text.return_value = "Element text"
         browser_available.query_selector.return_value = element
 
-        tool = BrowserExtractTool
+        tool = browser_extract
         result = tool.run(selector="#content")
 
         assert result.success is True
@@ -266,7 +266,7 @@ class TestBrowserExtractTool:
         element.inner_html.return_value = "<b>Bold</b>"
         browser_available.query_selector.return_value = element
 
-        tool = BrowserExtractTool
+        tool = browser_extract
         result = tool.run(selector="#content", format="html")
 
         assert result.success is True
@@ -275,14 +275,14 @@ class TestBrowserExtractTool:
     def test_extract_selector_not_found(self, browser_available):
         browser_available.query_selector.return_value = None
 
-        tool = BrowserExtractTool
+        tool = browser_extract
         result = tool.run(selector="#missing")
 
         assert result.success is False
         assert "No element found" in result.error
 
     def test_extract_playwright_not_installed(self, browser_unavailable):
-        tool = BrowserExtractTool
+        tool = browser_extract
         result = tool.run()
 
         assert result.success is False
@@ -290,7 +290,7 @@ class TestBrowserExtractTool:
 
 
 # ---------------------------------------------------------------------------
-# BrowserScreenshotTool
+# browser_screenshot
 # ---------------------------------------------------------------------------
 
 
@@ -300,7 +300,7 @@ class TestBrowserScreenshotTool:
         out = tmp_path / "shot.png"
         out.write_bytes(b"\x89PNG" + b"\x00" * 100)
 
-        tool = BrowserScreenshotTool
+        tool = browser_screenshot
         result = tool.run(output_path=str(out), full_page=True)
 
         assert result.success is True
@@ -315,7 +315,7 @@ class TestBrowserScreenshotTool:
         element = MagicMock()
         browser_available.query_selector.return_value = element
 
-        tool = BrowserScreenshotTool
+        tool = browser_screenshot
         result = tool.run(selector="#hero", output_path=str(out))
 
         assert result.success is True
@@ -324,21 +324,21 @@ class TestBrowserScreenshotTool:
     def test_screenshot_element_not_found(self, browser_available, tmp_path):
         browser_available.query_selector.return_value = None
 
-        tool = BrowserScreenshotTool
+        tool = browser_screenshot
         result = tool.run(selector="#missing", output_path=str(tmp_path / "x.png"))
 
         assert result.success is False
         assert "No element found" in result.error
 
     def test_screenshot_missing_output_path(self, browser_available):
-        tool = BrowserScreenshotTool
+        tool = browser_screenshot
         result = tool.run()
 
         assert result.success is False
         assert "output_path" in result.error.lower()
 
     def test_screenshot_playwright_not_installed(self, browser_unavailable):
-        tool = BrowserScreenshotTool
+        tool = browser_screenshot
         result = tool.run(output_path="/tmp/x.png")
 
         assert result.success is False
@@ -346,13 +346,13 @@ class TestBrowserScreenshotTool:
 
 
 # ---------------------------------------------------------------------------
-# BrowserWaitTool
+# browser_wait
 # ---------------------------------------------------------------------------
 
 
 class TestBrowserWaitTool:
     def test_wait_element_found(self, browser_available):
-        tool = BrowserWaitTool
+        tool = browser_wait
         result = tool.run(selector=".loaded")
 
         assert result.success is True
@@ -366,21 +366,21 @@ class TestBrowserWaitTool:
     def test_wait_timeout(self, browser_available):
         browser_available.wait_for_selector.side_effect = Exception("Timeout 5000ms exceeded")
 
-        tool = BrowserWaitTool
+        tool = browser_wait
         result = tool.run(selector=".spinner", timeout=5000)
 
         assert result.success is False
         assert "Timeout" in result.error
 
     def test_wait_missing_selector(self, browser_available):
-        tool = BrowserWaitTool
+        tool = browser_wait
         result = tool.run()
 
         assert result.success is False
         assert "selector" in result.error.lower()
 
     def test_wait_playwright_not_installed(self, browser_unavailable):
-        tool = BrowserWaitTool
+        tool = browser_wait
         result = tool.run(selector=".x")
 
         assert result.success is False
@@ -388,7 +388,7 @@ class TestBrowserWaitTool:
 
 
 # ---------------------------------------------------------------------------
-# BrowserEvalTool
+# browser_eval
 # ---------------------------------------------------------------------------
 
 
@@ -396,7 +396,7 @@ class TestBrowserEvalTool:
     def test_eval_returns_value(self, browser_available):
         browser_available.evaluate.return_value = 42
 
-        tool = BrowserEvalTool
+        tool = browser_eval
         result = tool.run(script="1 + 41")
 
         assert result.success is True
@@ -405,7 +405,7 @@ class TestBrowserEvalTool:
     def test_eval_returns_string(self, browser_available):
         browser_available.evaluate.return_value = "hello"
 
-        tool = BrowserEvalTool
+        tool = browser_eval
         result = tool.run(script="'hello'")
 
         assert result.success is True
@@ -414,21 +414,21 @@ class TestBrowserEvalTool:
     def test_eval_error(self, browser_available):
         browser_available.evaluate.side_effect = Exception("ReferenceError: foo is not defined")
 
-        tool = BrowserEvalTool
+        tool = browser_eval
         result = tool.run(script="foo.bar")
 
         assert result.success is False
         assert "ReferenceError" in result.error
 
     def test_eval_missing_script(self, browser_available):
-        tool = BrowserEvalTool
+        tool = browser_eval
         result = tool.run()
 
         assert result.success is False
         assert "script" in result.error.lower()
 
     def test_eval_playwright_not_installed(self, browser_unavailable):
-        tool = BrowserEvalTool
+        tool = browser_eval
         result = tool.run(script="1+1")
 
         assert result.success is False

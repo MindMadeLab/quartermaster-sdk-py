@@ -9,9 +9,9 @@ import tempfile
 import pytest
 
 from quartermaster_tools.builtin.database.tools import (
-    SQLiteQueryTool,
-    SQLiteSchemaTool,
-    SQLiteWriteTool,
+    sqlite_query,
+    sqlite_schema,
+    sqlite_write,
 )
 
 
@@ -38,18 +38,18 @@ def empty_db(tmp_path):
     return path
 
 
-# --- SQLiteQueryTool ---
+# --- sqlite_query ---
 
 
 class TestSQLiteQueryTool:
     def test_select_all(self, db_path):
-        result = SQLiteQueryTool.run(database=db_path, sql="SELECT * FROM users")
+        result = sqlite_query.run(database=db_path, sql="SELECT * FROM users")
         assert result.success is True
         assert result.data["row_count"] == 3
         assert result.data["columns"] == ["id", "name", "email"]
 
     def test_select_with_where(self, db_path):
-        result = SQLiteQueryTool.run(
+        result = sqlite_query.run(
             database=db_path,
             sql="SELECT name FROM users WHERE id = ?",
             params=[1],
@@ -58,7 +58,7 @@ class TestSQLiteQueryTool:
         assert result.data["rows"] == [{"name": "Alice"}]
 
     def test_select_with_params(self, db_path):
-        result = SQLiteQueryTool.run(
+        result = sqlite_query.run(
             database=db_path,
             sql="SELECT * FROM users WHERE name = ?",
             params=["Bob"],
@@ -67,12 +67,12 @@ class TestSQLiteQueryTool:
         assert result.data["rows"][0]["name"] == "Bob"
 
     def test_max_rows_limit(self, db_path):
-        result = SQLiteQueryTool.run(database=db_path, sql="SELECT * FROM users", max_rows=2)
+        result = sqlite_query.run(database=db_path, sql="SELECT * FROM users", max_rows=2)
         assert result.success is True
         assert result.data["row_count"] == 2
 
     def test_rejects_write_sql(self, db_path):
-        result = SQLiteQueryTool.run(
+        result = sqlite_query.run(
             database=db_path,
             sql="INSERT INTO users (name, email) VALUES ('Eve', 'eve@test.com')",
         )
@@ -80,35 +80,35 @@ class TestSQLiteQueryTool:
         assert "write" in result.error.lower()
 
     def test_rejects_delete(self, db_path):
-        result = SQLiteQueryTool.run(database=db_path, sql="DELETE FROM users WHERE id = 1")
+        result = sqlite_query.run(database=db_path, sql="DELETE FROM users WHERE id = 1")
         assert result.success is False
 
     def test_rejects_drop(self, db_path):
-        result = SQLiteQueryTool.run(database=db_path, sql="DROP TABLE users")
+        result = sqlite_query.run(database=db_path, sql="DROP TABLE users")
         assert result.success is False
 
     def test_missing_database(self):
-        result = SQLiteQueryTool.run(database="", sql="SELECT 1")
+        result = sqlite_query.run(database="", sql="SELECT 1")
         assert result.success is False
         assert "database" in result.error.lower()
 
     def test_nonexistent_database_file(self):
-        result = SQLiteQueryTool.run(database="/tmp/nonexistent_db_12345.db", sql="SELECT 1")
+        result = sqlite_query.run(database="/tmp/nonexistent_db_12345.db", sql="SELECT 1")
         assert result.success is False
         assert "not found" in result.error.lower()
 
     def test_missing_sql(self, db_path):
-        result = SQLiteQueryTool.run(database=db_path, sql="")
+        result = sqlite_query.run(database=db_path, sql="")
         assert result.success is False
 
     def test_invalid_sql(self, db_path):
-        result = SQLiteQueryTool.run(database=db_path, sql="NOT VALID SQL")
+        result = sqlite_query.run(database=db_path, sql="NOT VALID SQL")
         assert result.success is False
         assert "sqlite error" in result.error.lower()
 
     def test_sql_injection_prevented(self, db_path):
         """Parameterized queries prevent injection via params."""
-        result = SQLiteQueryTool.run(
+        result = sqlite_query.run(
             database=db_path,
             sql="SELECT * FROM users WHERE name = ?",
             params=["'; DROP TABLE users; --"],
@@ -116,17 +116,17 @@ class TestSQLiteQueryTool:
         assert result.success is True
         assert result.data["row_count"] == 0
         # Table should still exist
-        result2 = SQLiteQueryTool.run(database=db_path, sql="SELECT COUNT(*) as cnt FROM users")
+        result2 = sqlite_query.run(database=db_path, sql="SELECT COUNT(*) as cnt FROM users")
         assert result2.success is True
         assert result2.data["rows"][0]["cnt"] == 3
 
 
-# --- SQLiteWriteTool ---
+# --- sqlite_write ---
 
 
 class TestSQLiteWriteTool:
     def test_insert(self, db_path):
-        result = SQLiteWriteTool.run(
+        result = sqlite_write.run(
             database=db_path,
             sql="INSERT INTO users (name, email) VALUES (?, ?)",
             params=["Dave", "dave@example.com"],
@@ -136,7 +136,7 @@ class TestSQLiteWriteTool:
         assert result.data["rows_affected"] == 1
 
     def test_update(self, db_path):
-        result = SQLiteWriteTool.run(
+        result = sqlite_write.run(
             database=db_path,
             sql="UPDATE users SET email = ? WHERE name = ?",
             params=["new@example.com", "Alice"],
@@ -146,7 +146,7 @@ class TestSQLiteWriteTool:
         assert result.data["rows_affected"] == 1
 
     def test_delete(self, db_path):
-        result = SQLiteWriteTool.run(
+        result = sqlite_write.run(
             database=db_path,
             sql="DELETE FROM users WHERE name = ?",
             params=["Charlie"],
@@ -156,7 +156,7 @@ class TestSQLiteWriteTool:
         assert result.data["rows_affected"] == 1
 
     def test_create_table(self, db_path):
-        result = SQLiteWriteTool.run(
+        result = sqlite_write.run(
             database=db_path,
             sql="CREATE TABLE logs (id INTEGER PRIMARY KEY, msg TEXT)",
             confirm=True,
@@ -164,7 +164,7 @@ class TestSQLiteWriteTool:
         assert result.success is True
 
     def test_requires_confirm(self, db_path):
-        result = SQLiteWriteTool.run(
+        result = sqlite_write.run(
             database=db_path,
             sql="INSERT INTO users (name, email) VALUES (?, ?)",
             params=["Eve", "eve@test.com"],
@@ -173,7 +173,7 @@ class TestSQLiteWriteTool:
         assert "confirm" in result.error.lower()
 
     def test_confirm_false_rejects(self, db_path):
-        result = SQLiteWriteTool.run(
+        result = sqlite_write.run(
             database=db_path,
             sql="INSERT INTO users (name, email) VALUES (?, ?)",
             params=["Eve", "eve@test.com"],
@@ -182,20 +182,20 @@ class TestSQLiteWriteTool:
         assert result.success is False
 
     def test_missing_database(self):
-        result = SQLiteWriteTool.run(database="", sql="SELECT 1", confirm=True)
+        result = sqlite_write.run(database="", sql="SELECT 1", confirm=True)
         assert result.success is False
 
     def test_missing_sql(self, db_path):
-        result = SQLiteWriteTool.run(database=db_path, sql="", confirm=True)
+        result = sqlite_write.run(database=db_path, sql="", confirm=True)
         assert result.success is False
 
     def test_invalid_sql(self, db_path):
-        result = SQLiteWriteTool.run(database=db_path, sql="INVALID SQL", confirm=True)
+        result = sqlite_write.run(database=db_path, sql="INVALID SQL", confirm=True)
         assert result.success is False
 
     def test_parameterized_insert_prevents_injection(self, db_path):
         malicious_name = "'; DROP TABLE users; --"
-        result = SQLiteWriteTool.run(
+        result = sqlite_write.run(
             database=db_path,
             sql="INSERT INTO users (name, email) VALUES (?, ?)",
             params=[malicious_name, "evil@test.com"],
@@ -203,28 +203,28 @@ class TestSQLiteWriteTool:
         )
         assert result.success is True
         # Verify table still intact with the malicious string stored as data
-        r2 = SQLiteQueryTool.run(
+        r2 = sqlite_query.run(
             database=db_path, sql="SELECT * FROM users WHERE name = ?", params=[malicious_name]
         )
         assert r2.data["row_count"] == 1
 
 
-# --- SQLiteSchemaTool ---
+# --- sqlite_schema ---
 
 
 class TestSQLiteSchemaTool:
     def test_list_tables(self, db_path):
-        result = SQLiteSchemaTool.run(database=db_path)
+        result = sqlite_schema.run(database=db_path)
         assert result.success is True
         assert "users" in result.data["tables"]
 
     def test_list_tables_empty_db(self, empty_db):
-        result = SQLiteSchemaTool.run(database=empty_db)
+        result = sqlite_schema.run(database=empty_db)
         assert result.success is True
         assert result.data["tables"] == []
 
     def test_table_columns(self, db_path):
-        result = SQLiteSchemaTool.run(database=db_path, table="users")
+        result = sqlite_schema.run(database=db_path, table="users")
         assert result.success is True
         assert result.data["table"] == "users"
         col_names = [c["name"] for c in result.data["columns"]]
@@ -233,28 +233,28 @@ class TestSQLiteSchemaTool:
         assert "email" in col_names
 
     def test_table_column_types(self, db_path):
-        result = SQLiteSchemaTool.run(database=db_path, table="users")
+        result = sqlite_schema.run(database=db_path, table="users")
         cols = {c["name"]: c for c in result.data["columns"]}
         assert cols["id"]["type"] == "INTEGER"
         assert cols["id"]["primary_key"] is True
         assert cols["name"]["notnull"] is True
 
     def test_nonexistent_table(self, db_path):
-        result = SQLiteSchemaTool.run(database=db_path, table="nonexistent")
+        result = sqlite_schema.run(database=db_path, table="nonexistent")
         assert result.success is False
         assert "not found" in result.error.lower()
 
     def test_invalid_table_name(self, db_path):
-        result = SQLiteSchemaTool.run(database=db_path, table="'; DROP TABLE users;--")
+        result = sqlite_schema.run(database=db_path, table="'; DROP TABLE users;--")
         assert result.success is False
         assert "invalid" in result.error.lower()
 
     def test_missing_database(self):
-        result = SQLiteSchemaTool.run(database="")
+        result = sqlite_schema.run(database="")
         assert result.success is False
 
     def test_nonexistent_database_file(self):
-        result = SQLiteSchemaTool.run(database="/tmp/no_such_file_xyz.db")
+        result = sqlite_schema.run(database="/tmp/no_such_file_xyz.db")
         assert result.success is False
 
     def test_multiple_tables(self, db_path):
@@ -263,7 +263,7 @@ class TestSQLiteSchemaTool:
         conn.commit()
         conn.close()
 
-        result = SQLiteSchemaTool.run(database=db_path)
+        result = sqlite_schema.run(database=db_path)
         assert "users" in result.data["tables"]
         assert "orders" in result.data["tables"]
         assert result.data["count"] == 2
@@ -274,13 +274,13 @@ class TestSQLiteSchemaTool:
 
 class TestDatabaseToolMetadata:
     def test_query_tool_info(self):
-        assert SQLiteQueryTool.name() == "sqlite_query"
-        assert SQLiteQueryTool.version() == "1.0.0"
-        info = SQLiteQueryTool.info()
+        assert sqlite_query.name() == "sqlite_query"
+        assert sqlite_query.version() == "1.0.0"
+        info = sqlite_query.info()
         assert info.is_local is False
 
     def test_write_tool_info(self):
-        assert SQLiteWriteTool.name() == "sqlite_write"
+        assert sqlite_write.name() == "sqlite_write"
 
     def test_schema_tool_info(self):
-        assert SQLiteSchemaTool.name() == "sqlite_schema"
+        assert sqlite_schema.name() == "sqlite_schema"

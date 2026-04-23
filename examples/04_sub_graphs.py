@@ -71,5 +71,7 @@ agent = (
     )
 )
 
-result = qm.run(agent, "Research the latest trends in WebAssembly for server-side applications")
+result = qm.run(
+    agent, "Research the latest trends in WebAssembly for server-side applications"
+)
 print(result.text)

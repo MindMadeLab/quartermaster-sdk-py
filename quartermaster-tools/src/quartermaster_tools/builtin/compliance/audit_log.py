@@ -170,8 +170,3 @@ def read_audit_log(
         result_data["integrity_breaks_at"] = integrity_breaks
 
     return result_data
-
-
-# Backward-compatible aliases
-AuditLogTool = audit_log
-ReadAuditLogTool = read_audit_log

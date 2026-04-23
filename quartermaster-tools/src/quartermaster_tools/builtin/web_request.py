@@ -164,7 +164,3 @@ def web_request(url: str, method: str = "GET", headers: dict = None, body: str =
         body: Request body for POST/PUT/PATCH requests (string or JSON object).
     """
     return _web_request_impl(url, method=method, headers=headers, body=body)
-
-
-# Backward-compatible alias
-WebRequestTool = web_request

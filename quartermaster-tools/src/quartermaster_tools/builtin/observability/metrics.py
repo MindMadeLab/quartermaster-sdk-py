@@ -143,6 +143,3 @@ def clear_metrics() -> None:
 metric.get_metrics = get_metrics  # type: ignore[attr-defined]
 metric.get_summary = get_metric_summary  # type: ignore[attr-defined]
 metric.clear = clear_metrics  # type: ignore[attr-defined]
-
-# Backward-compatible alias
-MetricTool = metric

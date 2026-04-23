@@ -241,10 +241,3 @@ def discord_message(webhook_url: str, content: str) -> dict:
         raise RuntimeError(f"Discord HTTP error {e.response.status_code}: {e.response.text}")
     except httpx.HTTPError as e:
         raise RuntimeError(f"HTTP error: {e}")
-
-
-# Backward-compatible aliases
-SlackMessageTool = slack_message
-SlackReadTool = slack_read
-WebhookNotifyTool = webhook_notify
-DiscordMessageTool = discord_message

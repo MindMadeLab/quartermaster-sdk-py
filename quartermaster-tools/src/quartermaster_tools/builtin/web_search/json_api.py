@@ -151,7 +151,3 @@ def json_api(
         "status_code": response.status_code,
         "headers": dict(response.headers),
     }
-
-
-# Backward-compatible alias
-JsonApiTool = json_api

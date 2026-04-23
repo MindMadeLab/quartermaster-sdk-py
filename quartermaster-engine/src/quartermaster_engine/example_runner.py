@@ -1720,12 +1720,6 @@ def build_default_registry(
     return reg
 
 
-# Backwards-compatibility shim — older callers (and our own tests) imported
-# the underscored name.  Keep it around as a thin alias so 0.1.x users don't
-# break on upgrade.
-_build_registry = build_default_registry
-
-
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------

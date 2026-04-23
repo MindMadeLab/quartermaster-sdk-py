@@ -86,8 +86,3 @@ def browser_screenshot(output_path: str, selector: str = "", full_page: bool = F
 
     size_bytes = os.path.getsize(output_path)
     return {"saved_to": output_path, "size_bytes": size_bytes}
-
-
-# Backward-compatible aliases
-BrowserExtractTool = browser_extract
-BrowserScreenshotTool = browser_screenshot

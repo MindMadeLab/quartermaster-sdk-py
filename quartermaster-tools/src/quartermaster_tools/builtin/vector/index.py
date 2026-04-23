@@ -85,7 +85,3 @@ def document_index(
         )
 
     return {"chunks_indexed": len(chunks), "collection": collection}
-
-
-# Backward-compatible alias
-DocumentIndexTool = document_index

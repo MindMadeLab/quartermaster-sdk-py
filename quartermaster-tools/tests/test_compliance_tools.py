@@ -1,4 +1,4 @@
-"""Tests for compliance tools: RiskClassifierTool, AuditLogTool, ReadAuditLogTool, ComplianceChecklistTool."""
+"""Tests for compliance tools: risk_classifier, audit_log, read_audit_log, compliance_checklist."""
 
 from __future__ import annotations
 
@@ -9,21 +9,21 @@ import tempfile
 import pytest
 
 from quartermaster_tools.builtin.compliance.audit_log import (
-    AuditLogTool,
-    ReadAuditLogTool,
+    audit_log,
+    read_audit_log,
 )
-from quartermaster_tools.builtin.compliance.checklist import ComplianceChecklistTool
-from quartermaster_tools.builtin.compliance.risk_classifier import RiskClassifierTool
+from quartermaster_tools.builtin.compliance.checklist import compliance_checklist
+from quartermaster_tools.builtin.compliance.risk_classifier import risk_classifier
 
 
 # ---------------------------------------------------------------------------
-# RiskClassifierTool
+# risk_classifier
 # ---------------------------------------------------------------------------
 
 
 class TestRiskClassifierTool:
     def setup_method(self) -> None:
-        self.tool = RiskClassifierTool
+        self.tool = risk_classifier
 
     def test_unacceptable_subliminal(self) -> None:
         result = self.tool.run(
@@ -119,13 +119,13 @@ class TestRiskClassifierTool:
 
 
 # ---------------------------------------------------------------------------
-# AuditLogTool
+# audit_log
 # ---------------------------------------------------------------------------
 
 
 class TestAuditLogTool:
     def setup_method(self) -> None:
-        self.tool = AuditLogTool
+        self.tool = audit_log
         self._tmpfile = tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False)
         self._tmpfile.close()
         self.log_path = self._tmpfile.name
@@ -198,14 +198,14 @@ class TestAuditLogTool:
 
 
 # ---------------------------------------------------------------------------
-# ReadAuditLogTool
+# read_audit_log
 # ---------------------------------------------------------------------------
 
 
 class TestReadAuditLogTool:
     def setup_method(self) -> None:
-        self.write_tool = AuditLogTool
-        self.read_tool = ReadAuditLogTool
+        self.write_tool = audit_log
+        self.read_tool = read_audit_log
         self._tmpfile = tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False)
         self._tmpfile.close()
         self.log_path = self._tmpfile.name
@@ -297,13 +297,13 @@ class TestReadAuditLogTool:
 
 
 # ---------------------------------------------------------------------------
-# ComplianceChecklistTool
+# compliance_checklist
 # ---------------------------------------------------------------------------
 
 
 class TestComplianceChecklistTool:
     def setup_method(self) -> None:
-        self.tool = ComplianceChecklistTool
+        self.tool = compliance_checklist
 
     def test_high_checklist(self) -> None:
         result = self.tool.run(risk_level="HIGH")

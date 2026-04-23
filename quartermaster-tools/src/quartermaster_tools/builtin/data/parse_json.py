@@ -77,8 +77,5 @@ def parse_json(source: str, query: str = None) -> dict:
     return {"result": result}
 
 
-# Backward-compatible alias
-ParseJSONTool = parse_json
-
 # Alias used by convert_format
 parse_json_data = _parse_json

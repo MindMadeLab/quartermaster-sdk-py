@@ -133,7 +133,3 @@ def redact_pii(text: str, strategy: str = "redact", entities: list = None) -> di
         "entities_found": len(found),
         "entities": found,
     }
-
-
-# Backward-compatible alias
-RedactPIITool = redact_pii

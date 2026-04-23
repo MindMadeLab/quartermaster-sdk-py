@@ -143,6 +143,3 @@ list_variables = _make_list_variables(_default_store)
 
 
 # Backward-compatible class-like aliases.
-SetVariableTool = set_variable
-GetVariableTool = get_variable
-ListVariablesTool = list_variables

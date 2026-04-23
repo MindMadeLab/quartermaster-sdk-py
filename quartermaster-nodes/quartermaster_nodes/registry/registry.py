@@ -3,7 +3,7 @@
 IMPORTANT — naming gotcha:
 =========================
 
-This module exports ``NodeCatalog`` (aliased as ``NodeRegistry`` for
+This module exports ``NodeCatalog`` (the design-time catalog for
 backward compatibility). It is a *design-time catalog* of node **class
 definitions** — not a runtime executor registry.
 
@@ -197,16 +197,6 @@ class NodeCatalog:
 # ------------------------------------------------------------------
 # Backward-compatibility alias
 # ------------------------------------------------------------------
-# ``NodeRegistry`` was the original name. It collides with
-# ``quartermaster_engine.nodes.NodeRegistry`` (a Protocol for runtime
-# executors with a completely different API), which caused user-visible
-# confusion — ``FlowRunner(node_registry=quartermaster_nodes.NodeRegistry())``
-# crashed with ``AttributeError: get_executor``. Keep the old name as an
-# alias so existing code compiles, and handle the actual mis-use via the
-# ``get_executor`` guard above.
-NodeRegistry = NodeCatalog
-
-
 def register_node(registry: NodeCatalog):
     """Decorator for registering a node class with a catalog.
 

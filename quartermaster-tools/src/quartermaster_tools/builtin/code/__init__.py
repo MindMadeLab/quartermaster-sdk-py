@@ -8,22 +8,14 @@ Provides tools for executing code in subprocess-based sandboxes:
 - javascript_executor: Execute JavaScript via Node.js subprocess
 """
 
-from quartermaster_tools.builtin.code.eval_math import eval_math, EvalMathTool
-from quartermaster_tools.builtin.code.javascript_executor import (
-    javascript_executor,
-    JavaScriptExecutorTool,
-)
-from quartermaster_tools.builtin.code.python_executor import python_executor, PythonExecutorTool
-from quartermaster_tools.builtin.code.shell_executor import shell_executor, ShellExecutorTool
+from quartermaster_tools.builtin.code.eval_math import eval_math
+from quartermaster_tools.builtin.code.javascript_executor import javascript_executor
+from quartermaster_tools.builtin.code.python_executor import python_executor
+from quartermaster_tools.builtin.code.shell_executor import shell_executor
 
 __all__ = [
     "eval_math",
     "javascript_executor",
     "python_executor",
     "shell_executor",
-    # Backward-compatible aliases
-    "EvalMathTool",
-    "JavaScriptExecutorTool",
-    "PythonExecutorTool",
-    "ShellExecutorTool",
 ]

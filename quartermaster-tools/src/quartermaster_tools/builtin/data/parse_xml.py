@@ -105,8 +105,5 @@ def parse_xml(source: str, xpath: str = None) -> dict:
     return {"result": result}
 
 
-# Backward-compatible alias
-ParseXMLTool = parse_xml
-
 # Alias used by tests
 parse_xml_data = _parse_xml

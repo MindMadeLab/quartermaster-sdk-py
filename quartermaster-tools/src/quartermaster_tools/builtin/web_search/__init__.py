@@ -9,24 +9,16 @@ Provides:
 - json_api: JSON API client with optional JMESPath filtering
 """
 
-from quartermaster_tools.builtin.web_search.brave import BraveSearchTool, brave_search
-from quartermaster_tools.builtin.web_search.duckduckgo import (
-    DuckDuckGoSearchTool,
-    duckduckgo_search,
-)
-from quartermaster_tools.builtin.web_search.google import GoogleSearchTool, google_search
-from quartermaster_tools.builtin.web_search.json_api import JsonApiTool, json_api
-from quartermaster_tools.builtin.web_search.scraper import WebScraperTool, web_scraper
+from quartermaster_tools.builtin.web_search.brave import brave_search
+from quartermaster_tools.builtin.web_search.duckduckgo import duckduckgo_search
+from quartermaster_tools.builtin.web_search.google import google_search
+from quartermaster_tools.builtin.web_search.json_api import json_api
+from quartermaster_tools.builtin.web_search.scraper import web_scraper
 
 __all__ = [
     "brave_search",
-    "BraveSearchTool",
     "duckduckgo_search",
-    "DuckDuckGoSearchTool",
     "google_search",
-    "GoogleSearchTool",
     "json_api",
-    "JsonApiTool",
     "web_scraper",
-    "WebScraperTool",
 ]

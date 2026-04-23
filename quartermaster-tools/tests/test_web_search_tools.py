@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from quartermaster_tools.builtin.web_search.duckduckgo import DuckDuckGoSearchTool
-from quartermaster_tools.builtin.web_search.json_api import JsonApiTool
-from quartermaster_tools.builtin.web_search.scraper import WebScraperTool
+from quartermaster_tools.builtin.web_search.duckduckgo import duckduckgo_search
+from quartermaster_tools.builtin.web_search.json_api import json_api
+from quartermaster_tools.builtin.web_search.scraper import web_scraper
 from quartermaster_tools.types import ToolResult
 
 
@@ -72,31 +72,31 @@ def _mock_client(mock_httpx: MagicMock, response: MagicMock) -> MagicMock:
 
 
 # ---------------------------------------------------------------------------
-# DuckDuckGoSearchTool
+# duckduckgo_search
 # ---------------------------------------------------------------------------
 
 
 class TestDuckDuckGoSearchTool:
-    """Tests for DuckDuckGoSearchTool."""
+    """Tests for duckduckgo_search."""
 
     def test_name_and_version(self) -> None:
-        tool = DuckDuckGoSearchTool
+        tool = duckduckgo_search
         assert tool.name() == "duckduckgo_search"
         assert tool.version() == "1.0.0"
 
     def test_info_returns_descriptor(self) -> None:
-        tool = DuckDuckGoSearchTool
+        tool = duckduckgo_search
         info = tool.info()
         assert info.name == "duckduckgo_search"
 
     def test_missing_query(self) -> None:
-        tool = DuckDuckGoSearchTool
+        tool = duckduckgo_search
         result = tool.run()
         assert result.success is False
         assert "required" in result.error.lower()
 
     def test_empty_query(self) -> None:
-        tool = DuckDuckGoSearchTool
+        tool = duckduckgo_search
         result = tool.run(query="   ")
         assert result.success is False
         assert "required" in result.error.lower()
@@ -124,7 +124,7 @@ class TestDuckDuckGoSearchTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = DuckDuckGoSearchTool
+            tool = duckduckgo_search
             result = tool.run(query="test query")
 
             assert result.success is True
@@ -156,7 +156,7 @@ class TestDuckDuckGoSearchTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = DuckDuckGoSearchTool
+            tool = duckduckgo_search
             result = tool.run(query="test", max_results=2)
 
             assert result.success is True
@@ -174,7 +174,7 @@ class TestDuckDuckGoSearchTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = DuckDuckGoSearchTool
+            tool = duckduckgo_search
             result = tool.run(query="slow query")
 
             assert result.success is False
@@ -189,7 +189,7 @@ class TestDuckDuckGoSearchTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = DuckDuckGoSearchTool
+            tool = duckduckgo_search
             result = tool.run(query="xyznonexistent123")
 
             assert result.success is True
@@ -202,7 +202,7 @@ class TestDuckDuckGoSearchTool:
         httpx_mod = sys.modules.get("httpx")
         sys.modules["httpx"] = None  # type: ignore[assignment]
         try:
-            tool = DuckDuckGoSearchTool
+            tool = duckduckgo_search
             result = tool.run(query="test")
             assert result.success is False
             assert "httpx" in result.error.lower()
@@ -214,31 +214,31 @@ class TestDuckDuckGoSearchTool:
 
 
 # ---------------------------------------------------------------------------
-# WebScraperTool
+# web_scraper
 # ---------------------------------------------------------------------------
 
 
 class TestWebScraperTool:
-    """Tests for WebScraperTool."""
+    """Tests for web_scraper."""
 
     def test_name_and_version(self) -> None:
-        tool = WebScraperTool
+        tool = web_scraper
         assert tool.name() == "web_scraper"
         assert tool.version() == "1.0.0"
 
     def test_info_returns_descriptor(self) -> None:
-        tool = WebScraperTool
+        tool = web_scraper
         info = tool.info()
         assert info.name == "web_scraper"
 
     def test_missing_url(self) -> None:
-        tool = WebScraperTool
+        tool = web_scraper
         result = tool.run()
         assert result.success is False
         assert "required" in result.error.lower()
 
     def test_invalid_output_format(self) -> None:
-        tool = WebScraperTool
+        tool = web_scraper
         result = tool.run(url="https://example.com", output_format="pdf")
         assert result.success is False
         assert "invalid output_format" in result.error.lower()
@@ -251,7 +251,7 @@ class TestWebScraperTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = WebScraperTool
+            tool = web_scraper
             result = tool.run(url="https://example.com", output_format="text")
 
             assert result.success is True
@@ -270,7 +270,7 @@ class TestWebScraperTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = WebScraperTool
+            tool = web_scraper
             result = tool.run(url="https://example.com", output_format="markdown")
 
             assert result.success is True
@@ -289,7 +289,7 @@ class TestWebScraperTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = WebScraperTool
+            tool = web_scraper
             result = tool.run(url="https://example.com", output_format="html")
 
             assert result.success is True
@@ -307,7 +307,7 @@ class TestWebScraperTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = WebScraperTool
+            tool = web_scraper
             result = tool.run(url="https://example.com/slow")
 
             assert result.success is False
@@ -319,7 +319,7 @@ class TestWebScraperTool:
         httpx_mod = sys.modules.get("httpx")
         sys.modules["httpx"] = None  # type: ignore[assignment]
         try:
-            tool = WebScraperTool
+            tool = web_scraper
             result = tool.run(url="https://example.com")
             assert result.success is False
             assert "httpx" in result.error.lower()
@@ -331,31 +331,31 @@ class TestWebScraperTool:
 
 
 # ---------------------------------------------------------------------------
-# JsonApiTool
+# json_api
 # ---------------------------------------------------------------------------
 
 
 class TestJsonApiTool:
-    """Tests for JsonApiTool."""
+    """Tests for json_api."""
 
     def test_name_and_version(self) -> None:
-        tool = JsonApiTool
+        tool = json_api
         assert tool.name() == "json_api"
         assert tool.version() == "1.0.0"
 
     def test_info_returns_descriptor(self) -> None:
-        tool = JsonApiTool
+        tool = json_api
         info = tool.info()
         assert info.name == "json_api"
 
     def test_missing_url(self) -> None:
-        tool = JsonApiTool
+        tool = json_api
         result = tool.run()
         assert result.success is False
         assert "required" in result.error.lower()
 
     def test_unsupported_method(self) -> None:
-        tool = JsonApiTool
+        tool = json_api
         result = tool.run(url="https://api.example.com", method="OPTIONS")
         assert result.success is False
         assert "unsupported" in result.error.lower()
@@ -373,7 +373,7 @@ class TestJsonApiTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = JsonApiTool
+            tool = json_api
             result = tool.run(url="https://api.example.com/users")
 
             assert result.success is True
@@ -396,7 +396,7 @@ class TestJsonApiTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = JsonApiTool
+            tool = json_api
             result = tool.run(
                 url="https://api.example.com/users",
                 method="POST",
@@ -418,7 +418,7 @@ class TestJsonApiTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = JsonApiTool
+            tool = json_api
             result = tool.run(url="https://api.example.com/broken")
 
             assert result.success is False
@@ -436,7 +436,7 @@ class TestJsonApiTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = JsonApiTool
+            tool = json_api
             result = tool.run(url="https://api.example.com/slow")
 
             assert result.success is False
@@ -458,7 +458,7 @@ class TestJsonApiTool:
         jmespath_mod = sys.modules.get("jmespath")
         sys.modules["jmespath"] = None  # type: ignore[assignment]
         try:
-            tool = JsonApiTool
+            tool = json_api
             result = tool.run(
                 url="https://api.example.com/data",
                 jmespath_filter="items[0]",
@@ -477,7 +477,7 @@ class TestJsonApiTool:
         httpx_mod = sys.modules.get("httpx")
         sys.modules["httpx"] = None  # type: ignore[assignment]
         try:
-            tool = JsonApiTool
+            tool = json_api
             result = tool.run(url="https://api.example.com")
             assert result.success is False
             assert "httpx" in result.error.lower()
@@ -498,7 +498,7 @@ class TestJsonApiTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            tool = JsonApiTool
+            tool = json_api
             result = tool.run(
                 url="https://api.example.com",
                 headers={"X-Custom": "value"},
