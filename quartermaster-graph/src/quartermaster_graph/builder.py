@@ -67,10 +67,17 @@ def _llm_meta(
     max_input_tokens: int = 16385,
     vision: bool = False,
     thinking_level: str = "off",
+    extra_body: dict[str, Any] | None = None,
     **extra: Any,
 ) -> dict[str, Any]:
     """Build a metadata dict using the ``llm_*`` key names that match
-    the actual quartermaster-nodes ``AbstractLLMAssistantNode``."""
+    the actual quartermaster-nodes ``AbstractLLMAssistantNode``.
+
+    The ``extra_body`` arg is v0.6.0 — a provider-specific OpenAI-compat
+    escape hatch (spliced into the outgoing ``chat.completions.create(...,
+    extra_body=...)`` payload). Typical use: toggle Gemma-4 thinking via
+    ``extra_body={"chat_template_kwargs": {"enable_thinking": False}}``.
+    """
     meta: dict[str, Any] = {
         "llm_model": model,
         "llm_provider": provider,
@@ -82,6 +89,10 @@ def _llm_meta(
         "llm_vision": vision,
         "llm_thinking_level": thinking_level,
     }
+    if extra_body:
+        # Stash on the node metadata. The engine's executor layer reads
+        # ``llm_extra_body`` and forwards it into ``LLMConfig.extra_body``.
+        meta["llm_extra_body"] = dict(extra_body)
     meta.update({k: v for k, v in extra.items() if k not in _ALL_CONFIG_KEYS})
     return meta
 

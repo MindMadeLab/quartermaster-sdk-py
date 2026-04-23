@@ -281,6 +281,16 @@ class OpenAIProvider(AbstractLLMProvider):
         if timeout is not None:
             params["timeout"] = timeout
 
+        # v0.6.0: provider-specific body escape hatch. The openai Python
+        # SDK splices ``extra_body`` into the outgoing JSON; vLLM /
+        # OpenAI-compat servers use this for knobs like
+        # ``chat_template_kwargs`` (Gemma-4 thinking toggle),
+        # ``repetition_penalty``, ``top_k``, etc. — anything the SDK
+        # doesn't model natively. Pass-through only; we don't validate
+        # the keys because the set is server-specific.
+        if config.extra_body:
+            params["extra_body"] = dict(config.extra_body)
+
         return params
 
     async def list_models(self) -> list[str]:

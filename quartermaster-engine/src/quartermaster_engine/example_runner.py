@@ -339,6 +339,7 @@ def _build_llm_config(
         thinking_budget=thinking_budget,
         connect_timeout=float(connect_timeout) if connect_timeout is not None else None,
         read_timeout=float(read_timeout) if read_timeout is not None else None,
+        extra_body=context.get_meta("llm_extra_body", None) or None,
     )
 
 
