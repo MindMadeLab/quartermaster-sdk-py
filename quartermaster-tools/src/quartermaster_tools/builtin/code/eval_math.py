@@ -186,7 +186,3 @@ def eval_math(expression: str) -> dict:
 
     result = safe_eval(expression)
     return {"result": result, "expression": expression}
-
-
-# Backward-compatible alias
-EvalMathTool = eval_math

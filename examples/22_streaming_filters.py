@@ -43,9 +43,7 @@ agent = (
         "Respond",
         model="claude-haiku-4-5-20251001",
         provider="anthropic",
-        system_instruction=(
-            "You are a concise assistant. Answer in 1-2 sentences."
-        ),
+        system_instruction=("You are a concise assistant. Answer in 1-2 sentences."),
     )
 )
 

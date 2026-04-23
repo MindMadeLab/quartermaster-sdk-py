@@ -66,8 +66,3 @@ def browser_wait(selector: str, timeout: int = 5000, state: str = "visible") -> 
     page = BrowserSessionManager.get_page()
     page.wait_for_selector(selector, timeout=int(timeout), state=state)
     return {"found": True, "selector": selector, "state": state}
-
-
-# Backward-compatible aliases
-BrowserNavigateTool = browser_navigate
-BrowserWaitTool = browser_wait

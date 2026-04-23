@@ -1,52 +1,49 @@
-"""Regression tests for the NodeRegistry → NodeCatalog rename.
+"""Regression tests for the NodeCatalog design-time catalog.
 
 In 0.1.0, ``quartermaster_nodes.NodeRegistry`` and
 ``quartermaster_engine.nodes.NodeRegistry`` both existed with different
 APIs. ``FlowRunner.get_executor`` crashed with ``AttributeError`` when
 a user (reasonably) passed the nodes-package registry to the engine.
 
-0.1.1 addresses this two ways:
+0.1.1 renamed the design-time catalog to ``NodeCatalog`` and kept
+``NodeRegistry`` as a backward-compat alias. **v0.6.0 removes the
+alias** — callers must now use ``NodeCatalog`` directly.
 
-1. Rename the design-time catalog to ``NodeCatalog`` (canonical name).
-   ``NodeRegistry`` remains as a backward-compat alias.
-2. Add a ``get_executor`` guard on ``NodeCatalog`` that raises a
-   helpful ``TypeError`` instead of ``AttributeError``, pointing users
-   to ``quartermaster_engine.SimpleNodeRegistry``.
-
-These tests lock in both behaviours.
+These tests lock in:
+1. The ``NodeRegistry`` alias is gone from every import path.
+2. ``NodeCatalog`` keeps its ``get_executor`` guard that redirects to
+   ``quartermaster_engine.SimpleNodeRegistry`` with a helpful message.
+3. The rest of the catalog API is unchanged.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from quartermaster_nodes import NodeCatalog, NodeRegistry
-from quartermaster_nodes.registry import (
-    NodeCatalog as FromRegistry,
-)
-from quartermaster_nodes.registry import (
-    NodeRegistry as NodeRegistryFromRegistry,
-)
+from quartermaster_nodes import NodeCatalog
+from quartermaster_nodes.registry import NodeCatalog as FromRegistry
 from quartermaster_nodes.registry import default_registry
 from quartermaster_nodes.registry.registry import NodeCatalog as FromInnerModule
 
 
-def test_noderegistry_is_alias_for_nodecatalog() -> None:
-    """Old ``from quartermaster_nodes import NodeRegistry`` must keep working."""
-    assert NodeRegistry is NodeCatalog
-    assert NodeRegistryFromRegistry is FromRegistry
-
-
 def test_same_class_across_import_paths() -> None:
-    """All import paths resolve to the same class object."""
+    """All three import paths resolve to the same class object."""
     assert NodeCatalog is FromRegistry
     assert NodeCatalog is FromInnerModule
 
 
 def test_default_registry_is_nodecatalog_instance() -> None:
-    """The module-level default is a NodeCatalog — and therefore a NodeRegistry."""
     assert isinstance(default_registry, NodeCatalog)
-    assert isinstance(default_registry, NodeRegistry)
+
+
+def test_noderegistry_alias_removed() -> None:
+    """v0.6.0 dropped every NodeRegistry alias."""
+    with pytest.raises(ImportError):
+        from quartermaster_nodes import NodeRegistry  # noqa: F401
+    with pytest.raises(ImportError):
+        from quartermaster_nodes.registry import NodeRegistry  # noqa: F401
+    with pytest.raises(ImportError):
+        from quartermaster_nodes.registry.registry import NodeRegistry  # noqa: F401
 
 
 class TestGetExecutorGuard:
@@ -66,21 +63,11 @@ class TestGetExecutorGuard:
         with pytest.raises(TypeError) as exc_info:
             catalog.get_executor("Instruction1")
         msg = str(exc_info.value)
-        # Must mention the correct replacement class
         assert "SimpleNodeRegistry" in msg
         assert "quartermaster_engine" in msg
-        # Must include the node type that was attempted
         assert "Instruction1" in msg
 
-    def test_guard_also_fires_on_alias(self) -> None:
-        """Calling get_executor on the legacy NodeRegistry alias works the same."""
-        registry = NodeRegistry()
-        with pytest.raises(TypeError) as exc_info:
-            registry.get_executor("User1")
-        assert "SimpleNodeRegistry" in str(exc_info.value)
-
     def test_error_message_contains_working_example(self) -> None:
-        """The error message should include a code snippet users can copy."""
         catalog = NodeCatalog()
         with pytest.raises(TypeError) as exc_info:
             catalog.get_executor("X")

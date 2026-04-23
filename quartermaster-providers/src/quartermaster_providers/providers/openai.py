@@ -67,6 +67,157 @@ def _is_o_series(model: str) -> bool:
     return model.startswith("o1") or model.startswith("o3")
 
 
+#: Regex pairs that match the text-form tool-call markers emitted by
+#: mis-configured vLLM / Ollama servers (server was started without a
+#: ``--tool-call-parser`` flag, so the chat template's literal
+#: ``<|tool_call|>`` sentinels leak into ``message.content`` instead of
+#: being converted into structured ``tool_calls`` by the server). Each
+#: entry is ``(open_marker, close_marker)``. Order-matters: we try the
+#: most specific marker set first.
+_TEXT_TOOL_CALL_MARKERS: tuple[tuple[str, str], ...] = (
+    # Gemma-style markers
+    ("<|tool_call|>", "<|tool_call|>"),
+    # Qwen / some Llama fine-tunes
+    ("<tool_call>", "</tool_call>"),
+    # Fireworks / some custom templates
+    ("[TOOL_CALLS]", "[/TOOL_CALLS]"),
+)
+
+_TOOL_CALL_REGEXES = None
+
+
+def _compiled_tool_call_regexes():
+    """Compile once, cache. Keeps import time clean."""
+    global _TOOL_CALL_REGEXES
+    if _TOOL_CALL_REGEXES is None:
+        import re
+
+        _TOOL_CALL_REGEXES = tuple(
+            re.compile(
+                re.escape(open_m) + r"\s*(.*?)\s*" + re.escape(close_m),
+                re.DOTALL,
+            )
+            for open_m, close_m in _TEXT_TOOL_CALL_MARKERS
+        )
+    return _TOOL_CALL_REGEXES
+
+
+def _parse_text_form_tool_calls(content: str) -> tuple[list[ToolCall], str]:
+    """Salvage tool calls from a mis-configured server's text-form output.
+
+    Returns ``(tool_calls, residual_text)`` — ``tool_calls`` is whatever we
+    could recover from the marker-delimited blocks; ``residual_text`` is
+    ``content`` with the marker blocks stripped out (so the agent's visible
+    text answer doesn't carry the literal ``<|tool_call|>...`` junk).
+
+    Each marker-delimited block is parsed as JSON shaped like one of:
+
+        {"name": "foo", "arguments": {...}}
+        {"tool_name": "foo", "parameters": {...}}
+        {"function": {"name": "foo", "arguments": "{json}"}}
+
+    Blocks that don't parse are skipped silently (ops can still see the
+    raw content in ``message.content``; we don't want to raise from a
+    best-effort salvage).
+
+    This is a v0.6.0 defence-in-depth: servers launched with
+    ``--tool-call-parser <flavour>`` already emit structured
+    ``tool_calls`` and never trip this path. But users who forget the
+    flag — or who run against an older vLLM — used to silently lose tool
+    calls (the agent saw text and exited thinking it had a final answer).
+    """
+    if not content:
+        return [], content
+    residual = content
+    recovered: list[ToolCall] = []
+    for regex in _compiled_tool_call_regexes():
+        for idx, match in enumerate(regex.finditer(content)):
+            payload = match.group(1).strip()
+            parsed = _coerce_text_tool_call_payload(payload)
+            if parsed is None:
+                continue
+            name, arguments = parsed
+            recovered.append(
+                ToolCall(
+                    tool_name=name,
+                    tool_id=f"call_text_{idx}",
+                    parameters=arguments,
+                )
+            )
+        if recovered:
+            residual = regex.sub("", residual)
+            # Stop at the first marker flavour that produced hits.
+            # Servers usually emit one flavour only, and strip-then-re-
+            # scanning with a different regex would double-consume text.
+            break
+    return recovered, residual.strip()
+
+
+def _coerce_text_tool_call_payload(payload: str) -> tuple[str, dict[str, Any]] | None:
+    """Parse ``{name, arguments}`` / ``{tool_name, parameters}`` /
+    ``{function: {name, arguments}}`` out of one JSON block.
+
+    Returns ``(name, arguments_dict)`` on success, ``None`` if the block
+    isn't parseable as any recognised shape.
+    """
+    try:
+        obj = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(obj, dict):
+        return None
+
+    # Handle ``{"function": {...}}`` nesting
+    fn = obj.get("function") if "function" in obj else obj
+    if not isinstance(fn, dict):
+        return None
+
+    name = fn.get("name") or fn.get("tool_name")
+    if not isinstance(name, str) or not name:
+        return None
+
+    args = fn.get("arguments")
+    if args is None:
+        args = fn.get("parameters", {})
+    if isinstance(args, str):
+        # Some templates double-encode JSON as a string.
+        try:
+            args = json.loads(args)
+        except json.JSONDecodeError:
+            args = {"raw": args}
+    if not isinstance(args, dict):
+        args = {"raw": args}
+    return name, args
+
+
+async def _aclose_stream(stream: Any) -> None:
+    """Close an openai streaming response defensively.
+
+    openai's ``AsyncStream`` exposes either ``close()`` (a coroutine),
+    ``aclose()`` (a coroutine), or a ``.response`` attribute with an
+    ``aclose()`` coroutine. Older versions only have one or the other.
+    We try each option; any exception during close is swallowed —
+    we're in a finally path and must not obscure the original error.
+    """
+    for attr in ("close", "aclose"):
+        method = getattr(stream, attr, None)
+        if callable(method):
+            try:
+                result = method()
+                if hasattr(result, "__await__"):
+                    await result
+                return
+            except Exception:
+                pass
+    response = getattr(stream, "response", None)
+    aclose = getattr(response, "aclose", None) if response is not None else None
+    if callable(aclose):
+        try:
+            await aclose()
+        except Exception:
+            pass
+
+
 def _extract_reasoning_text(obj: Any) -> str:
     """Pull reasoning text out of a non-standard OpenAI-compatible response.
 
@@ -281,6 +432,16 @@ class OpenAIProvider(AbstractLLMProvider):
         if timeout is not None:
             params["timeout"] = timeout
 
+        # v0.6.0: provider-specific body escape hatch. The openai Python
+        # SDK splices ``extra_body`` into the outgoing JSON; vLLM /
+        # OpenAI-compat servers use this for knobs like
+        # ``chat_template_kwargs`` (Gemma-4 thinking toggle),
+        # ``repetition_penalty``, ``top_k``, etc. — anything the SDK
+        # doesn't model natively. Pass-through only; we don't validate
+        # the keys because the set is server-specific.
+        if config.extra_body:
+            params["extra_body"] = dict(config.extra_body)
+
         return params
 
     async def list_models(self) -> list[str]:
@@ -342,38 +503,64 @@ class OpenAIProvider(AbstractLLMProvider):
     async def _stream_text(
         self, client: Any, params: dict[str, Any]
     ) -> AsyncIterator[TokenResponse]:
+        # v0.7.0: poll the provider-level cancellation contextvar between
+        # chunks. When the engine calls ``runner.stop(flow_id)`` (triggered
+        # by an SSE client disconnect, a ``with qm.run.stream(...) as stream:
+        # break``, or an explicit ``qm.Cancelled`` exception in a tool) it
+        # flips the check; we then close the openai ``AsyncStream`` — which
+        # closes the underlying httpx response — so vLLM / Ollama stops
+        # generating and releases the slot. Without this the httpx
+        # connection kept draining tokens until the model finished naturally.
+        from quartermaster_providers.cancellation import should_cancel
+
         try:
             stream = await client.chat.completions.create(**params)
-            async for chunk in stream:
-                if chunk.choices:
-                    delta = chunk.choices[0].delta
-                    finish_reason = chunk.choices[0].finish_reason
-                    if delta and delta.content:
+            try:
+                async for chunk in stream:
+                    if chunk.choices:
+                        delta = chunk.choices[0].delta
+                        finish_reason = chunk.choices[0].finish_reason
+                        if delta and delta.content:
+                            yield TokenResponse(
+                                content=delta.content,
+                                stop_reason=finish_reason,
+                            )
+                        else:
+                            # OpenAI-compatible reasoning models stream their
+                            # answer through ``reasoning_content`` (or ``reasoning``)
+                            # when ``content`` is absent — surface that as visible
+                            # text so callers don't see an empty stream.
+                            reasoning_chunk = _extract_reasoning_text(delta) if delta else ""
+                            if reasoning_chunk:
+                                yield TokenResponse(
+                                    content=reasoning_chunk,
+                                    stop_reason=finish_reason,
+                                )
+                            elif finish_reason:
+                                yield TokenResponse(
+                                    content="",
+                                    stop_reason=finish_reason,
+                                )
+                    if hasattr(chunk, "usage") and chunk.usage:
                         yield TokenResponse(
-                            content=delta.content,
-                            stop_reason=finish_reason,
+                            content="",
+                            stop_reason="usage",
                         )
-                    else:
-                        # OpenAI-compatible reasoning models stream their
-                        # answer through ``reasoning_content`` (or ``reasoning``)
-                        # when ``content`` is absent — surface that as visible
-                        # text so callers don't see an empty stream.
-                        reasoning_chunk = _extract_reasoning_text(delta) if delta else ""
-                        if reasoning_chunk:
-                            yield TokenResponse(
-                                content=reasoning_chunk,
-                                stop_reason=finish_reason,
-                            )
-                        elif finish_reason:
-                            yield TokenResponse(
-                                content="",
-                                stop_reason=finish_reason,
-                            )
-                if hasattr(chunk, "usage") and chunk.usage:
-                    yield TokenResponse(
-                        content="",
-                        stop_reason="usage",
-                    )
+                    if should_cancel():
+                        # Close the openai AsyncStream (→ httpx response)
+                        # so the server knows to stop generating. The
+                        # ``stop_reason="cancelled"`` sentinel tells the
+                        # engine loop to treat this as a cooperative
+                        # cancel rather than a natural finish.
+                        await _aclose_stream(stream)
+                        yield TokenResponse(content="", stop_reason="cancelled")
+                        return
+            finally:
+                # Defensive: if the consumer abandons the generator mid-
+                # stream (e.g. the engine raises out of the async-for),
+                # still close the underlying httpx response rather than
+                # leaking it into GC.
+                await _aclose_stream(stream)
         except (AuthenticationError, RateLimitError, ProviderError):
             raise
         except Exception as e:
@@ -419,8 +606,17 @@ class OpenAIProvider(AbstractLLMProvider):
                     output_tokens=response.usage.completion_tokens,
                 )
 
+            text_content = message.content or ""
+            # v0.6.0: text-form tool-call fallback. See
+            # ``generate_native_response`` for the full rationale.
+            if not tool_calls and text_content:
+                salvaged, residual = _parse_text_form_tool_calls(text_content)
+                if salvaged:
+                    tool_calls = salvaged
+                    text_content = residual
+
             return ToolCallResponse(
-                text_content=message.content or "",
+                text_content=text_content,
                 tool_calls=tool_calls,
                 stop_reason=choice.finish_reason,
                 usage=usage,
@@ -476,6 +672,20 @@ class OpenAIProvider(AbstractLLMProvider):
             text_content = message.content or ""
             if not text_content:
                 text_content = _extract_reasoning_text(message)
+
+            # v0.6.0: text-form tool-call fallback. A vLLM / Ollama
+            # server launched WITHOUT ``--tool-call-parser <flavour>``
+            # leaks the chat-template's literal ``<|tool_call|>...``
+            # sentinels into ``message.content`` rather than converting
+            # them into structured ``tool_calls``. We used to miss those
+            # entirely — the agent loop saw text, no tool_calls, and
+            # exited thinking it had a final answer. Salvage them.
+            if not tool_calls and text_content:
+                salvaged, residual = _parse_text_form_tool_calls(text_content)
+                if salvaged:
+                    tool_calls = salvaged
+                    text_content = residual
+
             return NativeResponse(
                 text_content=text_content,
                 thinking=[],

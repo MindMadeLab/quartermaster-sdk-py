@@ -86,7 +86,3 @@ def grep(path: str, pattern: str, recursive: bool = True, context_lines: int = 0
                     _search_file(fpath, regex, context_lines, matches)
 
     return {"matches": matches, "total_matches": len(matches)}
-
-
-# Backward-compatible alias
-GrepTool = grep

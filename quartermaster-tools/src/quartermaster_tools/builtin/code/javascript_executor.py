@@ -66,7 +66,3 @@ def javascript_executor(code: str, timeout: int = DEFAULT_TIMEOUT) -> ToolResult
         return ToolResult(success=False, error=f"Command not found: {cmd[0]}")
     except OSError as e:
         return ToolResult(success=False, error=f"OS error: {e}")
-
-
-# Backward-compatible alias
-JavaScriptExecutorTool = javascript_executor

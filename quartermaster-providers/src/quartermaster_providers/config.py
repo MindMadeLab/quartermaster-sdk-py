@@ -6,6 +6,7 @@ provider is used.
 """
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -26,10 +27,10 @@ class LLMConfig:
             alongside the prompt for vision-capable models. ``base64_data``
             is the raw image bytes encoded as ASCII base64 (no ``data:``
             URI prefix); ``mime_type`` is e.g. ``"image/jpeg"`` /
-            ``"image/png"`` / ``"image/webp"``. Populated by the v0.3.0
-            engine path that reads ``flow_memory["__user_images__"]``;
-            providers that support vision consume this list when building
-            the request payload. Empty/``None`` means a text-only request.
+            ``"image/png"`` / ``"image/webp"``. Populated by the engine
+            path that reads ``flow_memory["__user_images__"]``; providers
+            that support vision consume this list when building the
+            request payload. Empty/``None`` means a text-only request.
         thinking_enabled: Whether to enable extended thinking mode (e.g., Claude thinking).
         thinking_budget: Maximum tokens allowed for thinking/reasoning.
         top_p: Nucleus sampling parameter (alternative to temperature).
@@ -70,6 +71,23 @@ class LLMConfig:
     # untouched (backwards-compat with v0.3.x callers).
     connect_timeout: float | None = None
     read_timeout: float | None = None
+    # v0.6.0 — pass-through for provider-specific OpenAI-compat body fields
+    # that the SDK doesn't otherwise model. The dict is spliced into the
+    # outgoing ``chat.completions.create(..., extra_body=<dict>)`` call
+    # (supported by the openai Python SDK as a generic escape hatch).
+    #
+    # Primary motivator: Gemma-4's ``chat_template_kwargs`` knob for
+    # toggling <thinking> blocks per-request:
+    #   extra_body={"chat_template_kwargs": {"enable_thinking": False}}
+    # Also handy for vLLM-specific sampling params (``top_k``,
+    # ``repetition_penalty``) that don't have a first-class field here.
+    #
+    # The field is provider-agnostic at the ``LLMConfig`` layer — each
+    # provider decides whether / how to forward it. OpenAI +
+    # OpenAI-compatible providers splice it into the request; Anthropic,
+    # Google, Groq, xAI ignore it (or will once they grow bespoke
+    # pass-through slots of their own).
+    extra_body: dict[str, Any] | None = None
 
     def validate(self) -> None:
         """Validate configuration parameters.

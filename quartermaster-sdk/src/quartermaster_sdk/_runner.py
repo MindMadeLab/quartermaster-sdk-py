@@ -154,6 +154,27 @@ def _extract_inline_tools(graph: GraphBuilder | GraphSpec) -> dict[str, Any]:
     return dict(raw)
 
 
+def _extract_retry_predicates(graph: GraphBuilder | GraphSpec) -> dict[str, Any]:
+    """Return the builder-side ``_retry_predicates`` dict if present.
+
+    v0.7.0: ``.agent(retry={"on": <callable>})`` (and the analogous
+    ``instruction()`` / ``instruction_form()`` forms) stashes the
+    predicate on the builder's ``_retry_predicates`` side-channel so the
+    engine can resolve it by node name at run time. Callables cannot
+    survive JSON/YAML so they do NOT round-trip through a rebuilt
+    :class:`GraphSpec` — callers who transport graphs across process
+    boundaries must re-attach their predicates via a freshly-invoked
+    builder on the consumer side.
+
+    Returns an empty dict when the graph carries no predicates (mirrors
+    :func:`_extract_inline_tools`).
+    """
+    raw = getattr(graph, "_retry_predicates", None)
+    if not isinstance(raw, dict):
+        return {}
+    return dict(raw)
+
+
 def _merge_inline_tools(
     tool_registry: Any | None,
     inline_tools: dict[str, Any],
@@ -429,6 +450,7 @@ class _RunCallable:
             user_input = _apply_pii_redaction(user_input, redact_policy)
 
         inline_tools = _extract_inline_tools(graph)
+        retry_predicates = _extract_retry_predicates(graph)
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
         prepared_images = prepare_images(image=image, images=images)
@@ -453,6 +475,7 @@ class _RunCallable:
             graph=spec,
             provider_registry=registry,
             tool_registry=effective_tool_registry,
+            retry_predicates=retry_predicates or None,
             # Forward every event to the global listener registry so
             # bolt-on instrumentation (e.g. ``qm.telemetry.instrument()``)
             # observes the same FlowEvent stream the streaming runner
@@ -614,6 +637,7 @@ class _RunCallable:
                 f"run.stream(): deadline_seconds must be > 0, got {deadline_seconds!r}"
             )
         inline_tools = _extract_inline_tools(graph)
+        retry_predicates = _extract_retry_predicates(graph)
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
         prepared_images = prepare_images(image=image, images=images)
@@ -653,6 +677,7 @@ class _RunCallable:
             graph=spec,
             provider_registry=registry,
             tool_registry=effective_tool_registry,
+            retry_predicates=retry_predicates or None,
             on_event=on_event,
         )
 

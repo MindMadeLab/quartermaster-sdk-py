@@ -1,4 +1,4 @@
-"""Tests for privacy tools: DetectPIITool, RedactPIITool, ScanFilePIITool."""
+"""Tests for privacy tools: detect_pii_tool, redact_pii, scan_file_pii."""
 
 from __future__ import annotations
 
@@ -7,18 +7,18 @@ import tempfile
 
 import pytest
 
-from quartermaster_tools.builtin.privacy.detect import DetectPIITool, ScanFilePIITool
-from quartermaster_tools.builtin.privacy.redact import RedactPIITool
+from quartermaster_tools.builtin.privacy.detect import detect_pii_tool, scan_file_pii
+from quartermaster_tools.builtin.privacy.redact import redact_pii
 
 
 # ---------------------------------------------------------------------------
-# DetectPIITool
+# detect_pii_tool
 # ---------------------------------------------------------------------------
 
 
 class TestDetectPIITool:
     def setup_method(self) -> None:
-        self.tool = DetectPIITool
+        self.tool = detect_pii_tool
 
     def test_detect_email(self) -> None:
         result = self.tool.run(text="Contact john@example.com for details.")
@@ -116,13 +116,13 @@ class TestDetectPIITool:
 
 
 # ---------------------------------------------------------------------------
-# RedactPIITool
+# redact_pii
 # ---------------------------------------------------------------------------
 
 
 class TestRedactPIITool:
     def setup_method(self) -> None:
-        self.tool = RedactPIITool
+        self.tool = redact_pii
 
     def test_redact_strategy(self) -> None:
         text = "Email: john@example.com"
@@ -193,13 +193,13 @@ class TestRedactPIITool:
 
 
 # ---------------------------------------------------------------------------
-# ScanFilePIITool
+# scan_file_pii
 # ---------------------------------------------------------------------------
 
 
 class TestScanFilePIITool:
     def setup_method(self) -> None:
-        self.tool = ScanFilePIITool
+        self.tool = scan_file_pii
 
     def test_scan_file(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:

@@ -172,6 +172,69 @@ def slow_research(topic: str) -> dict:
     return {"summary": "..."}
 ```
 
+Both sync and async tool bodies work. The context is carried through
+`contextvars.copy_context()` into the agent loop's worker threads, so
+`qm.current_context()` returns the right `ExecutionContext` even inside
+tools that were dispatched via `.agent(tools=[...])` in parallel.
+
+### SSE / Django example
+
+```python
+# views.py
+from django.http import StreamingHttpResponse
+import json
+import quartermaster_sdk as qm
+
+def enrich_sse(request):
+    graph = build_enrichment_graph()
+
+    def event_stream():
+        with qm.run.stream(graph, request.GET["company"]) as stream:
+            for chunk in stream.progress():
+                payload = {
+                    "message": chunk.message,
+                    "percent": chunk.percent,
+                    # ``tool_id`` lets the UI key concurrent cards correctly
+                    # when the agent emits parallel tool_calls in one turn.
+                    "tool_id": chunk.data.get("tool_id"),
+                    **chunk.data,
+                }
+                yield f"event: progress\ndata: {json.dumps(payload)}\n\n"
+
+    return StreamingHttpResponse(event_stream(), content_type="text/event-stream")
+```
+
+### Parallel tool-dispatch caveat
+
+When the agent emits multiple `tool_calls` in a single model turn
+(since v0.5.0), each tool runs on its own worker thread via
+`asyncio.gather(asyncio.to_thread(...))`. Progress events from concurrent
+tools are interleaved in arrival order — deterministic per-tool, not
+globally. If your UI renders live cards per tool, key them by the
+`tool_id` you pass into `emit_progress(..., data={"tool_id": ...})` so
+two simultaneous `list_orders()` and `fetch_invoices()` calls don't
+collapse into one card.
+
+### Cancellation interaction
+
+Tools can poll `ctx.cancelled` between progress emissions. If the SSE
+client disconnects and the caller exits the `with qm.run.stream(...):`
+block, `ctx.cancelled` flips True on the next poll:
+
+```python
+@tool()
+def long_list_orders() -> list[dict]:
+    ctx = qm.current_context()
+    orders: list[dict] = []
+    for i, row in enumerate(db.iter_orders()):
+        if ctx and ctx.cancelled:
+            raise qm.Cancelled()      # propagates as ErrorChunk(cancelled)
+        if ctx and i % 25 == 0:
+            ctx.emit_progress(f"Loaded {i} orders", percent=i / TOTAL)
+        orders.append(row)
+    return orders
+```
+
 ## OpenTelemetry instrumentation
 
 ```bash

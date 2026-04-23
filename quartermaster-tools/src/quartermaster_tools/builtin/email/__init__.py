@@ -8,22 +8,15 @@ Provides:
 """
 
 from quartermaster_tools.builtin.email.tools import (
-    send_email,
+    _send_timestamps,
     read_email,
     search_email,
-    SendEmailTool,
-    ReadEmailTool,
-    SearchEmailTool,
-    _send_timestamps,
+    send_email,
 )
 
 __all__ = [
-    "send_email",
+    "_send_timestamps",
     "read_email",
     "search_email",
-    # Backward-compatible aliases
-    "SendEmailTool",
-    "ReadEmailTool",
-    "SearchEmailTool",
-    "_send_timestamps",
+    "send_email",
 ]

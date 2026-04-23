@@ -261,8 +261,3 @@ def scan_file_pii(file_path: str, entities: list = None) -> dict:
         "count": len(found),
         "lines_with_pii": lines_with_pii,
     }
-
-
-# Backward-compatible aliases
-DetectPIITool = detect_pii_tool
-ScanFilePIITool = scan_file_pii

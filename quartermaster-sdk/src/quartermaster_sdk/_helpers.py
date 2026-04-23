@@ -4,8 +4,7 @@ These wrap a single-node graph so callers never touch ``Graph``,
 ``FlowRunner``, or ``register_local`` for the 90% of use-cases that are
 just ``prompt → text`` or ``prompt → typed JSON``.
 
-The docs / downstream feedback called this "the thing we'd actually write";
-v0.2.0 ships it as the primary recommended API for non-agentic calls.
+This is the recommended API for non-agentic calls.
 """
 
 from __future__ import annotations
@@ -302,9 +301,9 @@ def instruction_form(
     is_dict_schema = isinstance(schema, dict)
 
     if not (is_pydantic_schema or is_dict_schema):
-        # v0.4.0: upgraded from ValueError to TypeError — this is a
-        # programmer error about the *type* of the argument, not its
-        # value. Matches the pattern used elsewhere in the SDK.
+        # TypeError (not ValueError): this is a programmer error about the
+        # *type* of the argument, not its value. Matches the pattern used
+        # elsewhere in the SDK.
         raise TypeError(
             f"instruction_form(schema=...) must be a pydantic.BaseModel "
             f"subclass or a dict (JSON Schema); got {type(schema).__name__}"

@@ -81,7 +81,3 @@ def list_directory(
         return {"error": f"Permission denied: {e}"}
 
     return {"entries": entries, "count": len(entries)}
-
-
-# Backward-compatible alias
-ListDirectoryTool = list_directory

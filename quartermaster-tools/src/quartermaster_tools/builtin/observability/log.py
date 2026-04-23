@@ -79,6 +79,3 @@ def clear() -> None:
 # Attach class-method-like helpers to the FunctionTool instance
 log.get_logs = get_logs  # type: ignore[attr-defined]
 log.clear = clear  # type: ignore[attr-defined]
-
-# Backward-compatible alias
-LogTool = log

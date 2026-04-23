@@ -56,10 +56,10 @@ def slow_research(topic: str) -> dict:
 
     steps = [
         ("Gathering sources", 0.2, {"url": "https://example.com/a"}),
-        ("Reading page 1",    0.4, {"url": "https://example.com/a", "length": 2400}),
-        ("Reading page 2",    0.6, {"url": "https://example.com/b", "length": 1800}),
-        ("Summarising",       0.8, None),
-        ("Done",              1.0, None),
+        ("Reading page 1", 0.4, {"url": "https://example.com/a", "length": 2400}),
+        ("Reading page 2", 0.6, {"url": "https://example.com/b", "length": 1800}),
+        ("Summarising", 0.8, None),
+        ("Done", 1.0, None),
     ]
 
     for message, percent, source in steps:

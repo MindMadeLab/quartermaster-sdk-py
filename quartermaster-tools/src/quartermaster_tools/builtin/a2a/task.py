@@ -237,9 +237,3 @@ def a2a_collect_result(agent_url: str, task_id: str) -> dict:
         raise ConnectionError(f"Connection error: {e}")
     except httpx.HTTPError as e:
         raise RuntimeError(f"HTTP error: {e}")
-
-
-# Backward-compatible aliases
-A2ASendTaskTool = a2a_send_task
-A2ACheckStatusTool = a2a_check_status
-A2ACollectResultTool = a2a_collect_result

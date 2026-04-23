@@ -187,9 +187,3 @@ def sqlite_schema(
             conn.close()
     except sqlite3.Error as e:
         return ToolResult(success=False, error=f"SQLite error: {e}")
-
-
-# Backward-compatible aliases
-SQLiteQueryTool = sqlite_query
-SQLiteWriteTool = sqlite_write
-SQLiteSchemaTool = sqlite_schema

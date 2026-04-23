@@ -311,9 +311,3 @@ def search_email(
         return ToolResult(success=False, error=f"IMAP error: {e}")
     except OSError as e:
         return ToolResult(success=False, error=f"Connection error: {e}")
-
-
-# Backward-compatible aliases
-SendEmailTool = send_email
-ReadEmailTool = read_email
-SearchEmailTool = search_email

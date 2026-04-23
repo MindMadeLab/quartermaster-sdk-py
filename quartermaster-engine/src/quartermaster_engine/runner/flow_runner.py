@@ -65,6 +65,25 @@ from quartermaster_engine.types import (
 logger = logging.getLogger(__name__)
 
 
+# v0.7.0: node types eligible for graph-level retry.  Mirrors the surface
+# the builder exposes — ``instruction() / instruction_form() / agent()``.
+# Other node types ignore the ``retry_max_attempts`` metadata key (it's
+# only populated by the three builders that accept ``retry=``).
+_RETRYABLE_NODE_TYPES: frozenset[NodeType] = frozenset(
+    {NodeType.INSTRUCTION, NodeType.INSTRUCTION_FORM, NodeType.AGENT}
+)
+
+
+def _default_retry_predicate(result: NodeResult) -> bool:
+    """Default v0.7.0 retry predicate — fire only when the node failed.
+
+    Used when ``retry={"max_attempts": N}`` is passed without an ``on=``
+    predicate. Matches the documented semantics: "retry fires on the
+    exception path".
+    """
+    return not result.success
+
+
 @dataclass
 class FlowResult:
     """The final result of a flow execution.
@@ -132,6 +151,7 @@ class FlowRunner:
         provider_registry: Any | None = None,
         tool_registry: Any | None = None,
         parent_context: ExecutionContext | None = None,
+        retry_predicates: dict[str, Callable[[NodeResult], bool]] | None = None,
     ) -> None:
         """Construct a runner.
 
@@ -191,6 +211,16 @@ class FlowRunner:
         # v0.3.0: pointer back at the parent flow's ExecutionContext when
         # this runner is driving a sub-graph (spawned via SUB_ASSISTANT).
         self.parent_context = parent_context
+        # v0.7.0: per-node-name retry predicates. The builder's
+        # ``retry={"on": ...}`` kwarg stashes the callable here (via the
+        # SDK runner's pass-through) so the engine can resolve it by
+        # node name at run time.  Predicates can't live in node metadata
+        # because callables aren't JSON/YAML-serialisable — we follow
+        # the same in-memory side-channel pattern that ``_inline_tools``
+        # uses for tool callables.
+        self.retry_predicates: dict[str, Callable[[NodeResult], bool]] = dict(
+            retry_predicates or {}
+        )
 
         self._traverse_in = TraverseInGate()
         self._traverse_out = TraverseOutGate()
@@ -670,9 +700,17 @@ class FlowRunner:
             _cancelled_event=self._get_cancel_event(flow_id),
         )
 
-        # Execute with error handling
+        # Execute with error handling — wrapped in the v0.7.0 node-level
+        # retry loop for INSTRUCTION / INSTRUCTION_FORM / AGENT nodes when
+        # their metadata carries ``retry_max_attempts`` (set by
+        # ``.agent(retry={...})`` et al on the builder).  The loop
+        # re-invokes ``_run_executor`` up to ``max_attempts`` times,
+        # gated by the (optional) per-node predicate; both the happy
+        # path and the exception path are covered.  Non-retryable node
+        # types (or retryable nodes with no retry spec) execute exactly
+        # once, preserving pre-v0.7.0 behaviour.
         try:
-            result = self._run_executor(executor, context, node)
+            result = self._run_with_retry(executor, context, node, flow_id)
         except Exception as e:
             return self._handle_node_error(flow_id, node, execution, str(e))
 
@@ -688,6 +726,124 @@ class FlowRunner:
                 self.store.save_memory(flow_id, key, value)
 
         return result
+
+    def _run_with_retry(
+        self,
+        executor: NodeExecutor,
+        context: ExecutionContext,
+        node: GraphNode,
+        flow_id: UUID,
+    ) -> NodeResult:
+        """Invoke *executor* under the v0.7.0 node-level retry policy.
+
+        Scope is the SINGLE node — retries re-run ``executor.execute(...)``
+        with the same context; the rest of the graph is untouched (separate
+        design from a graph-level retry).  The counter is per-call, so a
+        sub-graph visited twice gets a fresh budget each time.
+
+        Semantics:
+
+        * Only :class:`NodeType.INSTRUCTION`, ``INSTRUCTION_FORM`` and
+          ``AGENT`` participate — the surface the builder exposes.  Other
+          node types short-circuit to a single ``_run_executor`` call.
+        * ``retry_max_attempts`` on node metadata is the TOTAL attempt
+          budget (initial attempt + retries).  Missing / non-int / ``<= 0``
+          → 1 (normalised upstream, but we defensively clamp again).
+        * The predicate (resolved by node name against
+          ``self.retry_predicates``) is called with the ``NodeResult`` of
+          the just-completed attempt.  If it returns True AND the budget
+          allows, we retry.  If no predicate is registered, the default
+          ``success is False`` check fires (exception path).
+        * Exceptions inside the executor are caught, converted into a
+          synthetic ``NodeResult(success=False, error=...)`` so the
+          predicate can inspect them, and the loop re-invokes the
+          executor.  After the final attempt the caught exception is
+          re-raised so the outer ``_execute_logic_node`` can funnel it
+          through ``_handle_node_error``.
+        * Every retry emits a ``CustomEvent(name="node.retried", ...)``
+          so observability tooling (``stream.custom(name="node.retried")``)
+          can see when and why a retry fired.
+        """
+        # Fast path — not a retryable node type, run once and done.
+        if node.type not in _RETRYABLE_NODE_TYPES:
+            return self._run_executor(executor, context, node)
+
+        raw_budget = node.metadata.get("retry_max_attempts", 1)
+        try:
+            max_attempts = int(raw_budget)
+        except (TypeError, ValueError):
+            max_attempts = 1
+        if max_attempts <= 0:
+            max_attempts = 1
+
+        predicate = self.retry_predicates.get(node.name)
+
+        attempt = 0
+        last_exc: Exception | None = None
+        while True:
+            attempt += 1
+            last_exc = None
+            try:
+                result = self._run_executor(executor, context, node)
+            except Exception as exc:
+                last_exc = exc
+                # Build a synthetic failure result so the predicate (if any)
+                # gets a uniform NodeResult shape to inspect.  We never
+                # expose this result outside the retry loop — on success
+                # we return ``result``; on budget exhaustion we re-raise
+                # the original exception.
+                result = NodeResult(success=False, data={}, error=str(exc))
+
+            if attempt >= max_attempts:
+                # Out of budget — if the last attempt raised, re-raise so
+                # the outer error handler runs.  Otherwise return the
+                # final result (success or failure) as-is.
+                if last_exc is not None:
+                    raise last_exc
+                return result
+
+            # Decide whether to retry based on the predicate.  ``last_exc``
+            # forces the retry path regardless of the predicate — an
+            # exception is always considered a retry trigger (the "default
+            # behaviour" for specs without ``on=``) because otherwise a
+            # caller-supplied predicate that only inspects ``output_text``
+            # would silently swallow transient errors.
+            if last_exc is not None:
+                should_retry = True
+                reason = "exception"
+            else:
+                pred = predicate if predicate is not None else _default_retry_predicate
+                try:
+                    should_retry = bool(pred(result))
+                except Exception:
+                    logger.exception(
+                        "retry predicate for node %r raised; treating as "
+                        "no-retry and surfacing the current result",
+                        node.name,
+                    )
+                    should_retry = False
+                reason = "predicate"
+
+            if not should_retry:
+                return result
+
+            # Emit the retry event BEFORE the next attempt so the retried
+            # attempt's NodeStarted/finished events sit alongside it in
+            # arrival order.  ``attempt`` here counts the retry itself,
+            # starting at 1 for the first re-run (matches the spec's
+            # "attempt counter starting at 1 (first retry)" wording).
+            self._emit(
+                CustomEvent(
+                    flow_id=flow_id,
+                    node_id=node.id,
+                    name="node.retried",
+                    payload={
+                        "node": node.name,
+                        "attempt": attempt,
+                        "reason": reason,
+                    },
+                )
+            )
 
     def _run_executor(
         self, executor: NodeExecutor, context: ExecutionContext, node: GraphNode

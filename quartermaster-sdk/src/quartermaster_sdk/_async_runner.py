@@ -43,6 +43,7 @@ from ._runner import (
     StreamDeadlineExceeded,
     _event_to_chunk,
     _extract_inline_tools,
+    _extract_retry_predicates,
     _merge_inline_tools,
     _resolve_call_timeouts,
     _resolve_graph,
@@ -104,6 +105,7 @@ class _ARunCallable:
         their current LLM/tool call but no new work is scheduled.
         """
         inline_tools = _extract_inline_tools(graph)
+        retry_predicates = _extract_retry_predicates(graph)
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
         prepared_images = prepare_images(image=image, images=images)
@@ -130,6 +132,7 @@ class _ARunCallable:
             graph=spec,
             provider_registry=registry,
             tool_registry=effective_tool_registry,
+            retry_predicates=retry_predicates or None,
             # Forward every event to the global listener registry so
             # bolt-on instrumentation (e.g. ``qm.telemetry.instrument()``)
             # observes the same FlowEvent stream the streaming runner
@@ -298,6 +301,7 @@ class _ARunCallable:
                 f"arun.stream(): deadline_seconds must be > 0, got {deadline_seconds!r}"
             )
         inline_tools = _extract_inline_tools(graph)
+        retry_predicates = _extract_retry_predicates(graph)
         spec = _resolve_graph(graph)
         registry = provider_registry or get_default_registry()
         prepared_images = prepare_images(image=image, images=images)
@@ -338,6 +342,7 @@ class _ARunCallable:
             graph=spec,
             provider_registry=registry,
             tool_registry=effective_tool_registry,
+            retry_predicates=retry_predicates or None,
             on_event=on_event,
         )
 

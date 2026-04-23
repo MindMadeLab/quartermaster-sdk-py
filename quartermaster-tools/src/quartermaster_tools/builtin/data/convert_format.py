@@ -130,8 +130,5 @@ def convert_format(source: str, from_format: str, to_format: str) -> dict:
     return {"output": output}
 
 
-# Backward-compatible alias
-ConvertFormatTool = convert_format
-
 # Public alias for the convert helper
 convert_format_data = _convert

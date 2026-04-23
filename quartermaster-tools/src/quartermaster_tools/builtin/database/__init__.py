@@ -7,19 +7,12 @@ All SQL execution uses parameterized queries to prevent injection.
 
 from quartermaster_tools.builtin.database.tools import (
     sqlite_query,
-    sqlite_write,
     sqlite_schema,
-    SQLiteQueryTool,
-    SQLiteSchemaTool,
-    SQLiteWriteTool,
+    sqlite_write,
 )
 
 __all__ = [
     "sqlite_query",
-    "sqlite_write",
     "sqlite_schema",
-    # Backward-compatible aliases
-    "SQLiteQueryTool",
-    "SQLiteSchemaTool",
-    "SQLiteWriteTool",
+    "sqlite_write",
 ]

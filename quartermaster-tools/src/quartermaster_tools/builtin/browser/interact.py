@@ -88,9 +88,3 @@ def browser_eval(script: str) -> dict:
     page = BrowserSessionManager.get_page()
     result = page.evaluate(script)
     return {"result": result}
-
-
-# Backward-compatible aliases
-BrowserClickTool = browser_click
-BrowserTypeTool = browser_type
-BrowserEvalTool = browser_eval

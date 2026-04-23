@@ -1,4 +1,4 @@
-"""Tests for built-in tools: ReadFileTool, WriteFileTool, WebRequestTool."""
+"""Tests for built-in tools: read_file, write_file, web_request."""
 
 from __future__ import annotations
 
@@ -6,30 +6,30 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from quartermaster_tools.builtin.file_read import ReadFileTool, _read_file_impl
-from quartermaster_tools.builtin.file_write import WriteFileTool, _write_file_impl
-from quartermaster_tools.builtin.web_request import WebRequestTool, _web_request_impl
+from quartermaster_tools.builtin.file_read import read_file, _read_file_impl
+from quartermaster_tools.builtin.file_write import write_file, _write_file_impl
+from quartermaster_tools.builtin.web_request import web_request, _web_request_impl
 from quartermaster_tools.types import ToolResult
 
 
 # ---------------------------------------------------------------------------
-# ReadFileTool
+# read_file
 # ---------------------------------------------------------------------------
 
 
 class TestReadFileTool:
-    """Tests for ReadFileTool."""
+    """Tests for read_file."""
 
     def test_name_and_version(self) -> None:
-        assert ReadFileTool.name() == "read_file"
-        assert ReadFileTool.version() == "1.0.0"
+        assert read_file.name() == "read_file"
+        assert read_file.version() == "1.0.0"
 
     def test_info_returns_descriptor(self) -> None:
-        info = ReadFileTool.info()
+        info = read_file.info()
         assert info.name == "read_file"
 
     def test_parameters_defined(self) -> None:
-        params = ReadFileTool.parameters()
+        params = read_file.parameters()
         names = [p.name for p in params]
         assert "path" in names
         assert "encoding" in names
@@ -38,19 +38,19 @@ class TestReadFileTool:
         file = tmp_path / "test.txt"
         file.write_text("hello world", encoding="utf-8")
 
-        result = ReadFileTool.run(path=str(file))
+        result = read_file.run(path=str(file))
 
         assert result.success is True
         assert result.data["content"] == "hello world"
 
     def test_read_nonexistent_file(self) -> None:
-        result = ReadFileTool.run(path="/tmp/nonexistent_file_abc123xyz.txt")
+        result = read_file.run(path="/tmp/nonexistent_file_abc123xyz.txt")
 
         assert result.success is False
         assert "not found" in result.error.lower()
 
     def test_read_directory_fails(self, tmp_path: str) -> None:
-        result = ReadFileTool.run(path=str(tmp_path))
+        result = read_file.run(path=str(tmp_path))
 
         assert result.success is False
         assert "not a file" in result.error.lower()
@@ -65,14 +65,14 @@ class TestReadFileTool:
         assert "too large" in result["error"].lower()
 
     def test_blocked_path_etc_shadow(self) -> None:
-        result = ReadFileTool.run(path="/etc/shadow")
+        result = read_file.run(path="/etc/shadow")
 
         # On macOS /etc/shadow doesn't exist; on Linux it's blocked.
         # Either way the result should be a failure.
         assert result.success is False
 
     def test_blocked_path_proc(self) -> None:
-        result = ReadFileTool.run(path="/proc/cpuinfo")
+        result = read_file.run(path="/proc/cpuinfo")
 
         assert result.success is False
         assert "access denied" in result.error.lower()
@@ -102,37 +102,37 @@ class TestReadFileTool:
         assert result["content"] == "allowed content"
 
     def test_missing_path_param(self) -> None:
-        result = ReadFileTool.run()
+        result = read_file.run()
 
         assert result.success is False
         assert "required" in result.error.lower()
 
     def test_safe_run_validates_params(self) -> None:
-        result = ReadFileTool.safe_run()  # missing required 'path'
+        result = read_file.safe_run()  # missing required 'path'
 
         assert result.success is False
 
 
 # ---------------------------------------------------------------------------
-# WriteFileTool
+# write_file
 # ---------------------------------------------------------------------------
 
 
 class TestWriteFileTool:
-    """Tests for WriteFileTool."""
+    """Tests for write_file."""
 
     def test_name_and_version(self) -> None:
-        assert WriteFileTool.name() == "write_file"
-        assert WriteFileTool.version() == "1.0.0"
+        assert write_file.name() == "write_file"
+        assert write_file.version() == "1.0.0"
 
     def test_info_returns_descriptor(self) -> None:
-        info = WriteFileTool.info()
+        info = write_file.info()
         assert info.name == "write_file"
 
     def test_write_new_file(self, tmp_path: str) -> None:
         file = tmp_path / "output.txt"
 
-        result = WriteFileTool.run(path=str(file), content="hello")
+        result = write_file.run(path=str(file), content="hello")
 
         assert result.success is True
         assert file.read_text(encoding="utf-8") == "hello"
@@ -142,7 +142,7 @@ class TestWriteFileTool:
         file = tmp_path / "output.txt"
         file.write_text("old content", encoding="utf-8")
 
-        result = WriteFileTool.run(path=str(file), content="new content")
+        result = write_file.run(path=str(file), content="new content")
 
         assert result.success is True
         assert file.read_text(encoding="utf-8") == "new content"
@@ -151,7 +151,7 @@ class TestWriteFileTool:
         file = tmp_path / "output.txt"
         file.write_text("line1\n", encoding="utf-8")
 
-        result = WriteFileTool.run(path=str(file), content="line2\n", append=True)
+        result = write_file.run(path=str(file), content="line2\n", append=True)
 
         assert result.success is True
         assert file.read_text(encoding="utf-8") == "line1\nline2\n"
@@ -174,7 +174,7 @@ class TestWriteFileTool:
         assert "too large" in result["error"].lower()
 
     def test_blocked_path(self) -> None:
-        result = WriteFileTool.run(path="/etc/evil.conf", content="bad")
+        result = write_file.run(path="/etc/evil.conf", content="bad")
 
         # On macOS /etc -> /private/etc, both are blocked. Result is always failure.
         assert result.success is False
@@ -190,7 +190,7 @@ class TestWriteFileTool:
         assert "access denied" in result["error"].lower()
 
     def test_missing_path_param(self) -> None:
-        result = WriteFileTool.run(content="hello")
+        result = write_file.run(content="hello")
 
         assert result.success is False
         assert "required" in result.error.lower()
@@ -198,30 +198,30 @@ class TestWriteFileTool:
     def test_bytes_written_reported(self, tmp_path: str) -> None:
         file = tmp_path / "out.txt"
 
-        result = WriteFileTool.run(path=str(file), content="abc")
+        result = write_file.run(path=str(file), content="abc")
 
         assert result.success is True
         assert result.data["bytes_written"] == 3
 
 
 # ---------------------------------------------------------------------------
-# WebRequestTool
+# web_request
 # ---------------------------------------------------------------------------
 
 
 class TestWebRequestTool:
-    """Tests for WebRequestTool."""
+    """Tests for web_request."""
 
     def test_name_and_version(self) -> None:
-        assert WebRequestTool.name() == "web_request"
-        assert WebRequestTool.version() == "1.0.0"
+        assert web_request.name() == "web_request"
+        assert web_request.version() == "1.0.0"
 
     def test_info_returns_descriptor(self) -> None:
-        info = WebRequestTool.info()
+        info = web_request.info()
         assert info.name == "web_request"
 
     def test_parameters_defined(self) -> None:
-        params = WebRequestTool.parameters()
+        params = web_request.parameters()
         names = [p.name for p in params]
         assert "url" in names
         assert "method" in names
@@ -229,13 +229,13 @@ class TestWebRequestTool:
         assert "body" in names
 
     def test_missing_url(self) -> None:
-        result = WebRequestTool.run()
+        result = web_request.run()
 
         assert result.success is False
         assert "required" in result.error.lower()
 
     def test_unsupported_method(self) -> None:
-        result = WebRequestTool.run(url="https://example.com", method="OPTIONS")
+        result = web_request.run(url="https://example.com", method="OPTIONS")
 
         assert result.success is False
         assert "unsupported" in result.error.lower()
@@ -278,7 +278,7 @@ class TestWebRequestTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            result = WebRequestTool.run(url="https://example.com/api")
+            result = web_request.run(url="https://example.com/api")
 
             assert result.success is True
             assert result.data["status_code"] == 200
@@ -301,7 +301,7 @@ class TestWebRequestTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            result = WebRequestTool.run(
+            result = web_request.run(
                 url="https://example.com/api",
                 method="POST",
                 body='{"data": 1}',
@@ -326,7 +326,7 @@ class TestWebRequestTool:
 
         sys.modules["httpx"] = mock_httpx
         try:
-            result = WebRequestTool.run(url="https://example.com/slow")
+            result = web_request.run(url="https://example.com/slow")
 
             assert result.success is False
             assert "timed out" in result.error.lower()
@@ -361,7 +361,7 @@ class TestWebRequestTool:
         httpx_mod = sys.modules.get("httpx")
         sys.modules["httpx"] = None  # type: ignore[assignment]
         try:
-            result = WebRequestTool.run(url="https://example.com")
+            result = web_request.run(url="https://example.com")
             assert result.success is False
             assert "httpx is required" in result.error
         finally:
@@ -383,9 +383,9 @@ class TestBuiltinRegistration:
         from quartermaster_tools.registry import ToolRegistry
 
         registry = ToolRegistry()
-        registry.register(ReadFileTool)
-        registry.register(WriteFileTool)
-        registry.register(WebRequestTool)
+        registry.register(read_file)
+        registry.register(write_file)
+        registry.register(web_request)
 
         assert len(registry) == 3
         assert "read_file" in registry
@@ -396,7 +396,7 @@ class TestBuiltinRegistration:
         from quartermaster_tools.registry import ToolRegistry
 
         registry = ToolRegistry()
-        registry.register(ReadFileTool)
+        registry.register(read_file)
 
         schemas = registry.to_json_schema()
         assert len(schemas) == 1
@@ -404,8 +404,8 @@ class TestBuiltinRegistration:
         assert "parameters" in schemas[0]
 
     def test_imports_from_top_level(self) -> None:
-        from quartermaster_tools import ReadFileTool, WriteFileTool, WebRequestTool
+        from quartermaster_tools import read_file, write_file, web_request
 
-        assert ReadFileTool.name() == "read_file"
-        assert WriteFileTool.name() == "write_file"
-        assert WebRequestTool.name() == "web_request"
+        assert read_file.name() == "read_file"
+        assert write_file.name() == "write_file"
+        assert web_request.name() == "web_request"

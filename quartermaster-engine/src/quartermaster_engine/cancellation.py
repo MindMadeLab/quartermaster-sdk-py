@@ -1,4 +1,4 @@
-"""Cooperative cancellation primitives — v0.4.0.
+"""Cooperative cancellation primitives.
 
 The engine-side home of the :class:`Cancelled` exception. Tools inside
 an :class:`AgentExecutor` loop that want to bail out mid-work raise

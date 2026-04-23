@@ -106,8 +106,12 @@ for t in registry.list_tools():
 
 # Direct call -- the @tool() decorator preserves callable behaviour, so
 # you can still invoke them like normal Python functions in tests.
-print(f"\nDirect call -- calculate('(3 + 4) * 2'): {calculate(expression='(3 + 4) * 2')}")
-print(f"Direct call -- lookup_capital('Slovenia'): {lookup_capital(country='Slovenia')}")
+print(
+    f"\nDirect call -- calculate('(3 + 4) * 2'): {calculate(expression='(3 + 4) * 2')}"
+)
+print(
+    f"Direct call -- lookup_capital('Slovenia'): {lookup_capital(country='Slovenia')}"
+)
 
 # ---------------------------------------------------------------------------
 # 3. Export JSON schemas for downstream MCP servers / multi-provider plumbing

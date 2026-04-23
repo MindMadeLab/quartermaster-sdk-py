@@ -31,9 +31,6 @@ __version__ = "0.5.1"
 # * ``configure(provider="ollama", default_model=...)`` — boot once
 # * ``instruction(system=..., user=...)`` — single-shot prompt → text
 # * ``instruction_form(schema, system=..., user=...)`` — prompt → typed JSON
-#
-# Legacy v0.1.x exports (``FlowRunner``, ``build_default_registry``, …)
-# remain available for integrators who need the low-level surface.
 from quartermaster_engine import (  # noqa: F401
     AgentExecutor,
     Cancelled,
@@ -51,7 +48,6 @@ from quartermaster_engine.context.current_context import (  # noqa: F401
     current_context,
 )
 from quartermaster_graph import (  # noqa: F401
-    AgentGraph,  # deprecated alias for GraphSpec — kept for backward compat
     Graph,
     GraphBuilder,
     GraphSpec,
@@ -88,6 +84,7 @@ from ._config import (  # noqa: F401
 from . import telemetry  # noqa: F401  — exposes ``qm.telemetry.instrument()`` without explicit import
 from ._async_runner import arun  # noqa: F401
 from ._helpers import instruction, instruction_form  # noqa: F401
+from ._parse_partial import PartialResult, parse_partial  # noqa: F401
 from ._result import Result  # noqa: F401
 from ._runner import StreamDeadlineExceeded, assert_traces_equal, run  # noqa: F401
 from ._session import ChatTurn, InMemorySessionStore, SessionStore  # noqa: F401
@@ -104,6 +101,8 @@ __all__ = [
     "arun",
     "instruction",
     "instruction_form",
+    "parse_partial",
+    "PartialResult",
     "Result",
     # v0.4.0 cooperative cancellation — stream context-manager exit
     # and/or tools raising qm.Cancelled inside the agent loop.
@@ -129,7 +128,6 @@ __all__ = [
     "Graph",
     "GraphBuilder",
     "GraphSpec",
-    "AgentGraph",  # deprecated
     "NodeType",
     # Engine — runner + node-registry surface (low-level)
     "FlowRunner",

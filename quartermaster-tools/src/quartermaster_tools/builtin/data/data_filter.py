@@ -188,8 +188,5 @@ def data_filter(
     return {"rows": rows, "count": len(rows)}
 
 
-# Backward-compatible alias
-DataFilterTool = data_filter
-
 # Public alias for the filter helper
 filter_data = _filter_data

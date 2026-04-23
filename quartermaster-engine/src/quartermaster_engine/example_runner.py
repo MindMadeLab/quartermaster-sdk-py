@@ -339,6 +339,7 @@ def _build_llm_config(
         thinking_budget=thinking_budget,
         connect_timeout=float(connect_timeout) if connect_timeout is not None else None,
         read_timeout=float(read_timeout) if read_timeout is not None else None,
+        extra_body=context.get_meta("llm_extra_body", None) or None,
     )
 
 
@@ -389,13 +390,24 @@ class LLMExecutor(NodeExecutor):
             system_message=system_instruction,
         )
 
+        from quartermaster_providers.cancellation import set_cancel_check
+
         try:
-            stream = await provider.generate_text_response(prompt, config)
-            chunks = []
-            async for token_response in stream:
-                if token_response.content:
-                    chunks.append(token_response.content)
-                    context.emit_token(token_response.content)
+            # v0.7.0: install a cancellation probe the provider's streaming
+            # path polls between chunks. When ``runner.stop(flow_id)`` flips
+            # ``ctx.cancelled`` (SSE client disconnect / explicit
+            # qm.Cancelled / context-manager break), the provider closes
+            # the openai AsyncStream → httpx response, so vLLM / Ollama
+            # stop generating mid-token instead of draining to completion.
+            with set_cancel_check(lambda: context.cancelled):
+                stream = await provider.generate_text_response(prompt, config)
+                chunks = []
+                async for token_response in stream:
+                    if token_response.stop_reason == "cancelled":
+                        break
+                    if token_response.content:
+                        chunks.append(token_response.content)
+                        context.emit_token(token_response.content)
             text = "".join(chunks)
 
             # Append to conversation history
@@ -534,7 +546,7 @@ def _execute_tool_call(
     # Strip ``default_api:`` / ``functions:`` / ``mcp:`` prefixes that
     # different providers attach to the function name.  Without this the
     # registry lookup would miss a tool that's registered under the bare
-    # name — a recurring integrator complaint before v0.2.0.
+    # name.
     normalised = _normalise_tool_name(tool_name)
     # v0.4.0 per-node scoping check — runs AFTER prefix-stripping so that
     # ``default_api:A`` matches an allow-list entry of ``A`` (preserves the
@@ -593,6 +605,58 @@ def _execute_tool_call(
     if hasattr(result, "data"):
         return _ToolInvocation(prompt_text=str(result.data), raw=result.data, error=None)
     return _ToolInvocation(prompt_text=str(result), raw=result, error=None)
+
+
+def _sliding_window_tool_log(
+    base_prompt: str,
+    accumulated_tool_log: list[str],
+    max_input_tokens: int | None,
+) -> tuple[list[str], int]:
+    """Drop the OLDEST ``<tool_result>`` blocks until the accumulated
+    prompt text fits inside ``max_input_tokens`` (approximated at
+    ~4 chars/token).
+
+    Returns ``(kept_blocks, dropped_count)``. When ``max_input_tokens``
+    is ``None`` the list is returned verbatim and ``dropped_count=0``.
+
+    Invariants:
+
+    * ``base_prompt`` is never mutated and always counted toward the
+      budget — the agent cannot drop the system/user turn.
+    * Blocks are kept intact. We never partially truncate a block: the
+      model needs well-formed ``<tool_result>...</tool_result>`` pairs
+      to reason over.
+    * If a SINGLE block already exceeds the budget we keep it anyway —
+      the agent needs the latest tool result to make progress; this
+      helper is best-effort, not an absolute limit.
+    * FIFO drop order — oldest results go first; the most recent
+      block (the one the agent is about to reason about) is preserved.
+
+    The ``+ 2`` per-block accounts for the ``"\\n".join(...)`` separator
+    the caller uses to splice blocks into the prompt.
+    """
+    if max_input_tokens is None:
+        return list(accumulated_tool_log), 0
+
+    budget_chars = int(max_input_tokens) * 4
+    kept = list(accumulated_tool_log)
+    dropped = 0
+
+    def _size(blocks: list[str]) -> int:
+        return len(base_prompt) + sum(len(b) + 2 for b in blocks)
+
+    while len(kept) > 1 and _size(kept) > budget_chars:
+        kept.pop(0)
+        dropped += 1
+
+    if dropped:
+        logger.info(
+            "AgentExecutor: dropped %d oldest tool_result blocks to fit max_input_tokens=%d",
+            dropped,
+            max_input_tokens,
+        )
+
+    return kept, dropped
 
 
 class AgentExecutor(NodeExecutor):
@@ -901,6 +965,28 @@ class AgentExecutor(NodeExecutor):
                     "<tool_result"
                     f' tool="{public_name}" iteration="{iteration}"'
                     f" args={params!r}>\n{invocation.prompt_text}\n</tool_result>"
+                )
+
+            # v0.7.0: sliding-window truncation — drop the OLDEST
+            # tool_result blocks when the running log would push the
+            # prompt past ``llm_max_input_tokens``. Truncation is
+            # cumulative (we rebind ``accumulated_tool_log`` to the
+            # pruned list) so later iterations start from the already-
+            # trimmed state instead of re-evaluating the original log.
+            max_input_tokens = context.get_meta("llm_max_input_tokens", None)
+            kept_blocks, dropped_count = _sliding_window_tool_log(
+                base_prompt, accumulated_tool_log, max_input_tokens
+            )
+            if dropped_count:
+                accumulated_tool_log = kept_blocks
+                context.emit_custom(
+                    "agent.tool_log_truncated",
+                    {
+                        "dropped": dropped_count,
+                        "kept": len(kept_blocks),
+                        "max_input_tokens": max_input_tokens,
+                        "iteration": iteration,
+                    },
                 )
 
             tool_history = "\n".join(accumulated_tool_log)
@@ -1718,12 +1804,6 @@ def build_default_registry(
     reg.register(NodeType.SWITCH.value, switch_exec)
 
     return reg
-
-
-# Backwards-compatibility shim — older callers (and our own tests) imported
-# the underscored name.  Keep it around as a thin alias so 0.1.x users don't
-# break on upgrade.
-_build_registry = build_default_registry
 
 
 # ---------------------------------------------------------------------------

@@ -7,15 +7,15 @@ import os
 
 import pytest
 
-from quartermaster_tools.builtin.vector.embed import EmbedTextTool, _builtin_embed
-from quartermaster_tools.builtin.vector.index import DocumentIndexTool, _chunk_text
+from quartermaster_tools.builtin.vector.embed import embed_text, _builtin_embed
+from quartermaster_tools.builtin.vector.index import document_index, _chunk_text
 from quartermaster_tools.builtin.vector.search import (
-    HybridSearchTool,
-    VectorSearchTool,
+    hybrid_search,
+    vector_search,
     _cosine_similarity,
     _keyword_score,
 )
-from quartermaster_tools.builtin.vector.store import VectorStoreTool, _memory_store
+from quartermaster_tools.builtin.vector.store import vector_store, _memory_store
 
 
 @pytest.fixture(autouse=True)
@@ -27,14 +27,14 @@ def _clear_memory_store():
 
 
 # ---------------------------------------------------------------------------
-# EmbedTextTool tests
+# embed_text tests
 # ---------------------------------------------------------------------------
 
 
 class TestEmbedTextTool:
     def test_deterministic_embeddings(self):
         """Same text always produces the same embedding."""
-        tool = EmbedTextTool
+        tool = embed_text
         r1 = tool.run(text="hello world")
         r2 = tool.run(text="hello world")
         assert r1.success
@@ -43,7 +43,7 @@ class TestEmbedTextTool:
 
     def test_correct_dimensions(self):
         """Embedding has the requested number of dimensions."""
-        tool = EmbedTextTool
+        tool = embed_text
         result = tool.run(text="test", dimensions=128)
         assert result.success
         assert len(result.data["embedding"]) == 128
@@ -51,34 +51,34 @@ class TestEmbedTextTool:
 
     def test_default_dimensions(self):
         """Default dimensions is 384."""
-        tool = EmbedTextTool
+        tool = embed_text
         result = tool.run(text="test")
         assert result.success
         assert len(result.data["embedding"]) == 384
 
     def test_different_texts_different_vectors(self):
         """Different texts produce different embeddings."""
-        tool = EmbedTextTool
+        tool = embed_text
         r1 = tool.run(text="the cat sat on the mat")
         r2 = tool.run(text="quantum physics is fascinating")
         assert r1.data["embedding"] != r2.data["embedding"]
 
     def test_model_field_returned(self):
         """Result includes the model name."""
-        tool = EmbedTextTool
+        tool = embed_text
         result = tool.run(text="test")
         assert result.data["model"] == "builtin"
 
     def test_missing_text_error(self):
         """Missing text parameter returns an error."""
-        tool = EmbedTextTool
+        tool = embed_text
         result = tool.run()
         assert not result.success
         assert "required" in result.error.lower()
 
     def test_nonexistent_model_error(self):
         """Non-builtin model without sentence-transformers returns error."""
-        tool = EmbedTextTool
+        tool = embed_text
         result = tool.run(text="test", model="all-MiniLM-L6-v2")
         assert not result.success
         assert "sentence-transformers" in result.error.lower()
@@ -93,7 +93,7 @@ class TestEmbedTextTool:
 
     def test_tool_metadata(self):
         """Tool reports correct name and version."""
-        tool = EmbedTextTool
+        tool = embed_text
         assert tool.name() == "embed_text"
         assert tool.version() == "1.0.0"
         info = tool.info()
@@ -102,14 +102,14 @@ class TestEmbedTextTool:
 
 
 # ---------------------------------------------------------------------------
-# VectorStoreTool tests
+# vector_store tests
 # ---------------------------------------------------------------------------
 
 
 class TestVectorStoreTool:
     def test_store_in_memory(self):
         """Store a document in memory and verify the result."""
-        tool = VectorStoreTool
+        tool = vector_store
         result = tool.run(collection="docs", text="hello world")
         assert result.success
         assert result.data["stored"] is True
@@ -118,7 +118,7 @@ class TestVectorStoreTool:
 
     def test_store_with_metadata(self):
         """Store a document with metadata."""
-        tool = VectorStoreTool
+        tool = vector_store
         result = tool.run(
             collection="docs",
             text="hello",
@@ -132,7 +132,7 @@ class TestVectorStoreTool:
 
     def test_store_with_precomputed_embedding(self):
         """Store with a pre-computed embedding vector."""
-        tool = VectorStoreTool
+        tool = vector_store
         emb = [0.1, 0.2, 0.3]
         result = tool.run(collection="docs", text="test", embedding=emb)
         assert result.success
@@ -141,7 +141,7 @@ class TestVectorStoreTool:
 
     def test_auto_generates_embedding(self):
         """Embedding is auto-generated when not provided."""
-        tool = VectorStoreTool
+        tool = vector_store
         tool.run(collection="docs", text="auto embed me")
         doc = _memory_store["docs"][0]
         assert len(doc["embedding"]) == 384
@@ -149,7 +149,7 @@ class TestVectorStoreTool:
     def test_persistence_to_file(self, tmp_path):
         """Store persists to a JSON file."""
         store_file = str(tmp_path / "vectors.json")
-        tool = VectorStoreTool
+        tool = vector_store
         tool.run(collection="test_col", text="persistent doc", store_path=store_file)
 
         assert os.path.exists(store_file)
@@ -160,24 +160,24 @@ class TestVectorStoreTool:
         assert data["test_col"][0]["text"] == "persistent doc"
 
     def test_missing_collection_error(self):
-        tool = VectorStoreTool
+        tool = vector_store
         result = tool.run(text="hello")
         assert not result.success
 
     def test_missing_text_error(self):
-        tool = VectorStoreTool
+        tool = vector_store
         result = tool.run(collection="docs")
         assert not result.success
 
 
 # ---------------------------------------------------------------------------
-# VectorSearchTool tests
+# vector_search tests
 # ---------------------------------------------------------------------------
 
 
 class TestVectorSearchTool:
     def _populate(self, texts: list[str], collection: str = "docs"):
-        store = VectorStoreTool
+        store = vector_store
         for t in texts:
             store.run(collection=collection, text=t)
 
@@ -186,7 +186,7 @@ class TestVectorSearchTool:
         self._populate(
             ["the cat sat on the mat", "dogs are loyal animals", "cat food is expensive"]
         )
-        tool = VectorSearchTool
+        tool = vector_search
         result = tool.run(collection="docs", query="cat")
         assert result.success
         assert result.data["count"] > 0
@@ -194,7 +194,7 @@ class TestVectorSearchTool:
     def test_top_k_limits_results(self):
         """top_k parameter limits the number of results."""
         self._populate([f"document number {i}" for i in range(10)])
-        tool = VectorSearchTool
+        tool = vector_search
         result = tool.run(collection="docs", query="document", top_k=3)
         assert result.success
         assert result.data["count"] <= 3
@@ -202,7 +202,7 @@ class TestVectorSearchTool:
     def test_threshold_filters_results(self):
         """High threshold filters out low-similarity results."""
         self._populate(["hello world", "completely unrelated xyz"])
-        tool = VectorSearchTool
+        tool = vector_search
         result = tool.run(collection="docs", query="hello world", threshold=0.99)
         assert result.success
         # The exact match should score very high
@@ -211,16 +211,16 @@ class TestVectorSearchTool:
 
     def test_empty_collection(self):
         """Search on empty collection returns empty results."""
-        tool = VectorSearchTool
+        tool = vector_search
         result = tool.run(collection="nonexistent", query="test")
         assert result.success
         assert result.data["count"] == 0
 
     def test_results_have_score_and_metadata(self):
         """Each result has text, score, and metadata fields."""
-        store = VectorStoreTool
+        store = vector_store
         store.run(collection="docs", text="test doc", metadata={"key": "val"})
-        tool = VectorSearchTool
+        tool = vector_search
         result = tool.run(collection="docs", query="test")
         assert result.success
         r = result.data["results"][0]
@@ -232,18 +232,18 @@ class TestVectorSearchTool:
     def test_file_backed_search(self, tmp_path):
         """Search works with file-backed store."""
         store_file = str(tmp_path / "store.json")
-        store = VectorStoreTool
+        store = vector_store
         store.run(collection="docs", text="hello world", store_path=store_file)
         store.run(collection="docs", text="goodbye world", store_path=store_file)
 
-        tool = VectorSearchTool
+        tool = vector_search
         result = tool.run(collection="docs", query="hello", store_path=store_file)
         assert result.success
         assert result.data["count"] > 0
 
 
 # ---------------------------------------------------------------------------
-# DocumentIndexTool tests
+# document_index tests
 # ---------------------------------------------------------------------------
 
 
@@ -252,7 +252,7 @@ class TestDocumentIndexTool:
         """Indexes a file into the correct number of chunks."""
         doc = tmp_path / "doc.txt"
         doc.write_text("a" * 1000)
-        tool = DocumentIndexTool
+        tool = document_index
         result = tool.run(file_path=str(doc), collection="idx", chunk_size=500, chunk_overlap=0)
         assert result.success
         assert result.data["chunks_indexed"] == 2
@@ -261,7 +261,7 @@ class TestDocumentIndexTool:
         """Overlap produces more chunks than without."""
         doc = tmp_path / "doc.txt"
         doc.write_text("a" * 1000)
-        tool = DocumentIndexTool
+        tool = document_index
         result = tool.run(file_path=str(doc), collection="idx", chunk_size=500, chunk_overlap=100)
         assert result.success
         assert result.data["chunks_indexed"] == 3  # 0-500, 400-900, 800-1000
@@ -270,7 +270,7 @@ class TestDocumentIndexTool:
         """All chunks are stored in the collection."""
         doc = tmp_path / "doc.txt"
         doc.write_text("word " * 200)  # 1000 chars
-        tool = DocumentIndexTool
+        tool = document_index
         tool.run(file_path=str(doc), collection="idx", chunk_size=250, chunk_overlap=0)
         assert len(_memory_store.get("idx", [])) == 4
 
@@ -278,7 +278,7 @@ class TestDocumentIndexTool:
         """Each chunk's metadata includes the source file path."""
         doc = tmp_path / "doc.txt"
         doc.write_text("short text")
-        tool = DocumentIndexTool
+        tool = document_index
         tool.run(file_path=str(doc), collection="idx")
         doc_entry = _memory_store["idx"][0]
         assert doc_entry["metadata"]["source"] == str(doc)
@@ -286,7 +286,7 @@ class TestDocumentIndexTool:
 
     def test_nonexistent_file_error(self):
         """Error when file does not exist."""
-        tool = DocumentIndexTool
+        tool = document_index
         result = tool.run(file_path="/nonexistent/file.txt", collection="idx")
         assert not result.success
         assert "not found" in result.error.lower()
@@ -295,7 +295,7 @@ class TestDocumentIndexTool:
         """Empty file produces zero chunks."""
         doc = tmp_path / "empty.txt"
         doc.write_text("")
-        tool = DocumentIndexTool
+        tool = document_index
         result = tool.run(file_path=str(doc), collection="idx")
         assert result.success
         assert result.data["chunks_indexed"] == 0
@@ -304,30 +304,30 @@ class TestDocumentIndexTool:
         """Indexed documents can be found via vector search."""
         doc = tmp_path / "doc.txt"
         doc.write_text("Python is a programming language. It is used for web development.")
-        tool = DocumentIndexTool
+        tool = document_index
         tool.run(file_path=str(doc), collection="idx", chunk_size=40, chunk_overlap=10)
 
-        search = VectorSearchTool
+        search = vector_search
         result = search.run(collection="idx", query="Python programming")
         assert result.success
         assert result.data["count"] > 0
 
 
 # ---------------------------------------------------------------------------
-# HybridSearchTool tests
+# hybrid_search tests
 # ---------------------------------------------------------------------------
 
 
 class TestHybridSearchTool:
     def _populate(self, texts: list[str], collection: str = "hybrid"):
-        store = VectorStoreTool
+        store = vector_store
         for t in texts:
             store.run(collection=collection, text=t)
 
     def test_combines_scores(self):
         """Results contain both vector_score and keyword_score."""
         self._populate(["python programming", "java development", "python snake"])
-        tool = HybridSearchTool
+        tool = hybrid_search
         result = tool.run(collection="hybrid", query="python")
         assert result.success
         for r in result.data["results"]:
@@ -338,7 +338,7 @@ class TestHybridSearchTool:
     def test_keyword_weight_affects_results(self):
         """Changing keyword_weight changes the final scores."""
         self._populate(["python programming", "java development"])
-        tool = HybridSearchTool
+        tool = hybrid_search
         r1 = tool.run(collection="hybrid", query="python", keyword_weight=0.0)
         r2 = tool.run(collection="hybrid", query="python", keyword_weight=1.0)
         assert r1.success and r2.success
@@ -351,7 +351,7 @@ class TestHybridSearchTool:
 
     def test_empty_collection(self):
         """Hybrid search on empty collection returns empty."""
-        tool = HybridSearchTool
+        tool = hybrid_search
         result = tool.run(collection="empty", query="test")
         assert result.success
         assert result.data["count"] == 0
@@ -359,13 +359,13 @@ class TestHybridSearchTool:
     def test_top_k_respected(self):
         """top_k limits the number of results."""
         self._populate([f"doc {i}" for i in range(10)])
-        tool = HybridSearchTool
+        tool = hybrid_search
         result = tool.run(collection="hybrid", query="doc", top_k=2)
         assert result.data["count"] <= 2
 
     def test_tool_metadata(self):
         """Tool reports correct name and version."""
-        tool = HybridSearchTool
+        tool = hybrid_search
         assert tool.name() == "hybrid_search"
         assert tool.version() == "1.0.0"
 

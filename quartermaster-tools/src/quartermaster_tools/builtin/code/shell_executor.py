@@ -126,7 +126,3 @@ def shell_executor(
         return ToolResult(success=False, error=f"Command not found: {cmd[0]}")
     except OSError as e:
         return ToolResult(success=False, error=f"OS error: {e}")
-
-
-# Backward-compatible alias
-ShellExecutorTool = shell_executor

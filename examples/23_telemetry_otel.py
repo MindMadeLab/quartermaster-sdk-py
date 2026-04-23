@@ -41,8 +41,7 @@ try:
     )
 except ImportError:
     print(
-        "OpenTelemetry not installed. "
-        "Run: pip install 'quartermaster-sdk[telemetry]'"
+        "OpenTelemetry not installed. Run: pip install 'quartermaster-sdk[telemetry]'"
     )
     sys.exit(1)
 

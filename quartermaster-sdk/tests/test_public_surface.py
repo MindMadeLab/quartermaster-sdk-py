@@ -23,7 +23,6 @@ _REQUIRED_PUBLIC_NAMES: tuple[str, ...] = (
     "Graph",
     "GraphBuilder",
     "GraphSpec",
-    "AgentGraph",  # deprecated alias kept for back-compat
     "NodeType",
     # Engine — runner + node-registry surface
     "FlowRunner",
@@ -40,6 +39,9 @@ _REQUIRED_PUBLIC_NAMES: tuple[str, ...] = (
     "LLMConfig",
     "ProviderRegistry",
     "register_local",
+    # v0.6.0 parse_partial helper
+    "parse_partial",
+    "PartialResult",
 )
 
 

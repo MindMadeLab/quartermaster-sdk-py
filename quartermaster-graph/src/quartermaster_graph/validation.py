@@ -57,12 +57,12 @@ def validate_graph(version: GraphSpec) -> list[ValidationError]:  # type: ignore
                 )
             )
 
-    # --- End node (optional since v0.2.0) ---
-    # Pre-0.2.0 a graph without an explicit End node was rejected here.
-    # The runner has always been fine with "no End" — it falls back to the
-    # last finished node's output in ``FlowResult``.  Making ``.end()``
-    # optional means single-node flows (``Graph("x").instruction(...).build()``)
-    # don't need a trailing ``.end()`` boilerplate line.
+    # --- End node ---
+    # A graph without an explicit End node is permitted. The runner falls
+    # back to the last finished node's output in ``FlowResult``.  Making
+    # ``.end()`` optional means single-node flows
+    # (``Graph("x").instruction(...).build()``) don't need a trailing
+    # ``.end()`` boilerplate line.
 
     # --- Start node ID valid ---
     if version.start_node_id not in node_map:

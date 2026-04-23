@@ -51,8 +51,8 @@ def main():
             "Respond",
             model=args.model,
             provider=args.provider,
-            tools=[],              # no tools — pure conversation
-            max_iterations=1,      # one LLM call per turn (no tool loop)
+            tools=[],  # no tools — pure conversation
+            max_iterations=1,  # one LLM call per turn (no tool loop)
             system_instruction=(
                 "You are a helpful assistant. Be concise and clear. "
                 "Respond in the same language the user writes in."

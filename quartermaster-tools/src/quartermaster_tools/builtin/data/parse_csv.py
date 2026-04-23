@@ -80,8 +80,5 @@ def parse_csv(source: str, delimiter: str = ",", has_headers: bool = True) -> di
     return {"rows": rows, "count": len(rows)}
 
 
-# Backward-compatible alias
-ParseCSVTool = parse_csv
-
 # Alias used by convert_format
 parse_csv_data = _parse_csv

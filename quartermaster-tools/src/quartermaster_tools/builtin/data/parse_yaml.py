@@ -69,8 +69,5 @@ def parse_yaml(source: str) -> dict:
     return {"result": result}
 
 
-# Backward-compatible alias
-ParseYAMLTool = parse_yaml
-
 # Alias used by convert_format
 parse_yaml_data = _parse_yaml
