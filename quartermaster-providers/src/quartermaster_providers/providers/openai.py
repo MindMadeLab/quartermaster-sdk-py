@@ -75,7 +75,15 @@ def _is_o_series(model: str) -> bool:
 #: entry is ``(open_marker, close_marker)``. Order-matters: we try the
 #: most specific marker set first.
 _TEXT_TOOL_CALL_MARKERS: tuple[tuple[str, str], ...] = (
-    # Gemma-style markers
+    # Gemma-4's actual production form — asymmetric pipes. Open marker
+    # is ``<|tool_call>`` (pipe AFTER the ``<``), close marker is
+    # ``<tool_call|>`` (pipe BEFORE the ``>``). A production reproducer:
+    #   <|tool_call>call:list_orders(status='odprto')<tool_call|>
+    # Tried FIRST because it's more specific — the symmetric form
+    # below would accidentally match half of the asymmetric markers.
+    ("<|tool_call>", "<tool_call|>"),
+    # Symmetric Gemma variant — appears in some fine-tunes and in the
+    # upstream vLLM chat template when the stop tokens are collapsed.
     ("<|tool_call|>", "<|tool_call|>"),
     # Qwen / some Llama fine-tunes
     ("<tool_call>", "</tool_call>"),
@@ -154,20 +162,45 @@ def _parse_text_form_tool_calls(content: str) -> tuple[list[ToolCall], str]:
 
 
 def _coerce_text_tool_call_payload(payload: str) -> tuple[str, dict[str, Any]] | None:
-    """Parse ``{name, arguments}`` / ``{tool_name, parameters}`` /
-    ``{function: {name, arguments}}`` out of one JSON block.
+    """Parse one tool-call block into ``(name, arguments_dict)``.
 
-    Returns ``(name, arguments_dict)`` on success, ``None`` if the block
-    isn't parseable as any recognised shape.
+    Two payload flavours supported:
+
+    1. **JSON** — ``{"name": ..., "arguments": {...}}`` /
+       ``{"tool_name": ..., "parameters": {...}}`` /
+       ``{"function": {"name": ..., "arguments": {...}}}``, plus
+       double-encoded arguments strings.
+    2. **Python-call syntax** — ``call:list_orders(status='active')``.
+       Gemma-4 emits this form inside ``<|tool_call>...<tool_call|>``
+       blocks when the server lacks ``--tool-call-parser gemma4``.
+       Keyword args supported (``key='value'`` / ``key=42`` / ``key=None``
+       / ``key=True``). Positional-only calls are NOT supported —
+       downstream tool registries expect keyword arguments; a
+       positional call would need per-tool signature introspection
+       we don't have at this layer.
+
+    Returns ``None`` when neither form parses.
     """
+    payload = payload.strip()
+    if not payload:
+        return None
+
+    # JSON path first — it's strict, so if it doesn't parse we know
+    # to try the Python-call form. Parsing-unit has no ambiguity.
     try:
         obj = json.loads(payload)
+        if isinstance(obj, dict):
+            return _coerce_json_payload(obj)
     except json.JSONDecodeError:
-        return None
-    if not isinstance(obj, dict):
-        return None
+        pass
 
-    # Handle ``{"function": {...}}`` nesting
+    # Python-call path — ``call:name(key='val', key2=42, ...)``.
+    return _coerce_python_call_payload(payload)
+
+
+def _coerce_json_payload(obj: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+    """JSON-shape extraction — factored out so the JSON and
+    Python-call paths stay easy to read independently."""
     fn = obj.get("function") if "function" in obj else obj
     if not isinstance(fn, dict):
         return None
@@ -188,6 +221,102 @@ def _coerce_text_tool_call_payload(payload: str) -> tuple[str, dict[str, Any]] |
     if not isinstance(args, dict):
         args = {"raw": args}
     return name, args
+
+
+#: Matches ``call:foo(args...)`` and ``foo(args...)`` with optional
+#: ``call:`` prefix. Captures the function name and the raw argument
+#: string. ``DOTALL`` so arg strings spanning newlines (rare, but
+#: Gemma-4 occasionally wraps them) still match.
+_PYTHON_CALL_RE = None
+
+
+def _python_call_regex():
+    global _PYTHON_CALL_RE
+    if _PYTHON_CALL_RE is None:
+        import re
+
+        _PYTHON_CALL_RE = re.compile(
+            r"""
+            (?:call\s*:\s*)?           # optional ``call:`` prefix
+            ([A-Za-z_][A-Za-z0-9_]*)   # tool name — Python identifier
+            \s*\(                      # opening paren
+            (.*?)                      # arg body (lazy, stops at the matching close)
+            \)\s*$                     # closing paren + optional trailing whitespace
+            """,
+            re.DOTALL | re.VERBOSE,
+        )
+    return _PYTHON_CALL_RE
+
+
+def _coerce_python_call_payload(payload: str) -> tuple[str, dict[str, Any]] | None:
+    """Parse ``call:list_orders(status='active', limit=5)`` into
+    ``("list_orders", {"status": "active", "limit": 5})``.
+
+    Uses :mod:`ast` to evaluate argument values so we get real Python
+    scalars (ints, floats, bools, ``None``, strings, lists, dicts).
+    ``ast.literal_eval`` rejects arbitrary expressions — no
+    ``eval()`` risk, no ``__import__``-style escapes.
+    """
+    import ast
+
+    match = _python_call_regex().fullmatch(payload)
+    if match is None:
+        return None
+    name, raw_args = match.group(1), match.group(2).strip()
+    if not name:
+        return None
+
+    if not raw_args:
+        # ``call:list_orders()`` — no arguments.
+        return name, {}
+
+    # Wrap the arg body in a synthetic call so ast can parse the
+    # keyword arguments for us — this is strictly-speaking easier
+    # than splitting on commas (which gets ugly inside nested dicts,
+    # quoted commas, etc.).
+    try:
+        expr = ast.parse(f"_({raw_args})", mode="eval")
+    except SyntaxError:
+        return None
+
+    call = expr.body
+    if not isinstance(call, ast.Call):
+        return None
+
+    args: dict[str, Any] = {}
+    for kw in call.keywords:
+        if kw.arg is None:
+            # ``**kwargs`` splat — nothing useful to extract; skip.
+            continue
+        try:
+            args[kw.arg] = ast.literal_eval(kw.value)
+        except (ValueError, SyntaxError):
+            # Value wasn't a literal (e.g. a bare identifier the model
+            # invented); stash the source form so the tool registry can
+            # at least log it meaningfully.
+            args[kw.arg] = ast.unparse(kw.value)
+
+    # Positional args: we expose them as ``__positional__`` so downstream
+    # tools can see them if they really want to, but most tools in
+    # quartermaster expect kwargs only. Left in as a diagnostic, not a
+    # promise.
+    if call.args:
+        args["__positional__"] = [
+            (ast.literal_eval(a) if _is_literal(a) else ast.unparse(a)) for a in call.args
+        ]
+
+    return name, args
+
+
+def _is_literal(node: Any) -> bool:
+    """``True`` when ``ast.literal_eval`` would accept *node*."""
+    import ast
+
+    try:
+        ast.literal_eval(node)
+    except (ValueError, SyntaxError):
+        return False
+    return True
 
 
 async def _aclose_stream(stream: Any) -> None:
