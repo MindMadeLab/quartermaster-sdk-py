@@ -820,10 +820,7 @@ class AgentExecutor(NodeExecutor):
                     return exc
 
             invocations = await asyncio.gather(
-                *(
-                    _run_one(raw_name, dict(params))
-                    for raw_name, _public, params in normalised
-                )
+                *(_run_one(raw_name, dict(params)) for raw_name, _public, params in normalised)
             )
 
             cancelled_idx: int | None = None
@@ -869,9 +866,7 @@ class AgentExecutor(NodeExecutor):
                     error="cancelled",
                 )
 
-            for (raw_name, public_name, params), invocation in zip(
-                normalised, invocations
-            ):
+            for (raw_name, public_name, params), invocation in zip(normalised, invocations):
                 context.emit_tool_finish(
                     public_name,
                     params,
