@@ -120,18 +120,66 @@ class OpenAIProvider(AbstractLLMProvider):
         self.api_key = api_key
         self.organization_id = organization_id
         self.base_url = base_url
+        # Legacy single-slot attribute. Kept for back-compat (some downstream
+        # code reads it directly); always mirrors the client for the current
+        # loop. The real cache is ``_clients_by_loop`` below.
         self._client = None
+        # Per-loop client cache. Each ``openai.AsyncOpenAI`` carries an
+        # httpx.AsyncClient whose connection pool and asyncio primitives
+        # (Event/Lock) bind to the loop they are first awaited on. Reusing
+        # that client from a different loop — e.g. when a @tool() body calls
+        # qm.run() which spins its own asyncio.run() — wedges those primitives
+        # and surfaces as "RuntimeError: <Event> is bound to a different event
+        # loop" / "Event loop is closed" from httpcore on the next call from
+        # the original loop. Keeping one client per live loop lets nested
+        # qm.run() from inside a @tool() body coexist with the outer agent's
+        # connection pool. ``id(loop)`` keys rather than the loop object
+        # itself so we can GC-clean dead entries without holding refs.
+        self._clients_by_loop: dict[int, tuple[Any, Any]] = {}
 
     def _get_client(self):
-        if self._client is None:
-            import openai
+        import asyncio
 
-            self._client = openai.AsyncOpenAI(
-                api_key=self.api_key,
-                organization=self.organization_id,
-                base_url=self.base_url,
-            )
-        return self._client
+        # Back-compat: if a caller (test or integrator) has directly
+        # assigned ``provider._client = <fake>``, honour it and skip the
+        # per-loop pool. We detect an external injection as: ``self._client``
+        # is set to an object we haven't registered in ``_clients_by_loop``.
+        if self._client is not None and not any(
+            c is self._client for (_, c) in self._clients_by_loop.values()
+        ):
+            return self._client
+
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        # Prune entries whose loop has closed. ``id()`` can be recycled so
+        # identity via the held ref is what we check here, not the key.
+        dead_keys = [
+            key
+            for key, (loop, _client) in self._clients_by_loop.items()
+            if loop is not None and loop.is_closed()
+        ]
+        for key in dead_keys:
+            self._clients_by_loop.pop(key, None)
+
+        loop_key = id(current_loop) if current_loop is not None else 0
+        entry = self._clients_by_loop.get(loop_key)
+        if entry is not None and entry[0] is current_loop:
+            self._client = entry[1]
+            return self._client
+
+        import openai
+
+        client = openai.AsyncOpenAI(
+            api_key=self.api_key,
+            organization=self.organization_id,
+            base_url=self.base_url,
+        )
+        self._clients_by_loop[loop_key] = (current_loop, client)
+        self._client = client
+        return client
 
     def _handle_api_error(self, e: Exception) -> NoReturn:
         """Translate OpenAI SDK exceptions to quartermaster-providers exceptions."""
