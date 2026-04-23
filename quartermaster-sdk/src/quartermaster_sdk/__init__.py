@@ -84,6 +84,7 @@ from ._config import (  # noqa: F401
 from . import telemetry  # noqa: F401  — exposes ``qm.telemetry.instrument()`` without explicit import
 from ._async_runner import arun  # noqa: F401
 from ._helpers import instruction, instruction_form  # noqa: F401
+from ._parse_partial import PartialResult, parse_partial  # noqa: F401
 from ._result import Result  # noqa: F401
 from ._runner import StreamDeadlineExceeded, assert_traces_equal, run  # noqa: F401
 from ._session import ChatTurn, InMemorySessionStore, SessionStore  # noqa: F401
@@ -100,6 +101,8 @@ __all__ = [
     "arun",
     "instruction",
     "instruction_form",
+    "parse_partial",
+    "PartialResult",
     "Result",
     # v0.4.0 cooperative cancellation — stream context-manager exit
     # and/or tools raising qm.Cancelled inside the agent loop.
