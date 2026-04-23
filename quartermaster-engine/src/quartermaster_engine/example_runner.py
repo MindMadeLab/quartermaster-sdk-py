@@ -18,6 +18,7 @@ Or force a provider:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import pathlib
@@ -760,17 +761,23 @@ class AgentExecutor(NodeExecutor):
                 hit_iteration_cap = True
                 break
 
-            # Execute every tool call, build a follow-up prompt the model
-            # can react to on the next iteration.  We can't push real
-            # ``tool`` role messages through the current provider API
-            # (``generate_native_response`` only takes a single prompt
-            # string) so we serialise the tool exchange into the prompt
-            # itself — adequate for autonomous loops, and the same shape
-            # quartermaster uses for non-streaming providers.
+            # Execute every tool call — when the model returns multiple
+            # calls in one turn we run them concurrently via
+            # ``asyncio.gather(asyncio.to_thread(...))`` and only emit
+            # start/finish events + append to the log in the original
+            # order so downstream UIs still see a deterministic stream.
+            #
+            # We can't push real ``tool`` role messages through the
+            # current provider API (``generate_native_response`` takes a
+            # single prompt string) so we serialise the tool exchange
+            # into the prompt itself — adequate for autonomous loops
+            # and matches quartermaster's non-streaming shape.
+            normalised: list[tuple[str, str, dict]] = []
             for call in tool_calls:
                 # Tool calls arrive as ``ToolCall`` dataclasses from typed
-                # providers and as plain dicts from ad-hoc backends — handle
-                # both without mistaking an empty-but-valid {} for "missing".
+                # providers and as plain dicts from ad-hoc backends —
+                # handle both without mistaking an empty-but-valid {}
+                # for "missing".
                 if isinstance(call, dict):
                     tool_name = call.get("tool_name", "") or call.get("name", "")
                     params = call.get("parameters", {}) or call.get("arguments", {})
@@ -779,51 +786,90 @@ class AgentExecutor(NodeExecutor):
                     params = getattr(call, "parameters", None)
                     if params is None:
                         params = getattr(call, "arguments", {}) or {}
-
                 # Normalise the tool name BEFORE emitting the "started"
                 # event so downstream UIs see the same name the registry
                 # looks up (strips ``default_api:`` / ``functions:`` /
-                # ``mcp:`` prefixes).  Without this the chat card would
-                # say ``default_api:list_orders`` while the tool call log
-                # says ``list_orders`` — confusing.
+                # ``mcp:`` prefixes).
                 public_name = _normalise_tool_name(tool_name)
-                context.emit_tool_start(public_name, dict(params), iteration)
+                normalised.append((tool_name, public_name, dict(params)))
 
+            # Emit all ``started`` events in order first — UIs need to
+            # show every tool card before results start streaming back.
+            for _, public_name, params in normalised:
+                context.emit_tool_start(public_name, params, iteration)
+
+            async def _run_one(
+                raw_name: str,
+                params: dict,
+            ) -> _ToolInvocation | Cancelled:
+                """Dispatch one tool call on a worker thread.
+
+                Wraps ``Cancelled`` as a return value so ``gather`` can
+                still collect results from the other in-flight calls
+                instead of cancelling them mid-flight on the first raise.
+                """
                 try:
-                    invocation = _execute_tool_call(
+                    return await asyncio.to_thread(
+                        _execute_tool_call,
                         per_node_tools,
-                        tool_name,
+                        raw_name,
                         params,
-                        allowed_tools=allowed_tools,
+                        allowed_tools,
                     )
-                except Cancelled:
-                    # v0.4.0 cooperative cancel — bubble out as a
-                    # distinct node failure so SDK consumers see
-                    # ``ErrorChunk(error="cancelled", ...)`` instead of
-                    # the generic tool-crash string. Fire a paired
-                    # ``tool_finish`` event first so UIs don't leave a
-                    # spinner on the "called" tool card.
-                    logger.info(
-                        "AgentExecutor: tool %r raised Cancelled — aborting agent loop",
-                        public_name,
-                    )
-                    context.emit_tool_finish(
-                        public_name,
-                        dict(params),
-                        "[CANCELLED]",
-                        None,
-                        "cancelled",
-                        iteration,
-                    )
-                    return NodeResult(
-                        success=False,
-                        data={"cancelled": True},
-                        error="cancelled",
-                    )
+                except Cancelled as exc:
+                    return exc
 
+            invocations = await asyncio.gather(
+                *(_run_one(raw_name, dict(params)) for raw_name, _public, params in normalised)
+            )
+
+            cancelled_idx: int | None = None
+            for idx, inv in enumerate(invocations):
+                if isinstance(inv, Cancelled):
+                    cancelled_idx = idx
+                    break
+
+            if cancelled_idx is not None:
+                # v0.4.0 cooperative cancel — bubble out as a distinct
+                # node failure so SDK consumers see ``ErrorChunk(
+                # error="cancelled", ...)``. Fire paired ``tool_finish``
+                # events for every tool started this turn so UIs don't
+                # leave a spinner on the "called" cards.
+                _, cancelled_name, cancelled_params = normalised[cancelled_idx]
+                logger.info(
+                    "AgentExecutor: tool %r raised Cancelled — aborting agent loop",
+                    cancelled_name,
+                )
+                for idx, (_, public_name, params) in enumerate(normalised):
+                    inv = invocations[idx]
+                    if idx == cancelled_idx or isinstance(inv, Cancelled):
+                        context.emit_tool_finish(
+                            public_name,
+                            params,
+                            "[CANCELLED]",
+                            None,
+                            "cancelled",
+                            iteration,
+                        )
+                    else:
+                        context.emit_tool_finish(
+                            public_name,
+                            params,
+                            inv.prompt_text,
+                            inv.raw,
+                            inv.error,
+                            iteration,
+                        )
+                return NodeResult(
+                    success=False,
+                    data={"cancelled": True},
+                    error="cancelled",
+                )
+
+            for (raw_name, public_name, params), invocation in zip(normalised, invocations):
                 context.emit_tool_finish(
                     public_name,
-                    dict(params),
+                    params,
                     invocation.prompt_text,
                     invocation.raw,
                     invocation.error,
@@ -833,11 +879,11 @@ class AgentExecutor(NodeExecutor):
                 # Structured record for NodeResult.data["tool_calls"] so
                 # ``qm.run(...)`` callers (non-streaming) can read exactly
                 # the same shape the streaming ToolCallFinished event
-                # carries.  Both surfaces stay in sync by construction.
+                # carries.
                 tool_call_log.append(
                     {
                         "tool": public_name,
-                        "arguments": dict(params),
+                        "arguments": params,
                         "result": invocation.prompt_text,
                         "raw": invocation.raw,
                         "error": invocation.error,
