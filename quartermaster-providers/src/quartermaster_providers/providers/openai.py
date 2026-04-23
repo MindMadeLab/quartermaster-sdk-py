@@ -190,6 +190,34 @@ def _coerce_text_tool_call_payload(payload: str) -> tuple[str, dict[str, Any]] |
     return name, args
 
 
+async def _aclose_stream(stream: Any) -> None:
+    """Close an openai streaming response defensively.
+
+    openai's ``AsyncStream`` exposes either ``close()`` (a coroutine),
+    ``aclose()`` (a coroutine), or a ``.response`` attribute with an
+    ``aclose()`` coroutine. Older versions only have one or the other.
+    We try each option; any exception during close is swallowed —
+    we're in a finally path and must not obscure the original error.
+    """
+    for attr in ("close", "aclose"):
+        method = getattr(stream, attr, None)
+        if callable(method):
+            try:
+                result = method()
+                if hasattr(result, "__await__"):
+                    await result
+                return
+            except Exception:
+                pass
+    response = getattr(stream, "response", None)
+    aclose = getattr(response, "aclose", None) if response is not None else None
+    if callable(aclose):
+        try:
+            await aclose()
+        except Exception:
+            pass
+
+
 def _extract_reasoning_text(obj: Any) -> str:
     """Pull reasoning text out of a non-standard OpenAI-compatible response.
 
@@ -475,38 +503,64 @@ class OpenAIProvider(AbstractLLMProvider):
     async def _stream_text(
         self, client: Any, params: dict[str, Any]
     ) -> AsyncIterator[TokenResponse]:
+        # v0.7.0: poll the provider-level cancellation contextvar between
+        # chunks. When the engine calls ``runner.stop(flow_id)`` (triggered
+        # by an SSE client disconnect, a ``with qm.run.stream(...) as stream:
+        # break``, or an explicit ``qm.Cancelled`` exception in a tool) it
+        # flips the check; we then close the openai ``AsyncStream`` — which
+        # closes the underlying httpx response — so vLLM / Ollama stops
+        # generating and releases the slot. Without this the httpx
+        # connection kept draining tokens until the model finished naturally.
+        from quartermaster_providers.cancellation import should_cancel
+
         try:
             stream = await client.chat.completions.create(**params)
-            async for chunk in stream:
-                if chunk.choices:
-                    delta = chunk.choices[0].delta
-                    finish_reason = chunk.choices[0].finish_reason
-                    if delta and delta.content:
+            try:
+                async for chunk in stream:
+                    if chunk.choices:
+                        delta = chunk.choices[0].delta
+                        finish_reason = chunk.choices[0].finish_reason
+                        if delta and delta.content:
+                            yield TokenResponse(
+                                content=delta.content,
+                                stop_reason=finish_reason,
+                            )
+                        else:
+                            # OpenAI-compatible reasoning models stream their
+                            # answer through ``reasoning_content`` (or ``reasoning``)
+                            # when ``content`` is absent — surface that as visible
+                            # text so callers don't see an empty stream.
+                            reasoning_chunk = _extract_reasoning_text(delta) if delta else ""
+                            if reasoning_chunk:
+                                yield TokenResponse(
+                                    content=reasoning_chunk,
+                                    stop_reason=finish_reason,
+                                )
+                            elif finish_reason:
+                                yield TokenResponse(
+                                    content="",
+                                    stop_reason=finish_reason,
+                                )
+                    if hasattr(chunk, "usage") and chunk.usage:
                         yield TokenResponse(
-                            content=delta.content,
-                            stop_reason=finish_reason,
+                            content="",
+                            stop_reason="usage",
                         )
-                    else:
-                        # OpenAI-compatible reasoning models stream their
-                        # answer through ``reasoning_content`` (or ``reasoning``)
-                        # when ``content`` is absent — surface that as visible
-                        # text so callers don't see an empty stream.
-                        reasoning_chunk = _extract_reasoning_text(delta) if delta else ""
-                        if reasoning_chunk:
-                            yield TokenResponse(
-                                content=reasoning_chunk,
-                                stop_reason=finish_reason,
-                            )
-                        elif finish_reason:
-                            yield TokenResponse(
-                                content="",
-                                stop_reason=finish_reason,
-                            )
-                if hasattr(chunk, "usage") and chunk.usage:
-                    yield TokenResponse(
-                        content="",
-                        stop_reason="usage",
-                    )
+                    if should_cancel():
+                        # Close the openai AsyncStream (→ httpx response)
+                        # so the server knows to stop generating. The
+                        # ``stop_reason="cancelled"`` sentinel tells the
+                        # engine loop to treat this as a cooperative
+                        # cancel rather than a natural finish.
+                        await _aclose_stream(stream)
+                        yield TokenResponse(content="", stop_reason="cancelled")
+                        return
+            finally:
+                # Defensive: if the consumer abandons the generator mid-
+                # stream (e.g. the engine raises out of the async-for),
+                # still close the underlying httpx response rather than
+                # leaking it into GC.
+                await _aclose_stream(stream)
         except (AuthenticationError, RateLimitError, ProviderError):
             raise
         except Exception as e:

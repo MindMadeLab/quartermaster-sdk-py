@@ -17,6 +17,10 @@ Example:
 """
 
 from quartermaster_providers.base import AbstractLLMProvider
+from quartermaster_providers.cancellation import (  # noqa: F401
+    set_cancel_check,
+    should_cancel,
+)
 from quartermaster_providers.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerState,

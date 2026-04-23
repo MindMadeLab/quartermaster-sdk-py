@@ -390,13 +390,24 @@ class LLMExecutor(NodeExecutor):
             system_message=system_instruction,
         )
 
+        from quartermaster_providers.cancellation import set_cancel_check
+
         try:
-            stream = await provider.generate_text_response(prompt, config)
-            chunks = []
-            async for token_response in stream:
-                if token_response.content:
-                    chunks.append(token_response.content)
-                    context.emit_token(token_response.content)
+            # v0.7.0: install a cancellation probe the provider's streaming
+            # path polls between chunks. When ``runner.stop(flow_id)`` flips
+            # ``ctx.cancelled`` (SSE client disconnect / explicit
+            # qm.Cancelled / context-manager break), the provider closes
+            # the openai AsyncStream → httpx response, so vLLM / Ollama
+            # stop generating mid-token instead of draining to completion.
+            with set_cancel_check(lambda: context.cancelled):
+                stream = await provider.generate_text_response(prompt, config)
+                chunks = []
+                async for token_response in stream:
+                    if token_response.stop_reason == "cancelled":
+                        break
+                    if token_response.content:
+                        chunks.append(token_response.content)
+                        context.emit_token(token_response.content)
             text = "".join(chunks)
 
             # Append to conversation history
