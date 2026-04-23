@@ -150,7 +150,7 @@ def test_strict_scope_blocks_out_of_list_tool():
         .start()
         .user()
         .agent("research", tools=["A"], capture_as="research")
-        .end(stop=True)
+        .end()
         .build()
     )
 
@@ -198,7 +198,7 @@ def test_in_list_tool_resolves_normally():
     )
     provider_registry = _make_registry(mock)
 
-    graph = Graph("scope-ok").start().user().agent("research", tools=["A"]).end(stop=True).build()
+    graph = Graph("scope-ok").start().user().agent("research", tools=["A"]).end().build()
 
     runner = FlowRunner(
         graph=graph,
@@ -236,7 +236,7 @@ def test_permissive_scope_keeps_legacy_behaviour():
         .start()
         .user()
         .agent("research", tools=["A"], tool_scope="permissive")
-        .end(stop=True)
+        .end()
         .build()
     )
 
@@ -274,7 +274,7 @@ def test_default_is_strict():
         .start()
         .user()
         .agent("research", tools=["A"])  # no explicit tool_scope=
-        .end(stop=True)
+        .end()
         .build()
     )
 
@@ -313,9 +313,7 @@ def test_normalised_name_is_compared():
     )
     provider_registry = _make_registry(mock)
 
-    graph = (
-        Graph("prefix-strip").start().user().agent("research", tools=["A"]).end(stop=True).build()
-    )
+    graph = Graph("prefix-strip").start().user().agent("research", tools=["A"]).end().build()
 
     runner = FlowRunner(
         graph=graph,
@@ -359,7 +357,7 @@ def test_empty_tools_list_means_no_tools():
     )
     provider_registry = _make_registry(mock)
 
-    graph = Graph("empty-tools").start().user().agent("research", tools=[]).end(stop=True).build()
+    graph = Graph("empty-tools").start().user().agent("research", tools=[]).end().build()
 
     runner = FlowRunner(
         graph=graph,
