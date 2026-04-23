@@ -17,7 +17,15 @@ Execution engine for AI agent graphs with pluggable storage, dispatching, and me
 - **Flow pause/resume** for user interaction nodes
 - **Sync and async execution** modes with `run()` and `run_async()`
 
-### New in v0.4.0
+### New in v0.5.0
+
+- **Parallel tool execution** -- when a model emits multiple `tool_calls` in a
+  single turn, the agent loop dispatches them concurrently; wall-clock drops
+  from `O(sum(t))` to `O(max(t))`.
+- **Universal tool-name prefix strip** -- `default_api:foo`, `default_api.foo`,
+  `functions:foo`, `mcp:foo` all resolve via `rsplit` on `:` or `.`.
+
+### What shipped in v0.4.0
 
 - **Cooperative cancellation** -- `ctx.cancelled` flag + `Cancelled` exception for clean stream teardown.
 - **Per-node tool scoping** -- `agent(tools=[...])` strictly enforced at the engine level; `tool_scope="permissive"` escape.

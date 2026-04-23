@@ -17,7 +17,12 @@ Lightweight tool abstraction framework for AI agent orchestration.
 - **AbstractTool** base class available for advanced use cases
 - **Zero required dependencies** (httpx optional for WebRequestTool)
 
-### New in v0.4.0
+### New in v0.5.0
+
+- **`duckduckgo_search` UA fix** -- realistic Chrome UA + `Accept`/`Referer`
+  headers.
+
+### What shipped in v0.4.0
 
 - **Local-GPU cost tracker** -- `cost_tracker` tool now accepts `duration_seconds` + `local_gpu_cost_per_hour` for self-hosted inference cost accounting.
 
