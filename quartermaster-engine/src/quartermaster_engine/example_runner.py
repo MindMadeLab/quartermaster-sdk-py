@@ -596,6 +596,58 @@ def _execute_tool_call(
     return _ToolInvocation(prompt_text=str(result), raw=result, error=None)
 
 
+def _sliding_window_tool_log(
+    base_prompt: str,
+    accumulated_tool_log: list[str],
+    max_input_tokens: int | None,
+) -> tuple[list[str], int]:
+    """Drop the OLDEST ``<tool_result>`` blocks until the accumulated
+    prompt text fits inside ``max_input_tokens`` (approximated at
+    ~4 chars/token).
+
+    Returns ``(kept_blocks, dropped_count)``. When ``max_input_tokens``
+    is ``None`` the list is returned verbatim and ``dropped_count=0``.
+
+    Invariants:
+
+    * ``base_prompt`` is never mutated and always counted toward the
+      budget — the agent cannot drop the system/user turn.
+    * Blocks are kept intact. We never partially truncate a block: the
+      model needs well-formed ``<tool_result>...</tool_result>`` pairs
+      to reason over.
+    * If a SINGLE block already exceeds the budget we keep it anyway —
+      the agent needs the latest tool result to make progress; this
+      helper is best-effort, not an absolute limit.
+    * FIFO drop order — oldest results go first; the most recent
+      block (the one the agent is about to reason about) is preserved.
+
+    The ``+ 2`` per-block accounts for the ``"\\n".join(...)`` separator
+    the caller uses to splice blocks into the prompt.
+    """
+    if max_input_tokens is None:
+        return list(accumulated_tool_log), 0
+
+    budget_chars = int(max_input_tokens) * 4
+    kept = list(accumulated_tool_log)
+    dropped = 0
+
+    def _size(blocks: list[str]) -> int:
+        return len(base_prompt) + sum(len(b) + 2 for b in blocks)
+
+    while len(kept) > 1 and _size(kept) > budget_chars:
+        kept.pop(0)
+        dropped += 1
+
+    if dropped:
+        logger.info(
+            "AgentExecutor: dropped %d oldest tool_result blocks to fit max_input_tokens=%d",
+            dropped,
+            max_input_tokens,
+        )
+
+    return kept, dropped
+
+
 class AgentExecutor(NodeExecutor):
     """Autonomous agent with native-response generation and tool orchestration.
 
@@ -902,6 +954,28 @@ class AgentExecutor(NodeExecutor):
                     "<tool_result"
                     f' tool="{public_name}" iteration="{iteration}"'
                     f" args={params!r}>\n{invocation.prompt_text}\n</tool_result>"
+                )
+
+            # v0.7.0: sliding-window truncation — drop the OLDEST
+            # tool_result blocks when the running log would push the
+            # prompt past ``llm_max_input_tokens``. Truncation is
+            # cumulative (we rebind ``accumulated_tool_log`` to the
+            # pruned list) so later iterations start from the already-
+            # trimmed state instead of re-evaluating the original log.
+            max_input_tokens = context.get_meta("llm_max_input_tokens", None)
+            kept_blocks, dropped_count = _sliding_window_tool_log(
+                base_prompt, accumulated_tool_log, max_input_tokens
+            )
+            if dropped_count:
+                accumulated_tool_log = kept_blocks
+                context.emit_custom(
+                    "agent.tool_log_truncated",
+                    {
+                        "dropped": dropped_count,
+                        "kept": len(kept_blocks),
+                        "max_input_tokens": max_input_tokens,
+                        "iteration": iteration,
+                    },
                 )
 
             tool_history = "\n".join(accumulated_tool_log)
