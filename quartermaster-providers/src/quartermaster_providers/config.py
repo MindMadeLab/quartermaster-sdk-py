@@ -6,6 +6,7 @@ provider is used.
 """
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -70,6 +71,23 @@ class LLMConfig:
     # untouched (backwards-compat with v0.3.x callers).
     connect_timeout: float | None = None
     read_timeout: float | None = None
+    # v0.6.0 — pass-through for provider-specific OpenAI-compat body fields
+    # that the SDK doesn't otherwise model. The dict is spliced into the
+    # outgoing ``chat.completions.create(..., extra_body=<dict>)`` call
+    # (supported by the openai Python SDK as a generic escape hatch).
+    #
+    # Primary motivator: Gemma-4's ``chat_template_kwargs`` knob for
+    # toggling <thinking> blocks per-request:
+    #   extra_body={"chat_template_kwargs": {"enable_thinking": False}}
+    # Also handy for vLLM-specific sampling params (``top_k``,
+    # ``repetition_penalty``) that don't have a first-class field here.
+    #
+    # The field is provider-agnostic at the ``LLMConfig`` layer — each
+    # provider decides whether / how to forward it. OpenAI +
+    # OpenAI-compatible providers splice it into the request; Anthropic,
+    # Google, Groq, xAI ignore it (or will once they grow bespoke
+    # pass-through slots of their own).
+    extra_body: dict[str, Any] | None = None
 
     def validate(self) -> None:
         """Validate configuration parameters.
