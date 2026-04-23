@@ -38,6 +38,11 @@ _META_CONFIG_KEYS = {"show_output", "capture_as"}
 # string (see ``quartermaster_engine.runner.flow_runner``).
 CAPTURE_AS_METADATA_KEY = "capture_as"
 
+# v0.7.0: node-metadata key under which the ``retry_max_attempts`` integer
+# (normalised budget for node-level retries) is stored.  Kept as a named
+# constant so the engine side can import it rather than hard-coding.
+RETRY_MAX_ATTEMPTS_METADATA_KEY = "retry_max_attempts"
+
 # Combined set for extraction from kwargs
 _ALL_CONFIG_KEYS = _FLOW_CONFIG_KEYS | _META_CONFIG_KEYS
 
@@ -95,6 +100,55 @@ def _llm_meta(
         meta["llm_extra_body"] = dict(extra_body)
     meta.update({k: v for k, v in extra.items() if k not in _ALL_CONFIG_KEYS})
     return meta
+
+
+def _apply_retry_spec(
+    node: GraphNode,
+    retry: dict[str, Any] | None,
+    predicate_registry: dict[str, Any],
+) -> None:
+    """Apply a v0.7.0 retry spec to *node* metadata and *predicate_registry*.
+
+    The retry spec is a dict with shape::
+
+        {"max_attempts": int, "on": Callable[[NodeResult], bool] | None}
+
+    Only the integer budget lands on ``node.metadata[RETRY_MAX_ATTEMPTS_METADATA_KEY]``
+    because node metadata must survive JSON / YAML round-trips.  The ``on``
+    predicate (if any) is stashed in *predicate_registry* keyed by node name
+    so the engine can look it up at run time via the same inline-tools-style
+    side-channel — it does NOT survive serialisation.
+
+    ``max_attempts`` values ``<= 0`` are normalised to ``1`` (no retries,
+    just the initial attempt).  The spec is a no-op when ``retry`` is
+    ``None`` or an empty dict — metadata stays clean so round-trips don't
+    acquire stale keys.
+    """
+    if not retry:
+        return
+    max_attempts = retry.get("max_attempts", 1)
+    try:
+        max_attempts_int = int(max_attempts)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"retry=: 'max_attempts' must be int-coercible, got {max_attempts!r}"
+        ) from exc
+    if max_attempts_int <= 0:
+        max_attempts_int = 1
+    node.metadata[RETRY_MAX_ATTEMPTS_METADATA_KEY] = max_attempts_int
+
+    predicate = retry.get("on")
+    if predicate is not None:
+        if not callable(predicate):
+            raise TypeError(
+                f"retry={{'on': ...}}: expected a callable predicate, got "
+                f"{type(predicate).__name__}"
+            )
+        # Keyed by node NAME — the engine resolves predicates by looking
+        # the node's name up in ``FlowRunner.retry_predicates`` at run time.
+        # Callable objects can't survive JSON/YAML so they live only in
+        # this in-memory registry (mirrors the inline-tools design).
+        predicate_registry[node.name] = predicate
 
 
 def _normalise_agent_tools(
@@ -382,11 +436,20 @@ class _BranchBuilder:
         provider: str = "",
         temperature: float = 0.5,
         system_instruction: str = "",
+        retry: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> _BranchBuilder:
         """Add an Instruction node — pure LLM text generation, NO tools.
 
         Streams the LLM response. Use ``agent()`` instead if you need tool use.
+
+        Args:
+            retry: Optional v0.7.0 node-level retry spec. A dict with
+                ``max_attempts`` (int) and optional ``on`` (predicate
+                ``(NodeResult) -> bool``). Only the int budget survives
+                ``to_json``/``from_json`` round-trips — the predicate is
+                held in memory on the builder and re-attached to the
+                engine by the SDK runner.
         """
         flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
@@ -400,6 +463,7 @@ class _BranchBuilder:
             type=NodeType.INSTRUCTION, name=name, metadata=meta, message_type=MessageType.ASSISTANT
         )
         _apply_flow_config(node, flow_cfg)
+        _apply_retry_spec(node, retry, self._graph._retry_predicates)
         return self._add_node(node)
 
     def instruction_form(
@@ -410,6 +474,7 @@ class _BranchBuilder:
         provider: str = "",
         temperature: float = 0.1,
         system_instruction: str = "",
+        retry: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> _BranchBuilder:
         """Add an InstructionForm node — LLM returns typed JSON.
@@ -420,6 +485,8 @@ class _BranchBuilder:
 
         Args:
             schema: Pydantic BaseModel subclass or dict JSON Schema.
+            retry: Optional v0.7.0 node-level retry spec — see
+                :meth:`instruction` for the exact shape.
         """
         import json as _json
 
@@ -451,6 +518,7 @@ class _BranchBuilder:
             message_type=MessageType.ASSISTANT,
         )
         _apply_flow_config(node, flow_cfg)
+        _apply_retry_spec(node, retry, self._graph._retry_predicates)
         return self._add_node(node)
 
     def summarize(
@@ -486,6 +554,7 @@ class _BranchBuilder:
         tools: list[Any] | None = None,
         max_iterations: int = 25,
         tool_scope: str = "strict",
+        retry: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> _BranchBuilder:
         """Add an Agent node — autonomous agentic loop with optional tools.
@@ -509,6 +578,8 @@ class _BranchBuilder:
                 ``"permissive"`` — the legacy pre-v0.4.0 behaviour where
                 every tool registered on the shared registry is reachable
                 from this node; intended as a migration escape hatch.
+            retry: Optional v0.7.0 node-level retry spec — see
+                :meth:`instruction` for the exact shape.
         """
         flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
@@ -524,6 +595,7 @@ class _BranchBuilder:
             type=NodeType.AGENT, name=name, metadata=meta, message_type=MessageType.ASSISTANT
         )
         _apply_flow_config(node, flow_cfg)
+        _apply_retry_spec(node, retry, self._graph._retry_predicates)
         return self._add_node(node)
 
     def instruction_program(
@@ -1434,6 +1506,13 @@ class GraphBuilder:
         # in the serialisable GraphSpec (they can't survive JSON/YAML
         # round-trips), only the resolved tool NAMES do.
         self._inline_tools: dict[str, Any] = {}
+        # v0.7.0: side-channel dict of {node_name: retry-predicate callable}
+        # populated by ``.instruction(retry=...)`` / ``.agent(retry=...)`` /
+        # ``.instruction_form(retry=...)``.  The engine resolves predicates
+        # by name at run time.  Callable objects can't survive JSON/YAML
+        # so they live only in this in-memory registry (mirrors
+        # ``_inline_tools``).
+        self._retry_predicates: dict[str, Any] = {}
         if auto_start:
             self._create_start_node()
 
@@ -1655,11 +1734,19 @@ class GraphBuilder:
         provider: str = "",
         temperature: float = 0.5,
         system_instruction: str = "",
+        retry: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> GraphBuilder:
         """Add an Instruction node — pure LLM text generation, NO tools.
 
         Streams the LLM response. Use ``agent()`` instead if you need tool use.
+
+        Args:
+            retry: Optional v0.7.0 node-level retry spec. Shape:
+                ``{"max_attempts": int, "on": (NodeResult) -> bool}``.
+                Only the integer budget survives ``to_json``/``from_json``
+                round-trips — the predicate is in-memory only (builder
+                side-channel, re-attached by the SDK runner).
         """
         flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
         meta = _llm_meta(
@@ -1673,6 +1760,7 @@ class GraphBuilder:
             type=NodeType.INSTRUCTION, name=name, metadata=meta, message_type=MessageType.ASSISTANT
         )
         _apply_flow_config(node, flow_cfg)
+        _apply_retry_spec(node, retry, self._retry_predicates)
         return self._add_node(node)
 
     def instruction_form(
@@ -1683,11 +1771,13 @@ class GraphBuilder:
         provider: str = "",
         temperature: float = 0.1,
         system_instruction: str = "",
+        retry: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> GraphBuilder:
         """Add an InstructionForm node — LLM returns typed JSON.
 
-        See :meth:`_BranchBuilder.instruction_form`.
+        See :meth:`_BranchBuilder.instruction_form`. Accepts the v0.7.0
+        ``retry=`` spec; see :meth:`instruction` for the exact shape.
         """
         import json as _json
 
@@ -1719,6 +1809,7 @@ class GraphBuilder:
             message_type=MessageType.ASSISTANT,
         )
         _apply_flow_config(node, flow_cfg)
+        _apply_retry_spec(node, retry, self._retry_predicates)
         return self._add_node(node)
 
     def summarize(
@@ -1754,6 +1845,7 @@ class GraphBuilder:
         tools: list[Any] | None = None,
         max_iterations: int = 25,
         tool_scope: str = "strict",
+        retry: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> GraphBuilder:
         """Add an Agent node — autonomous agentic loop with optional tools.
@@ -1796,6 +1888,7 @@ class GraphBuilder:
             type=NodeType.AGENT, name=name, metadata=meta, message_type=MessageType.ASSISTANT
         )
         _apply_flow_config(node, flow_cfg)
+        _apply_retry_spec(node, retry, self._retry_predicates)
         return self._add_node(node)
 
     def instruction_program(
@@ -2605,6 +2698,11 @@ class GraphBuilder:
         # yet accessible to the SDK runner via ``getattr(spec, "_inline_tools")``.
         if self._inline_tools:
             object.__setattr__(ver, "_inline_tools", dict(self._inline_tools))
+        # v0.7.0: retry predicates follow the same side-channel pattern as
+        # inline tools — callables can't survive JSON/YAML, so they live as
+        # a non-declared attribute on the spec for the SDK runner to read.
+        if self._retry_predicates:
+            object.__setattr__(ver, "_retry_predicates", dict(self._retry_predicates))
         return ver
 
     def build(self, validate: bool = True) -> GraphSpec:
