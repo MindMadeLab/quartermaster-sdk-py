@@ -67,9 +67,7 @@ class TestLLMConfigPropagation:
 
     def test_max_output_tokens_reaches_provider(self, provider_registry_with_mock):
         registry, mock = provider_registry_with_mock
-        graph = (
-            Graph("chat").start().user().agent("Tight", max_output_tokens=50).end(stop=True).build()
-        )
+        graph = Graph("chat").start().user().agent("Tight", max_output_tokens=50).end().build()
         runner = FlowRunner(graph=graph, provider_registry=registry)
         result = runner.run("ping")
         assert result.success, result.error
@@ -78,28 +76,14 @@ class TestLLMConfigPropagation:
 
     def test_max_input_tokens_reaches_provider(self, provider_registry_with_mock):
         registry, mock = provider_registry_with_mock
-        graph = (
-            Graph("chat")
-            .start()
-            .user()
-            .agent("Tight", max_input_tokens=8000)
-            .end(stop=True)
-            .build()
-        )
+        graph = Graph("chat").start().user().agent("Tight", max_input_tokens=8000).end().build()
         runner = FlowRunner(graph=graph, provider_registry=registry)
         runner.run("ping")
         assert mock.last_config.max_input_tokens == 8000
 
     def test_thinking_level_high_propagates_enabled_and_budget(self, provider_registry_with_mock):
         registry, mock = provider_registry_with_mock
-        graph = (
-            Graph("chat")
-            .start()
-            .user()
-            .agent("Reasoning", thinking_level="high")
-            .end(stop=True)
-            .build()
-        )
+        graph = Graph("chat").start().user().agent("Reasoning", thinking_level="high").end().build()
         runner = FlowRunner(graph=graph, provider_registry=registry)
         runner.run("ping")
         assert mock.last_config.thinking_enabled is True
@@ -107,9 +91,7 @@ class TestLLMConfigPropagation:
 
     def test_thinking_level_off_disables(self, provider_registry_with_mock):
         registry, mock = provider_registry_with_mock
-        graph = (
-            Graph("chat").start().user().agent("Plain", thinking_level="off").end(stop=True).build()
-        )
+        graph = Graph("chat").start().user().agent("Plain", thinking_level="off").end().build()
         runner = FlowRunner(graph=graph, provider_registry=registry)
         runner.run("ping")
         assert mock.last_config.thinking_enabled is False
@@ -122,7 +104,7 @@ class TestLLMConfigPropagation:
             .start()
             .user()
             .vision("Look", model="gemma4:26b", provider="ollama")
-            .end(stop=True)
+            .end()
             .build()
         )
         runner = FlowRunner(graph=graph, provider_registry=registry)
@@ -143,7 +125,7 @@ class TestSimpleGraphSnippet:
             .start()
             .user()
             .agent()  # no tools, just text completion
-            .end(stop=True)
+            .end()
             .build()
         )
 
@@ -159,7 +141,7 @@ class TestSimpleGraphSnippet:
 
     def test_flowrunner_requires_a_registry(self):
         """Constructing a runner without either kind of registry must error."""
-        graph = Graph("chat").start().user().agent().end(stop=True).build()
+        graph = Graph("chat").start().user().agent().end().build()
         with pytest.raises(TypeError, match="node_registry or provider_registry"):
             FlowRunner(graph=graph)
 
@@ -167,7 +149,7 @@ class TestSimpleGraphSnippet:
         """provider_registry must be keyword-only (we don't want a future
         positional swap with node_registry to bite anyone)."""
         registry, _ = provider_registry_with_mock
-        graph = Graph("chat").start().user().agent().end(stop=True).build()
+        graph = Graph("chat").start().user().agent().end().build()
         runner = FlowRunner(graph=graph, provider_registry=registry)
         assert runner.node_registry is not None
         assert runner.provider_registry is registry
@@ -183,7 +165,7 @@ class TestAgentExecutor:
     def test_no_tools_single_iteration(self, provider_registry_with_mock):
         """With no tools wired up, the loop runs exactly once."""
         registry, mock = provider_registry_with_mock
-        graph = Graph("chat").start().user().agent().end(stop=True).build()
+        graph = Graph("chat").start().user().agent().end().build()
         runner = FlowRunner(graph=graph, provider_registry=registry)
         result = runner.run("ping")
         assert result.success
@@ -272,7 +254,7 @@ class TestAgentExecutor:
             .start()
             .user()
             .agent("Tooled", tools=["get_weather"])
-            .end(stop=True)
+            .end()
             .build()
         )
 
@@ -339,7 +321,7 @@ class TestAgentExecutor:
             .start()
             .user()
             .agent("Looping", tools=["loopy"], max_iterations=3)
-            .end(stop=True)
+            .end()
             .build()
         )
 
@@ -388,7 +370,7 @@ class TestPropagatesNodeFailure:
         reg.register(NodeType.USER.value, UserExecutor(interactive=False))
         reg.register(NodeType.STATIC.value, PassthroughExecutor())
 
-        graph = Graph("chat").start().user().agent().end(stop=True).build()
+        graph = Graph("chat").start().user().agent().end().build()
         runner = FlowRunner(graph=graph, node_registry=reg)
         result = runner.run("hello")
 

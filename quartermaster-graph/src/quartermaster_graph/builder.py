@@ -1303,7 +1303,7 @@ class _BranchBuilder:
     # Termination
     # ------------------------------------------------------------------
 
-    def end(self, stop: bool | None = None) -> Any:
+    def end(self) -> Any:
         """End this branch.
 
         v0.3.1 restores the pre-v0.3.0 behaviour: ``.end()`` on a
@@ -1318,13 +1318,9 @@ class _BranchBuilder:
         (e.g. a ``.text(...)``-like terminal, or fall through to the
         outer ``.end()``).  For loops, use :meth:`back` instead.
 
-        The *stop* kwarg is a deprecated no-op kept for v0.3.0 API
-        compatibility.
-
         Returns the parent — either a ``GraphBuilder`` or another
         ``_BranchBuilder`` for nested control flow.
         """
-        del stop  # deprecated no-op — kept for v0.3.0 callsite compatibility
         if self._last_node_id is not None:
             self._parent._branch_endpoints.append(self._last_node_id)
         return self._parent
@@ -1584,7 +1580,7 @@ class GraphBuilder:
         self._create_start_node()
         return self
 
-    def end(self, stop: bool | None = None) -> GraphBuilder:
+    def end(self) -> GraphBuilder:
         """Add an End node — the graph terminates here.
 
         v0.3.1 semantics (reverted from v0.3.0 Proposal A):
@@ -1601,14 +1597,9 @@ class GraphBuilder:
         * For explicit "loop back to Start / return to parent" use
           :meth:`back` instead.
 
-        The *stop* kwarg is retained as a deprecated no-op so code
-        written against the v0.3.0 API still builds; it has no effect
-        and will be removed in a later release.
-
         If there are pending branch endpoints, auto-merges them first
         so the End node is reachable from all branches.
         """
-        del stop  # deprecated no-op — kept for v0.3.0 callsite compatibility
         node = GraphNode(
             type=NodeType.END,
             name="End",

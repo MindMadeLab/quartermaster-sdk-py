@@ -80,8 +80,8 @@ def _match_rule(rule: SemanticChangeRule, line: str) -> bool:
 
     TODO(v0.4.1+): when ``rule.pattern_kind == "ast"``, dispatch to an
     AST-walker that evaluates a structured pattern against the parsed
-    module.  The regex-only path handles the current five rules fine,
-    but the ``.end(stop=True)`` matcher is a good candidate for an AST
+    module.  The regex-only path handles the current rule set fine,
+    but more structural patterns are a good candidate for an AST
     rewrite once the rule set grows.
     """
 
