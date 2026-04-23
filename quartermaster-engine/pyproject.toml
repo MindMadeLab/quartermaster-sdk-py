@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quartermaster-engine"
-version = "0.6.1"
+version = "0.6.2"
 description = "Execution engine for AI agent graphs — traversal, branching, merging, memory, message passing, and error handling"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -25,13 +25,13 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "quartermaster-graph>=0.6.1",
-    "quartermaster-providers>=0.6.1",
+    "quartermaster-graph>=0.6.2",
+    "quartermaster-providers>=0.6.2",
     # ``quartermaster-nodes`` ships ``safe_eval`` (a simpleeval sandbox)
     # which the example runner uses for ``Var``/``If``/``Switch`` node
     # expression evaluation.  Pre-0.1.2 this was an implicit workspace
     # dep — it would ImportError when installed standalone.
-    "quartermaster-nodes>=0.6.1",
+    "quartermaster-nodes>=0.6.2",
 ]
 
 [project.optional-dependencies]
