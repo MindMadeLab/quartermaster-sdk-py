@@ -571,6 +571,19 @@ class OpenAIProvider(AbstractLLMProvider):
         if config.extra_body:
             params["extra_body"] = dict(config.extra_body)
 
+        # Auto-translate ``thinking_enabled`` into Gemma-4 / vLLM's
+        # ``chat_template_kwargs.enable_thinking`` so users don't have to
+        # hand-splice ``extra_body`` for the common case. Explicit caller
+        # values in ``extra_body.chat_template_kwargs.enable_thinking``
+        # win — we never overwrite.
+        if config.thinking_enabled:
+            current = params.get("extra_body") or {}
+            ctk = current.get("chat_template_kwargs") or {}
+            if "enable_thinking" not in ctk:
+                ctk = {**ctk, "enable_thinking": True}
+                current = {**current, "chat_template_kwargs": ctk}
+                params["extra_body"] = current
+
         return params
 
     async def list_models(self) -> list[str]:
