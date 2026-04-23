@@ -191,9 +191,7 @@ class TestCircuitBreakerWrapper:
         breaker = _make_state(failure_threshold=3)
         wrapper = CircuitBreakerWrapper(mock_provider, breaker)
 
-        result = asyncio.run(
-            wrapper.generate_text_response("hello", config)
-        )
+        result = asyncio.run(wrapper.generate_text_response("hello", config))
 
         assert result.content == "ok"
         assert mock_provider.call_count == 1
@@ -212,9 +210,7 @@ class TestCircuitBreakerWrapper:
         assert breaker.state == "open"
 
         with pytest.raises(CircuitOpenError):
-            asyncio.run(
-                wrapper.generate_text_response("hello", config)
-            )
+            asyncio.run(wrapper.generate_text_response("hello", config))
 
         # Inner provider was never called.
         assert mock_provider.call_count == 0
@@ -235,9 +231,7 @@ class TestCircuitBreakerWrapper:
 
         for _ in range(3):
             with pytest.raises(RuntimeError):
-                asyncio.run(
-                    wrapper.generate_text_response("hello", config)
-                )
+                asyncio.run(wrapper.generate_text_response("hello", config))
 
         assert breaker.state == "open"
 

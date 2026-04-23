@@ -22,8 +22,6 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-import pytest
-
 from quartermaster_providers.providers.openai import OpenAIProvider
 from quartermaster_providers.providers.openai_compat import OpenAICompatibleProvider
 
