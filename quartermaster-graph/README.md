@@ -17,6 +17,12 @@ Framework-agnostic graph schema for defining AI agent workflows as directed grap
 - **Pre-built templates**: simple chat, decision tree, multi-agent supervisor, and more
 - **Typed metadata schemas** for each node type
 
+### New in v0.5.0
+
+- **`program_runner(program=<callable>)`** -- pass a `@tool()`-decorated function
+  directly instead of its name string; the graph builder auto-registers it.
+  Parity with `.agent(tools=[...])`.
+
 ## Installation
 
 ```bash

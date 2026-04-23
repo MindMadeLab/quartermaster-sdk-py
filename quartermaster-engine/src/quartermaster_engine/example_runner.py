@@ -18,6 +18,7 @@ Or force a provider:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import pathlib
@@ -467,20 +468,19 @@ def _tool_definitions(tool_registry: Any) -> list[dict[str, Any]] | None:
 #: Ollama's OpenAI-compat proxy and emit ``default_api:list_orders``; the
 #: OpenAI native wire format uses ``functions:list_orders``; the MCP bridge
 #: emits ``mcp:foo``.  All three resolve to the same registered tool name.
-_TOOL_NAME_PREFIXES: tuple[str, ...] = (
-    "default_api:",
-    "default_api.",
-    "functions:",
-    "functions.",
-    "mcp:",
-)
-
-
 def _normalise_tool_name(tool_name: str) -> str:
-    """Strip provider-specific namespace prefixes from a tool call's name."""
-    for prefix in _TOOL_NAME_PREFIXES:
-        if tool_name.startswith(prefix):
-            return tool_name[len(prefix) :]
+    """Strip provider-specific namespace prefixes from a tool call's name.
+
+    Models return tool names with various prefixes — ``default_api:``,
+    ``default_api.``, ``functions:``, ``functions.``, ``google_search:``,
+    ``mcp:``, etc. Instead of maintaining a brittle allow-list, strip
+    everything before the LAST ``:`` or ``.`` separator. Handles every
+    current and future prefix pattern regardless of which delimiter the
+    model chose.
+    """
+    idx = max(tool_name.rfind(":"), tool_name.rfind("."))
+    if idx >= 0:
+        return tool_name[idx + 1 :]
     return tool_name
 
 
@@ -761,17 +761,23 @@ class AgentExecutor(NodeExecutor):
                 hit_iteration_cap = True
                 break
 
-            # Execute every tool call, build a follow-up prompt the model
-            # can react to on the next iteration.  We can't push real
-            # ``tool`` role messages through the current provider API
-            # (``generate_native_response`` only takes a single prompt
-            # string) so we serialise the tool exchange into the prompt
-            # itself — adequate for autonomous loops, and the same shape
-            # quartermaster uses for non-streaming providers.
+            # Execute every tool call — when the model returns multiple
+            # calls in one turn we run them concurrently via
+            # ``asyncio.gather(asyncio.to_thread(...))`` and only emit
+            # start/finish events + append to the log in the original
+            # order so downstream UIs still see a deterministic stream.
+            #
+            # We can't push real ``tool`` role messages through the
+            # current provider API (``generate_native_response`` takes a
+            # single prompt string) so we serialise the tool exchange
+            # into the prompt itself — adequate for autonomous loops
+            # and matches quartermaster's non-streaming shape.
+            normalised: list[tuple[str, str, dict]] = []
             for call in tool_calls:
                 # Tool calls arrive as ``ToolCall`` dataclasses from typed
-                # providers and as plain dicts from ad-hoc backends — handle
-                # both without mistaking an empty-but-valid {} for "missing".
+                # providers and as plain dicts from ad-hoc backends —
+                # handle both without mistaking an empty-but-valid {}
+                # for "missing".
                 if isinstance(call, dict):
                     tool_name = call.get("tool_name", "") or call.get("name", "")
                     params = call.get("parameters", {}) or call.get("arguments", {})
@@ -780,51 +786,90 @@ class AgentExecutor(NodeExecutor):
                     params = getattr(call, "parameters", None)
                     if params is None:
                         params = getattr(call, "arguments", {}) or {}
-
                 # Normalise the tool name BEFORE emitting the "started"
                 # event so downstream UIs see the same name the registry
                 # looks up (strips ``default_api:`` / ``functions:`` /
-                # ``mcp:`` prefixes).  Without this the chat card would
-                # say ``default_api:list_orders`` while the tool call log
-                # says ``list_orders`` — confusing.
+                # ``mcp:`` prefixes).
                 public_name = _normalise_tool_name(tool_name)
-                context.emit_tool_start(public_name, dict(params), iteration)
+                normalised.append((tool_name, public_name, dict(params)))
 
+            # Emit all ``started`` events in order first — UIs need to
+            # show every tool card before results start streaming back.
+            for _, public_name, params in normalised:
+                context.emit_tool_start(public_name, params, iteration)
+
+            async def _run_one(
+                raw_name: str,
+                params: dict,
+            ) -> _ToolInvocation | Cancelled:
+                """Dispatch one tool call on a worker thread.
+
+                Wraps ``Cancelled`` as a return value so ``gather`` can
+                still collect results from the other in-flight calls
+                instead of cancelling them mid-flight on the first raise.
+                """
                 try:
-                    invocation = _execute_tool_call(
+                    return await asyncio.to_thread(
+                        _execute_tool_call,
                         per_node_tools,
-                        tool_name,
+                        raw_name,
                         params,
-                        allowed_tools=allowed_tools,
+                        allowed_tools,
                     )
-                except Cancelled:
-                    # v0.4.0 cooperative cancel — bubble out as a
-                    # distinct node failure so SDK consumers see
-                    # ``ErrorChunk(error="cancelled", ...)`` instead of
-                    # the generic tool-crash string. Fire a paired
-                    # ``tool_finish`` event first so UIs don't leave a
-                    # spinner on the "called" tool card.
-                    logger.info(
-                        "AgentExecutor: tool %r raised Cancelled — aborting agent loop",
-                        public_name,
-                    )
-                    context.emit_tool_finish(
-                        public_name,
-                        dict(params),
-                        "[CANCELLED]",
-                        None,
-                        "cancelled",
-                        iteration,
-                    )
-                    return NodeResult(
-                        success=False,
-                        data={"cancelled": True},
-                        error="cancelled",
-                    )
+                except Cancelled as exc:
+                    return exc
 
+            invocations = await asyncio.gather(
+                *(_run_one(raw_name, dict(params)) for raw_name, _public, params in normalised)
+            )
+
+            cancelled_idx: int | None = None
+            for idx, inv in enumerate(invocations):
+                if isinstance(inv, Cancelled):
+                    cancelled_idx = idx
+                    break
+
+            if cancelled_idx is not None:
+                # v0.4.0 cooperative cancel — bubble out as a distinct
+                # node failure so SDK consumers see ``ErrorChunk(
+                # error="cancelled", ...)``. Fire paired ``tool_finish``
+                # events for every tool started this turn so UIs don't
+                # leave a spinner on the "called" cards.
+                _, cancelled_name, cancelled_params = normalised[cancelled_idx]
+                logger.info(
+                    "AgentExecutor: tool %r raised Cancelled — aborting agent loop",
+                    cancelled_name,
+                )
+                for idx, (_, public_name, params) in enumerate(normalised):
+                    inv = invocations[idx]
+                    if idx == cancelled_idx or isinstance(inv, Cancelled):
+                        context.emit_tool_finish(
+                            public_name,
+                            params,
+                            "[CANCELLED]",
+                            None,
+                            "cancelled",
+                            iteration,
+                        )
+                    else:
+                        context.emit_tool_finish(
+                            public_name,
+                            params,
+                            inv.prompt_text,
+                            inv.raw,
+                            inv.error,
+                            iteration,
+                        )
+                return NodeResult(
+                    success=False,
+                    data={"cancelled": True},
+                    error="cancelled",
+                )
+
+            for (raw_name, public_name, params), invocation in zip(normalised, invocations):
                 context.emit_tool_finish(
                     public_name,
-                    dict(params),
+                    params,
                     invocation.prompt_text,
                     invocation.raw,
                     invocation.error,
@@ -834,11 +879,11 @@ class AgentExecutor(NodeExecutor):
                 # Structured record for NodeResult.data["tool_calls"] so
                 # ``qm.run(...)`` callers (non-streaming) can read exactly
                 # the same shape the streaming ToolCallFinished event
-                # carries.  Both surfaces stay in sync by construction.
+                # carries.
                 tool_call_log.append(
                     {
                         "tool": public_name,
-                        "arguments": dict(params),
+                        "arguments": params,
                         "result": invocation.prompt_text,
                         "raw": invocation.raw,
                         "error": invocation.error,
@@ -1193,12 +1238,16 @@ class InstructionFormExecutor(NodeExecutor):
 
         # Inject schema into system prompt
         full_system = (
-            f"{system_instruction}\n\n"
-            "Respond with a single JSON object matching this schema. "
-            "Do not wrap the JSON in markdown code fences. Do not emit any "
-            "text outside the JSON object.\n\n"
-            f"Schema: {schema_json}"
-        ).strip() if schema_json else system_instruction
+            (
+                f"{system_instruction}\n\n"
+                "Respond with a single JSON object matching this schema. "
+                "Do not wrap the JSON in markdown code fences. Do not emit any "
+                "text outside the JSON object.\n\n"
+                f"Schema: {schema_json}"
+            ).strip()
+            if schema_json
+            else system_instruction
+        )
 
         provider_name, model = _resolve_provider_and_model(
             self._registry,
@@ -1212,7 +1261,8 @@ class InstructionFormExecutor(NodeExecutor):
             provider = None
         if provider is None:
             return NodeResult(
-                success=False, data={},
+                success=False,
+                data={},
                 error=f"Provider '{provider_name}' not registered.",
             )
 
@@ -1261,7 +1311,8 @@ class InstructionFormExecutor(NodeExecutor):
 
         if parsed is None:
             return NodeResult(
-                success=False, data={"raw_text": raw_text},
+                success=False,
+                data={"raw_text": raw_text},
                 error=f"Could not parse JSON from LLM response",
                 output_text=raw_text,
             )
@@ -1272,6 +1323,7 @@ class InstructionFormExecutor(NodeExecutor):
             try:
                 module_path, class_name = schema_class.rsplit(".", 1)
                 import importlib
+
                 mod = importlib.import_module(module_path)
                 cls = getattr(mod, class_name)
                 validated = cls.model_validate(parsed)
@@ -1320,17 +1372,14 @@ class ProgramRunnerExecutor(NodeExecutor):
         program = context.get_meta("program", "")
         if not program:
             return NodeResult(
-                success=False, data={},
+                success=False,
+                data={},
                 error="ProgramRunner node has no 'program' in metadata",
             )
 
         # Collect arguments: everything in metadata except reserved keys
         reserved = {"program", "capture_as", "show_output"}
-        args = {
-            k: v
-            for k, v in context.current_node.metadata.items()
-            if k not in reserved
-        }
+        args = {k: v for k, v in context.current_node.metadata.items() if k not in reserved}
 
         # Resolve the tool
         per_node_tools = context.get_meta("_tool_registry") or self._tools
@@ -1338,7 +1387,8 @@ class ProgramRunnerExecutor(NodeExecutor):
 
         if per_node_tools is None:
             return NodeResult(
-                success=False, data={},
+                success=False,
+                data={},
                 error=f"No tool registry available for ProgramRunner '{normalised}'",
             )
 
@@ -1346,14 +1396,16 @@ class ProgramRunnerExecutor(NodeExecutor):
             tool_obj = per_node_tools.get(normalised)
         except Exception as exc:
             return NodeResult(
-                success=False, data={},
+                success=False,
+                data={},
                 error=f"Tool '{normalised}' not found: {exc}",
             )
 
         safe_run = getattr(tool_obj, "safe_run", None) or getattr(tool_obj, "run", None)
         if safe_run is None:
             return NodeResult(
-                success=False, data={},
+                success=False,
+                data={},
                 error=f"Tool '{normalised}' has no run() method",
             )
 
@@ -1366,7 +1418,8 @@ class ProgramRunnerExecutor(NodeExecutor):
         except Exception as exc:
             logger.warning("ProgramRunner %r raised: %s", normalised, exc)
             return NodeResult(
-                success=False, data={},
+                success=False,
+                data={},
                 error=f"Tool '{normalised}' failed: {exc}",
             )
 
@@ -1387,17 +1440,47 @@ class ProgramRunnerExecutor(NodeExecutor):
             success=True,
             data={
                 "memory_updates": {"__conversation__": conversation},
-                "tool_calls": [{
-                    "tool": normalised,
-                    "arguments": args,
-                    "result": text[:500],
-                    "raw": result if isinstance(result, dict) else None,
-                    "error": None,
-                    "iteration": 0,
-                }],
+                "tool_calls": [
+                    {
+                        "tool": normalised,
+                        "arguments": args,
+                        "result": text[:500],
+                        "raw": result if isinstance(result, dict) else None,
+                        "error": None,
+                        "iteration": 0,
+                    }
+                ],
             },
             output_text=text,
         )
+
+
+class ViewMetadataExecutor(NodeExecutor):
+    """Debug node that dumps flow memory and conversation as text."""
+
+    async def execute(self, context: ExecutionContext) -> NodeResult:
+        import json
+
+        sections = []
+        sections.append("=== Flow Memory ===")
+        for k, v in sorted(context.memory.items()):
+            if k.startswith("__"):
+                continue
+            sections.append(f"  {k}: {str(v)[:200]}")
+
+        conversation = context.memory.get("__conversation__", [])
+        if conversation:
+            sections.append("\n=== Conversation ===")
+            for entry in conversation:
+                sections.append(f"  [{entry.get('role', '?')}]: {str(entry.get('text', ''))[:200]}")
+
+        sections.append(f"\n=== Node: {context.current_node.name} ===")
+        sections.append(
+            f"  metadata: {json.dumps(dict(context.current_node.metadata), default=str)[:500]}"
+        )
+
+        text = "\n".join(sections)
+        return NodeResult(success=True, data={}, output_text=text)
 
 
 class PassthroughExecutor(NodeExecutor):
@@ -1605,6 +1688,7 @@ def build_default_registry(
     program_runner = ProgramRunnerExecutor(tool_registry=tool_registry)
     reg.register(NodeType.PROGRAM_RUNNER.value, program_runner)
     reg.register(NodeType.STATIC_PROGRAM_PARAMETERS.value, passthrough)
+    reg.register(NodeType.VIEW_METADATA.value, ViewMetadataExecutor())
 
     # Memory nodes
     reg.register(NodeType.WRITE_MEMORY.value, mem_write)

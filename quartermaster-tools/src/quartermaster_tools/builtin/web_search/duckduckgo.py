@@ -16,6 +16,17 @@ from quartermaster_tools.decorator import tool
 # DuckDuckGo HTML search endpoint
 _DDG_URL = "https://html.duckduckgo.com/html/"
 
+# DDG returns an HTTP 202 challenge page for bot-like User-Agents (including
+# the descriptive "QuartermasterBot/1.0" we used to send). A realistic browser
+# UA gets the real HTML back. This string mirrors a current desktop Chrome —
+# refresh occasionally if DDG starts serving a challenge again.
+_BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
+_DEFAULT_TIMEOUT = 30
+
 # Default and max results
 _DEFAULT_MAX_RESULTS = 5
 _HARD_MAX_RESULTS = 20
@@ -112,12 +123,18 @@ def duckduckgo_search(query: str, max_results: int = _DEFAULT_MAX_RESULTS) -> di
         )
 
     try:
-        with httpx.Client(timeout=30, follow_redirects=True) as client:
+        with httpx.Client(timeout=_DEFAULT_TIMEOUT, follow_redirects=True) as client:
             response = client.post(
                 _DDG_URL,
                 data={"q": query},
                 headers={
-                    "User-Agent": "Mozilla/5.0 (compatible; QuartermasterBot/1.0)",
+                    "User-Agent": _BROWSER_UA,
+                    "Accept": (
+                        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                        "image/avif,image/webp,*/*;q=0.8"
+                    ),
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Referer": "https://duckduckgo.com/",
                 },
             )
             response.raise_for_status()

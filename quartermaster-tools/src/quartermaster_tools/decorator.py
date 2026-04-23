@@ -324,12 +324,25 @@ def tool(
                 )
             )
 
-        return FunctionTool(
+        ft = FunctionTool(
             func=func,
             tool_name=tool_name,
             description=short_desc,
             long_description=long_desc,
             params=params,
         )
+
+        # Auto-register in the default registry so program_runner nodes
+        # and agent nodes can resolve the tool by name without explicit
+        # registry.register() calls. Idempotent — silently skips if the
+        # name is already registered (e.g. module re-import).
+        try:
+            from quartermaster_tools.registry import get_default_registry
+
+            get_default_registry().register(ft)
+        except Exception:
+            pass  # registry not available or already registered
+
+        return ft
 
     return decorator

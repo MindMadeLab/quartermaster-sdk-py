@@ -156,6 +156,66 @@ def _normalise_agent_tools(
     return result
 
 
+def _normalise_program(
+    program: Any,
+    inline_registry: dict[str, Any],
+) -> str:
+    """Normalise a ``program_runner(program=...)`` argument to a tool name.
+
+    Accepts the same shapes as :func:`_normalise_agent_tools`:
+
+    * ``str`` — a tool name the run-time registry already knows about
+      (unchanged behaviour).
+    * A ``FunctionTool`` / :class:`AbstractTool` instance — typically
+      what ``@tool()`` produces. Stashed in *inline_registry* by name so
+      the runner can register it lazily.
+    * A plain callable (undecorated ``def``) — auto-decorated via
+      :func:`quartermaster_tools.auto_decorate`, then stashed the same way.
+
+    Returns the tool's name string — which is what the engine's
+    ProgramRunnerExecutor looks up at runtime. Mutates *inline_registry*
+    in place when a callable was supplied.
+    """
+    if program is None or program == "":
+        return ""
+    if isinstance(program, str):
+        return program
+    try:
+        from quartermaster_tools import (
+            auto_decorate,
+            is_quartermaster_tool,
+        )
+    except ImportError as exc:  # pragma: no cover — quartermaster-tools is a hard dep
+        raise ImportError(
+            "quartermaster_tools is required to pass a callable to "
+            "program_runner(program=...). Install quartermaster-tools or "
+            "pass the tool's name string instead."
+        ) from exc
+
+    if is_quartermaster_tool(program):
+        tool_name = program.name()
+        inline_registry[tool_name] = program
+        return tool_name
+    if callable(program):
+        try:
+            wrapped = auto_decorate(program)
+        except ValueError as exc:
+            raise ValueError(
+                f"program_runner(program={program!r}) — function is not "
+                f"@tool()-decorated and cannot be auto-decorated ({exc}). "
+                "Either decorate it with @tool() or pass the tool's name "
+                "string instead."
+            ) from exc
+        tool_name = wrapped.name()
+        inline_registry[tool_name] = wrapped
+        return tool_name
+    raise TypeError(
+        f"program_runner(program={program!r}) — unsupported type "
+        f"{type(program).__name__}. Expected a tool name string, a "
+        "@tool()-decorated function, or an AbstractTool instance."
+    )
+
+
 def _inline_subgraph(
     sub_graph: GraphSpec | GraphBuilder,
     nodes: list[GraphNode],
@@ -362,8 +422,11 @@ class _BranchBuilder:
                 schema_json = _json.dumps(schema, separators=(",", ":"))
 
         meta = _llm_meta(
-            model=model, provider=provider, temperature=temperature,
-            system_instruction=system_instruction, **kwargs,
+            model=model,
+            provider=provider,
+            temperature=temperature,
+            system_instruction=system_instruction,
+            **kwargs,
         )
         meta["schema_json"] = schema_json
         meta["schema_class"] = (
@@ -371,7 +434,9 @@ class _BranchBuilder:
         )
 
         node = GraphNode(
-            type=NodeType.INSTRUCTION_FORM, name=name, metadata=meta,
+            type=NodeType.INSTRUCTION_FORM,
+            name=name,
+            metadata=meta,
             message_type=MessageType.ASSISTANT,
         )
         _apply_flow_config(node, flow_cfg)
@@ -446,6 +511,89 @@ class _BranchBuilder:
         meta["tool_scope"] = tool_scope
         node = GraphNode(
             type=NodeType.AGENT, name=name, metadata=meta, message_type=MessageType.ASSISTANT
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
+    def instruction_program(
+        self,
+        name: str,
+        model: str = "",
+        provider: str = "",
+        system_instruction: str = "",
+        tools: list[Any] | None = None,
+        **kwargs: Any,
+    ) -> _BranchBuilder:
+        """Add an InstructionProgram node — LLM emits tool calls in one round.
+
+        Unlike ``agent()`` which loops (call tools → feed results → call
+        again), this node makes ONE LLM call that produces tool-call
+        parameters. The tools execute, and the combined result is the
+        node's output. Use this when the LLM should decide WHICH tool
+        to call and with what arguments, but you don't need a multi-turn
+        reasoning loop.
+        """
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        meta = _llm_meta(
+            model=model,
+            provider=provider,
+            system_instruction=system_instruction,
+            **kwargs,
+        )
+        if tools:
+            meta["program_version_ids"] = _normalise_agent_tools(tools, self._graph._inline_tools)
+        node = GraphNode(
+            type=NodeType.INSTRUCTION_PROGRAM,
+            name=name,
+            metadata=meta,
+            message_type=MessageType.ASSISTANT,
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
+    def user_program_form(
+        self,
+        name: str,
+        parameters: list[dict] | None = None,
+        tools: list[Any] | None = None,
+        **kwargs: Any,
+    ) -> _BranchBuilder:
+        """Add a UserProgramForm node — form that collects tool parameters from the user.
+
+        Combines a user form (structured input fields) with tool
+        invocation: the user fills in the parameters, the tools execute
+        with those values.
+
+        Args:
+            parameters: Form field definitions (same as ``user_form``).
+            tools: Tools to invoke with the collected parameters.
+        """
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        meta: dict[str, Any] = {"parameters": parameters or []}
+        if tools:
+            meta["program_version_ids"] = _normalise_agent_tools(tools, self._graph._inline_tools)
+        meta.update(kwargs)
+        node = GraphNode(
+            type=NodeType.USER_PROGRAM_FORM,
+            name=name,
+            metadata=meta,
+            message_type=MessageType.USER,
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
+    def view_metadata(self, name: str = "View Metadata", **kwargs: Any) -> _BranchBuilder:
+        """Add a ViewMetadata node — debug/inspection node that exposes flow state.
+
+        Outputs the current flow memory, node metadata, and conversation
+        history as text. Useful for debugging graph execution.
+        """
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        node = GraphNode(
+            type=NodeType.VIEW_METADATA,
+            name=name,
+            metadata=dict(kwargs),
+            message_type=MessageType.ASSISTANT,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -593,13 +741,23 @@ class _BranchBuilder:
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
-    def program_runner(self, name: str, program: str = "", **kwargs: Any) -> _BranchBuilder:
-        """Run a program/tool inline."""
+    def program_runner(self, name: str, program: Any = "", **kwargs: Any) -> _BranchBuilder:
+        """Run a program/tool inline.
+
+        *program* accepts either:
+
+        * a tool-name string ("web_scraper") — classic behaviour, resolved
+          against the run-time tool registry, or
+        * a ``@tool()``-decorated function — auto-registered into the
+          builder's inline-tools so the SDK runner can dispatch it without
+          a manual ``get_default_registry().register(...)`` call.
+        """
         flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        program_name = _normalise_program(program, self._graph._inline_tools)
         node = GraphNode(
             type=NodeType.PROGRAM_RUNNER,
             name=name,
-            metadata={"program": program, **kwargs},
+            metadata={"program": program_name, **kwargs},
             message_type=MessageType.TOOL,
         )
         _apply_flow_config(node, flow_cfg)
@@ -1541,8 +1699,11 @@ class GraphBuilder:
                 schema_json = _json.dumps(schema, separators=(",", ":"))
 
         meta = _llm_meta(
-            model=model, provider=provider, temperature=temperature,
-            system_instruction=system_instruction, **kwargs,
+            model=model,
+            provider=provider,
+            temperature=temperature,
+            system_instruction=system_instruction,
+            **kwargs,
         )
         meta["schema_json"] = schema_json
         meta["schema_class"] = (
@@ -1550,7 +1711,9 @@ class GraphBuilder:
         )
 
         node = GraphNode(
-            type=NodeType.INSTRUCTION_FORM, name=name, metadata=meta,
+            type=NodeType.INSTRUCTION_FORM,
+            name=name,
+            metadata=meta,
             message_type=MessageType.ASSISTANT,
         )
         _apply_flow_config(node, flow_cfg)
@@ -1629,6 +1792,74 @@ class GraphBuilder:
         meta["tool_scope"] = tool_scope
         node = GraphNode(
             type=NodeType.AGENT, name=name, metadata=meta, message_type=MessageType.ASSISTANT
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
+    def instruction_program(
+        self,
+        name: str,
+        model: str = "",
+        provider: str = "",
+        system_instruction: str = "",
+        tools: list[Any] | None = None,
+        **kwargs: Any,
+    ) -> GraphBuilder:
+        """Add an InstructionProgram node — single-round LLM tool dispatch.
+
+        See :meth:`_BranchBuilder.instruction_program`.
+        """
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        meta = _llm_meta(
+            model=model,
+            provider=provider,
+            system_instruction=system_instruction,
+            **kwargs,
+        )
+        if tools:
+            meta["program_version_ids"] = _normalise_agent_tools(tools, self._inline_tools)
+        node = GraphNode(
+            type=NodeType.INSTRUCTION_PROGRAM,
+            name=name,
+            metadata=meta,
+            message_type=MessageType.ASSISTANT,
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
+    def user_program_form(
+        self,
+        name: str,
+        parameters: list[dict] | None = None,
+        tools: list[Any] | None = None,
+        **kwargs: Any,
+    ) -> GraphBuilder:
+        """Add a UserProgramForm node — form + tool execution.
+
+        See :meth:`_BranchBuilder.user_program_form`.
+        """
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        meta: dict[str, Any] = {"parameters": parameters or []}
+        if tools:
+            meta["program_version_ids"] = _normalise_agent_tools(tools, self._inline_tools)
+        meta.update(kwargs)
+        node = GraphNode(
+            type=NodeType.USER_PROGRAM_FORM,
+            name=name,
+            metadata=meta,
+            message_type=MessageType.USER,
+        )
+        _apply_flow_config(node, flow_cfg)
+        return self._add_node(node)
+
+    def view_metadata(self, name: str = "View Metadata", **kwargs: Any) -> GraphBuilder:
+        """Add a ViewMetadata debug node. See :meth:`_BranchBuilder.view_metadata`."""
+        flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        node = GraphNode(
+            type=NodeType.VIEW_METADATA,
+            name=name,
+            metadata=dict(kwargs),
+            message_type=MessageType.ASSISTANT,
         )
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
@@ -1939,13 +2170,20 @@ class GraphBuilder:
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
-    def program_runner(self, name: str, program: str = "", **kwargs: Any) -> GraphBuilder:
-        """Run a program/tool inline."""
+    def program_runner(self, name: str, program: Any = "", **kwargs: Any) -> GraphBuilder:
+        """Run a program/tool inline.
+
+        *program* accepts either a tool-name string or a ``@tool()``-
+        decorated function — callables are auto-registered into the
+        builder's inline-tools so the SDK runner can dispatch them
+        without a manual ``get_default_registry().register(...)`` call.
+        """
         flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        program_name = _normalise_program(program, self._inline_tools)
         node = GraphNode(
             type=NodeType.PROGRAM_RUNNER,
             name=name,
-            metadata={"program": program, **kwargs},
+            metadata={"program": program_name, **kwargs},
             message_type=MessageType.TOOL,
         )
         _apply_flow_config(node, flow_cfg)

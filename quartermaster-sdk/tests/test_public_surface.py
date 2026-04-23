@@ -36,9 +36,8 @@ _REQUIRED_PUBLIC_NAMES: tuple[str, ...] = (
     "AgentExecutor",
     "build_default_registry",
     "run_graph",
-    # Providers — config, sync chat result, registry helpers
+    # Providers — config, registry helpers
     "LLMConfig",
-    "ChatResult",
     "ProviderRegistry",
     "register_local",
 )
@@ -104,7 +103,6 @@ class TestSnippetCompiles:
         # behaviour against a mock is in
         # quartermaster-engine/tests/test_smoke_simple_graph.py.
         from quartermaster_sdk import (
-            ChatResult,  # noqa: F401
             FlowRunner,  # noqa: F401
             Graph,  # noqa: F401
             register_local,  # noqa: F401

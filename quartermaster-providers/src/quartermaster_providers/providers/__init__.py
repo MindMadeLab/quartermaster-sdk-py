@@ -20,10 +20,6 @@ from quartermaster_providers.providers.local import (
     LlamaCppProvider,
     LOCAL_PROVIDERS,
 )
-from quartermaster_providers.providers.ollama import (
-    OllamaNativeProvider,
-    model_supports_native_tools,
-)
 
 __all__ = [
     # Cloud providers
@@ -36,12 +32,10 @@ __all__ = [
     "QuartermasterProvider",
     # Local / self-hosted providers
     "OllamaProvider",
-    "OllamaNativeProvider",
     "VLLMProvider",
     "LMStudioProvider",
     "TGIProvider",
     "LocalAIProvider",
     "LlamaCppProvider",
     "LOCAL_PROVIDERS",
-    "model_supports_native_tools",
 ]
