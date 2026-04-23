@@ -156,6 +156,66 @@ def _normalise_agent_tools(
     return result
 
 
+def _normalise_program(
+    program: Any,
+    inline_registry: dict[str, Any],
+) -> str:
+    """Normalise a ``program_runner(program=...)`` argument to a tool name.
+
+    Accepts the same shapes as :func:`_normalise_agent_tools`:
+
+    * ``str`` — a tool name the run-time registry already knows about
+      (unchanged behaviour).
+    * A ``FunctionTool`` / :class:`AbstractTool` instance — typically
+      what ``@tool()`` produces. Stashed in *inline_registry* by name so
+      the runner can register it lazily.
+    * A plain callable (undecorated ``def``) — auto-decorated via
+      :func:`quartermaster_tools.auto_decorate`, then stashed the same way.
+
+    Returns the tool's name string — which is what the engine's
+    ProgramRunnerExecutor looks up at runtime. Mutates *inline_registry*
+    in place when a callable was supplied.
+    """
+    if program is None or program == "":
+        return ""
+    if isinstance(program, str):
+        return program
+    try:
+        from quartermaster_tools import (
+            auto_decorate,
+            is_quartermaster_tool,
+        )
+    except ImportError as exc:  # pragma: no cover — quartermaster-tools is a hard dep
+        raise ImportError(
+            "quartermaster_tools is required to pass a callable to "
+            "program_runner(program=...). Install quartermaster-tools or "
+            "pass the tool's name string instead."
+        ) from exc
+
+    if is_quartermaster_tool(program):
+        tool_name = program.name()
+        inline_registry[tool_name] = program
+        return tool_name
+    if callable(program):
+        try:
+            wrapped = auto_decorate(program)
+        except ValueError as exc:
+            raise ValueError(
+                f"program_runner(program={program!r}) — function is not "
+                f"@tool()-decorated and cannot be auto-decorated ({exc}). "
+                "Either decorate it with @tool() or pass the tool's name "
+                "string instead."
+            ) from exc
+        tool_name = wrapped.name()
+        inline_registry[tool_name] = wrapped
+        return tool_name
+    raise TypeError(
+        f"program_runner(program={program!r}) — unsupported type "
+        f"{type(program).__name__}. Expected a tool name string, a "
+        "@tool()-decorated function, or an AbstractTool instance."
+    )
+
+
 def _inline_subgraph(
     sub_graph: GraphSpec | GraphBuilder,
     nodes: list[GraphNode],
@@ -681,13 +741,23 @@ class _BranchBuilder:
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
-    def program_runner(self, name: str, program: str = "", **kwargs: Any) -> _BranchBuilder:
-        """Run a program/tool inline."""
+    def program_runner(self, name: str, program: Any = "", **kwargs: Any) -> _BranchBuilder:
+        """Run a program/tool inline.
+
+        *program* accepts either:
+
+        * a tool-name string ("web_scraper") — classic behaviour, resolved
+          against the run-time tool registry, or
+        * a ``@tool()``-decorated function — auto-registered into the
+          builder's inline-tools so the SDK runner can dispatch it without
+          a manual ``get_default_registry().register(...)`` call.
+        """
         flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        program_name = _normalise_program(program, self._graph._inline_tools)
         node = GraphNode(
             type=NodeType.PROGRAM_RUNNER,
             name=name,
-            metadata={"program": program, **kwargs},
+            metadata={"program": program_name, **kwargs},
             message_type=MessageType.TOOL,
         )
         _apply_flow_config(node, flow_cfg)
@@ -2100,13 +2170,20 @@ class GraphBuilder:
         _apply_flow_config(node, flow_cfg)
         return self._add_node(node)
 
-    def program_runner(self, name: str, program: str = "", **kwargs: Any) -> GraphBuilder:
-        """Run a program/tool inline."""
+    def program_runner(self, name: str, program: Any = "", **kwargs: Any) -> GraphBuilder:
+        """Run a program/tool inline.
+
+        *program* accepts either a tool-name string or a ``@tool()``-
+        decorated function — callables are auto-registered into the
+        builder's inline-tools so the SDK runner can dispatch them
+        without a manual ``get_default_registry().register(...)`` call.
+        """
         flow_cfg = {k: kwargs.pop(k) for k in list(kwargs) if k in _ALL_CONFIG_KEYS}
+        program_name = _normalise_program(program, self._inline_tools)
         node = GraphNode(
             type=NodeType.PROGRAM_RUNNER,
             name=name,
-            metadata={"program": program, **kwargs},
+            metadata={"program": program_name, **kwargs},
             message_type=MessageType.TOOL,
         )
         _apply_flow_config(node, flow_cfg)
