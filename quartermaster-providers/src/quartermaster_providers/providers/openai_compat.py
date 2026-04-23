@@ -51,35 +51,68 @@ class OpenAICompatibleProvider(OpenAIProvider):
             super().__init__(api_key=api_key, base_url=base_url)
 
     def _get_client(self):
-        if self._client is None:
-            import openai
+        # Per-loop client cache — same rationale as OpenAIProvider._get_client,
+        # but this subclass has to build its own httpx.AsyncClient on the same
+        # loop as the wrapping openai.AsyncOpenAI (for basic-auth / extra
+        # headers), so we can't just delegate to super() — we have to
+        # replicate the cache lookup around the extra httpx construction.
+        import asyncio
 
-            kwargs: dict[str, Any] = {
-                "api_key": self.api_key,
-                "base_url": self.base_url,
-            }
+        # Back-compat external injection — see OpenAIProvider._get_client.
+        if self._client is not None and not any(
+            c is self._client for (_, c) in self._clients_by_loop.values()
+        ):
+            return self._client
 
-            extra_headers = getattr(self, "_extra_headers", None)
-            needs_http_client = bool(
-                (self.auth_method == "basic" and self.auth_credentials) or extra_headers
-            )
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
 
-            if needs_http_client:
-                import httpx
+        dead_keys = [
+            key
+            for key, (loop, _client) in self._clients_by_loop.items()
+            if loop is not None and loop.is_closed()
+        ]
+        for key in dead_keys:
+            self._clients_by_loop.pop(key, None)
 
-                client_kwargs: dict[str, Any] = {}
-                if self.auth_method == "basic" and self.auth_credentials:
-                    client_kwargs["auth"] = (
-                        self.auth_credentials[0],
-                        self.auth_credentials[1],
-                    )
-                    kwargs["api_key"] = "unused"
-                if extra_headers:
-                    client_kwargs["headers"] = dict(extra_headers)
-                kwargs["http_client"] = httpx.AsyncClient(**client_kwargs)
+        loop_key = id(current_loop) if current_loop is not None else 0
+        entry = self._clients_by_loop.get(loop_key)
+        if entry is not None and entry[0] is current_loop:
+            self._client = entry[1]
+            return self._client
 
-            self._client = openai.AsyncOpenAI(**kwargs)
-        return self._client
+        import openai
+
+        kwargs: dict[str, Any] = {
+            "api_key": self.api_key,
+            "base_url": self.base_url,
+        }
+
+        extra_headers = getattr(self, "_extra_headers", None)
+        needs_http_client = bool(
+            (self.auth_method == "basic" and self.auth_credentials) or extra_headers
+        )
+
+        if needs_http_client:
+            import httpx
+
+            client_kwargs: dict[str, Any] = {}
+            if self.auth_method == "basic" and self.auth_credentials:
+                client_kwargs["auth"] = (
+                    self.auth_credentials[0],
+                    self.auth_credentials[1],
+                )
+                kwargs["api_key"] = "unused"
+            if extra_headers:
+                client_kwargs["headers"] = dict(extra_headers)
+            kwargs["http_client"] = httpx.AsyncClient(**client_kwargs)
+
+        client = openai.AsyncOpenAI(**kwargs)
+        self._clients_by_loop[loop_key] = (current_loop, client)
+        self._client = client
+        return client
 
     async def list_models(self) -> list[str]:
         """List models from the remote endpoint."""

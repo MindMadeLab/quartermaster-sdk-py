@@ -191,9 +191,7 @@ class TestCircuitBreakerWrapper:
         breaker = _make_state(failure_threshold=3)
         wrapper = CircuitBreakerWrapper(mock_provider, breaker)
 
-        result = asyncio.get_event_loop().run_until_complete(
-            wrapper.generate_text_response("hello", config)
-        )
+        result = asyncio.run(wrapper.generate_text_response("hello", config))
 
         assert result.content == "ok"
         assert mock_provider.call_count == 1
@@ -212,9 +210,7 @@ class TestCircuitBreakerWrapper:
         assert breaker.state == "open"
 
         with pytest.raises(CircuitOpenError):
-            asyncio.get_event_loop().run_until_complete(
-                wrapper.generate_text_response("hello", config)
-            )
+            asyncio.run(wrapper.generate_text_response("hello", config))
 
         # Inner provider was never called.
         assert mock_provider.call_count == 0
@@ -235,9 +231,7 @@ class TestCircuitBreakerWrapper:
 
         for _ in range(3):
             with pytest.raises(RuntimeError):
-                asyncio.get_event_loop().run_until_complete(
-                    wrapper.generate_text_response("hello", config)
-                )
+                asyncio.run(wrapper.generate_text_response("hello", config))
 
         assert breaker.state == "open"
 
@@ -251,7 +245,7 @@ class TestCircuitBreakerWrapper:
         wrapper = CircuitBreakerWrapper(mock_provider, breaker)
 
         # These should still work even with an open circuit.
-        models = asyncio.get_event_loop().run_until_complete(wrapper.list_models())
+        models = asyncio.run(wrapper.list_models())
         assert "mock-model-1" in models
 
         count = wrapper.estimate_token_count("hello world", "mock-model-1")
