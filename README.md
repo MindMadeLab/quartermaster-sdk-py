@@ -9,7 +9,15 @@ Modular AI agent orchestration framework. Build agent workflows as directed grap
 
 Built by [MindMade](https://mindmade.io) in Slovenia.
 
-## What's new in v0.4.0
+## What's new in v0.5.0
+
+- **Simplified Ollama provider** -- `OllamaProvider` is now a thin subclass of the OpenAI-compatible client; the separate `OllamaNativeProvider`, the sync `chat()` shim, and the `ollama_tool_protocol` knob are gone. One transport for every local and cloud OpenAI-compatible endpoint. See [Migrating from 0.4 → 0.5](#migrating-from-04--05).
+- **Parallel tool execution** -- when a model emits multiple `tool_calls` in a single turn (common on Claude/GPT-4o, doable on Gemma with explicit prompting), the agent loop dispatches them concurrently via `asyncio.gather(asyncio.to_thread(...))`. Wall-clock latency drops from `O(sum(t))` to `O(max(t))`; event ordering stays deterministic.
+- **`program_runner(program=<callable>)`** -- pass a `@tool()`-decorated function directly instead of its name string; the graph builder auto-registers it into `_inline_tools` (mirrors what `.agent(tools=[...])` already did). No more `get_default_registry().register(...)` plumbing for simple pipelines.
+- **Universal tool-name prefix strip** -- `default_api:foo`, `default_api.foo`, `functions:foo`, `mcp:foo`, etc. all resolve to the bare registry name. Handles every current *and* future namespacing pattern via `rsplit` on `:` or `.` instead of an allow-list.
+- **`duckduckgo_search` UA fix** -- realistic Chrome UA + `Accept`/`Referer` headers. DDG's HTML endpoint no longer serves 202 challenge pages.
+
+### What shipped in v0.4.0
 
 - **Application timeouts** -- `qm.configure(timeout=, connect_timeout=, read_timeout=)` with per-call overrides via `qm.run(..., read_timeout=)`.
 - **Stream cancellation** -- `with qm.run.stream(graph, input) as stream:` context-manager protocol; break/return/exception triggers cooperative cancellation. `qm.Cancelled` exception + `ctx.cancelled` polling flag for tools.
@@ -335,6 +343,21 @@ quartermaster-code-runner   Standalone Docker code execution
 | [Engine](./docs/engine.md) | Execution engine internals |
 | [Security](./docs/security.md) | Safe eval, sandboxing, API key management |
 | [Node Reference](./docs/nodes/README.md) | Detailed node documentation by category |
+
+## Migrating from 0.4 → 0.5
+
+The Ollama transport fork was collapsed. If you were on the v0.4 paths, apply these renames:
+
+| Removed (v0.4) | Replacement (v0.5) |
+|---|---|
+| `OllamaNativeProvider` | `OllamaProvider` (now inherits from `OpenAICompatibleProvider`) |
+| `OllamaProvider.chat(...)` sync shim | `await provider.generate_native_response(...)` |
+| `ChatResult` | `NativeResponse` |
+| `qm.configure(ollama_tool_protocol="auto"/"native"/"openai_compat")` | *removed* — tool-name hallucinations are now handled globally by the universal prefix strip |
+| `from quartermaster_providers import ChatResult` | *removed from `__all__`* |
+| `model_supports_native_tools(...)` | *removed* |
+
+Nothing else is behaviour-breaking. Parallel tool execution is opt-out-free (just emit multiple `tool_calls` from the model). `program_runner(program=<str>)` keeps working — the callable form is an addition.
 
 ## Development
 

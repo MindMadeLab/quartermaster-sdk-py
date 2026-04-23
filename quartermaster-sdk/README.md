@@ -4,7 +4,24 @@
 
 Quartermaster lets you build AI agent workflows as directed graphs — define nodes (LLM calls, decisions, user input, tools), connect them with edges, and execute them with a pluggable engine.
 
-## What's new in v0.4.0
+## What's new in v0.5.0
+
+- **Simplified Ollama provider** -- `OllamaProvider` is now a thin subclass of the
+  OpenAI-compatible client; the separate `OllamaNativeProvider`, the sync `chat()`
+  shim, and the `ollama_tool_protocol` knob are gone. One transport for every
+  local and cloud OpenAI-compatible endpoint.
+- **Parallel tool execution** -- when a model emits multiple `tool_calls` in a
+  single turn, the agent loop dispatches them concurrently; wall-clock drops
+  from `O(sum(t))` to `O(max(t))`.
+- **`program_runner(program=<callable>)`** -- pass a `@tool()`-decorated function
+  directly instead of its name string; the graph builder auto-registers it.
+  Parity with `.agent(tools=[...])`.
+- **Universal tool-name prefix strip** -- `default_api:foo`, `default_api.foo`,
+  `functions:foo`, `mcp:foo` all resolve via `rsplit` on `:` or `.`.
+- **`duckduckgo_search` UA fix** -- realistic Chrome UA + `Accept`/`Referer`
+  headers.
+
+### What shipped in v0.4.0
 
 - **Application timeouts** -- `qm.configure(timeout=, connect_timeout=, read_timeout=)` + per-call overrides.
 - **Stream cancellation** -- `with qm.run.stream(...) as stream:` context-manager; `qm.Cancelled` + `ctx.cancelled`.
