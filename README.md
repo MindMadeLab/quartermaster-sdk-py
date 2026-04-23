@@ -9,38 +9,6 @@ Modular AI agent orchestration framework. Build agent workflows as directed grap
 
 Built by [MindMade](https://mindmade.io) in Slovenia.
 
-## What's new in v0.5.0
-
-- **Simplified Ollama provider** -- `OllamaProvider` is now a thin subclass of the OpenAI-compatible client; the separate `OllamaNativeProvider`, the sync `chat()` shim, and the `ollama_tool_protocol` knob are gone. One transport for every local and cloud OpenAI-compatible endpoint. See [Migrating from 0.4 → 0.5](#migrating-from-04--05).
-- **Parallel tool execution** -- when a model emits multiple `tool_calls` in a single turn (common on Claude/GPT-4o, doable on Gemma with explicit prompting), the agent loop dispatches them concurrently via `asyncio.gather(asyncio.to_thread(...))`. Wall-clock latency drops from `O(sum(t))` to `O(max(t))`; event ordering stays deterministic.
-- **`program_runner(program=<callable>)`** -- pass a `@tool()`-decorated function directly instead of its name string; the graph builder auto-registers it into `_inline_tools` (mirrors what `.agent(tools=[...])` already did). No more `get_default_registry().register(...)` plumbing for simple pipelines.
-- **Universal tool-name prefix strip** -- `default_api:foo`, `default_api.foo`, `functions:foo`, `mcp:foo`, etc. all resolve to the bare registry name. Handles every current *and* future namespacing pattern via `rsplit` on `:` or `.` instead of an allow-list.
-- **`duckduckgo_search` UA fix** -- realistic Chrome UA + `Accept`/`Referer` headers. DDG's HTML endpoint no longer serves 202 challenge pages.
-
-### What shipped in v0.4.0
-
-- **Application timeouts** -- `qm.configure(timeout=, connect_timeout=, read_timeout=)` with per-call overrides via `qm.run(..., read_timeout=)`.
-- **Stream cancellation** -- `with qm.run.stream(graph, input) as stream:` context-manager protocol; break/return/exception triggers cooperative cancellation. `qm.Cancelled` exception + `ctx.cancelled` polling flag for tools.
-- **Per-node tool scoping** -- `agent(tools=[...])` is now strictly enforced; unknown tool names raise at build time. Escape hatch: `tool_scope="permissive"`.
-- **Inline `@tool` callables** -- `agent(tools=[my_func])` accepts bare callables alongside registry names.
-- **`instruction_form` robustness** -- Gemma preamble handling + dict-schema support (pass a plain dict instead of a Pydantic model).
-- **`qm.configure(telemetry=True)`** -- sugar for `qm.telemetry.instrument()`.
-- **`qm.configure(auto_redact_pii=True)`** -- automatic PII redaction policy.
-- **`Trace.from_jsonl()` / `assert_traces_equal()`** -- round-trip trace serialisation with header; useful for golden-file tests.
-- **`SessionStore` protocol** -- `qm.run(graph, input, session=store, session_id=...)` + `InMemorySessionStore` for multi-turn chat.
-- **`TypedEvent`** -- Pydantic base class for typed custom events with `extra="forbid"` validation.
-- **`python -m quartermaster_sdk.lint check`** -- static linter with 5 rules (QM001--QM005) for graph definitions.
-- **`CircuitBreaker`** -- `CircuitBreaker(failure_threshold=, recovery_timeout=)` + `CircuitOpenError` for provider resilience.
-- **Local-GPU cost tracker** -- `cost_tracker` tool now supports `duration_seconds` + `local_gpu_cost_per_hour`.
-
-### What shipped in v0.3.0
-
-- **Filtered stream iterators** -- `qm.run.stream(...).tokens()` / `.tool_calls()` / `.progress()` / `.custom(name=...)` replace the old `chunk.type`-matching boilerplate.
-- **Live progress signals** -- tools reach `qm.current_context()` and call `ctx.emit_progress(message, percent, **data)` or `ctx.emit_custom(name, payload)`. UIs render "Searching... 3/5" cards alongside streamed tokens.
-- **Structured post-mortem `Trace`** -- every `Result` carries `result.trace` with `.text`, `.tool_calls`, `.progress`, `.custom(name)`, `.as_jsonl()`, plus per-node breakdowns via `result.trace.by_node["name"]`.
-- **One-line OpenTelemetry** -- `qm.telemetry.instrument()` emits OTEL GenAI-semconv spans for every flow, node, and tool call. Install with `pip install 'quartermaster-sdk[telemetry]'`.
-- **New engine events** -- `ProgressEvent` and `CustomEvent` exported from `quartermaster_engine`, in addition to the existing `NodeStarted` / `TokenGenerated` / `ToolCallStarted` set.
-
 ## Install
 
 ```bash
@@ -358,6 +326,51 @@ The Ollama transport fork was collapsed. If you were on the v0.4 paths, apply th
 | `model_supports_native_tools(...)` | *removed* |
 
 Nothing else is behaviour-breaking. Parallel tool execution is opt-out-free (just emit multiple `tool_calls` from the model). `program_runner(program=<str>)` keeps working — the callable form is an addition.
+
+## What's new
+
+Release notes live in [GitHub Discussions](https://github.com/MindMadeLab/quartermaster-sdk-py/discussions/categories/general) — one thread per release with migration tables and known issues. Highlights per version:
+
+<details>
+<summary><strong>v0.6.0</strong> — legacy cleanup + 7 integrator-requested features</summary>
+
+- Stream cancellation now actually aborts the in-flight httpx call (vLLM slot freed on SSE disconnect). [#68](https://github.com/MindMadeLab/quartermaster-sdk-py/pull/68)
+- `.agent(extra_body={...})` / `.instruction_form(extra_body={...})` — pass-through for Gemma-4's `chat_template_kwargs`, vLLM sampling knobs. [#62](https://github.com/MindMadeLab/quartermaster-sdk-py/pull/62)
+- `.agent(retry={"max_attempts": N, "on": predicate})` — node-level retry primitive. [#67](https://github.com/MindMadeLab/quartermaster-sdk-py/pull/67)
+- `qm.parse_partial(text, schema)` — progressive-degradation parser for structured output. [#64](https://github.com/MindMadeLab/quartermaster-sdk-py/pull/64)
+- Sliding-window truncation of oldest `<tool_result>` blocks when accumulated prompt exceeds `max_input_tokens`. [#66](https://github.com/MindMadeLab/quartermaster-sdk-py/pull/66)
+- Client-side salvage of text-form `<|tool_call|>` blocks for mis-configured vLLM / Ollama servers. [#63](https://github.com/MindMadeLab/quartermaster-sdk-py/pull/63)
+- Cleanup: 35 `CamelCaseTool` aliases dropped, `AgentGraph`/`AgentVersion`/`_build_registry`/`NodeRegistry` alias gone, `.end(stop=)` kwarg removed, lint rules QM002–QM004 pruned. See [discussion #70](https://github.com/MindMadeLab/quartermaster-sdk-py/discussions/70) for full migration table.
+</details>
+
+<details>
+<summary><strong>v0.5.0</strong> — Ollama transport collapse, parallel tools, callable <code>program_runner</code></summary>
+
+- Ollama provider collapsed into a thin subclass of the OpenAI-compatible client. One transport.
+- Parallel tool execution: multiple `tool_calls` in one turn dispatch concurrently.
+- `program_runner(program=<callable>)` accepts `@tool()` functions directly.
+- Universal tool-name prefix strip (`default_api:`, `functions:`, `mcp:`, …) via `rsplit(':' or '.')`.
+- `duckduckgo_search` UA fix.
+</details>
+
+<details>
+<summary><strong>v0.4.0</strong> — timeouts, stream cancellation, per-node tool scoping</summary>
+
+- Application timeouts via `qm.configure(timeout=/connect_timeout=/read_timeout=)`.
+- Stream cancellation via `with qm.run.stream(...) as stream:`.
+- Per-node tool scoping (`agent(tools=[...])` strictly enforced).
+- Inline `@tool` callables in `agent(tools=[my_func])`.
+- Circuit breaker, session store, typed custom events, static graph linter.
+</details>
+
+<details>
+<summary><strong>v0.3.0</strong> — filtered streams, live progress, structured trace</summary>
+
+- Filtered stream iterators: `stream.tokens()` / `.tool_calls()` / `.progress()` / `.custom(name=...)`.
+- Live progress from tools via `qm.current_context().emit_progress(...)`.
+- Structured post-mortem `Result.trace` with per-node breakdowns.
+- One-line OpenTelemetry instrumentation.
+</details>
 
 ## Development
 
