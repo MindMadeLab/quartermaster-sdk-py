@@ -35,8 +35,7 @@ __all__ = [
     # Chain
     "Chain",
     "Handler",
-    # Catalog (design-time). Not to be confused with
-    # quartermaster_engine.nodes.NodeRegistry (runtime executor Protocol).
+    # Catalog (design-time registry of node types).
     "NodeCatalog",
     "register_node",
 ]

@@ -534,7 +534,7 @@ def _execute_tool_call(
     # Strip ``default_api:`` / ``functions:`` / ``mcp:`` prefixes that
     # different providers attach to the function name.  Without this the
     # registry lookup would miss a tool that's registered under the bare
-    # name — a recurring integrator complaint before v0.2.0.
+    # name.
     normalised = _normalise_tool_name(tool_name)
     # v0.4.0 per-node scoping check — runs AFTER prefix-stripping so that
     # ``default_api:A`` matches an allow-list entry of ``A`` (preserves the
