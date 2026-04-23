@@ -53,7 +53,3 @@ def find_files(root_path: str, pattern: str, name_pattern: str = None) -> dict:
         return {"error": f"Error scanning files: {e}"}
 
     return {"files": matches, "count": len(matches)}
-
-
-# Backward-compatible alias
-FindFilesTool = find_files

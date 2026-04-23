@@ -161,9 +161,9 @@ class TestRegistryDiscovery:
     """Test that all nodes can be discovered and registered."""
 
     def test_discover_all_nodes(self):
-        from quartermaster_nodes.registry import NodeRegistry
+        from quartermaster_nodes.registry import NodeCatalog
 
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         count = registry.discover("quartermaster_nodes.nodes")
         assert count >= 30  # We have ~38 node types
 
@@ -177,9 +177,9 @@ class TestRegistryDiscovery:
         assert "StaticAssistant" in names
 
     def test_all_nodes_have_valid_config(self):
-        from quartermaster_nodes.registry import NodeRegistry
+        from quartermaster_nodes.registry import NodeCatalog
 
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         registry.discover("quartermaster_nodes.nodes")
 
         for entry in registry.catalog_json():
@@ -188,9 +188,9 @@ class TestRegistryDiscovery:
             config.validate()  # Should not raise
 
     def test_all_nodes_have_info(self):
-        from quartermaster_nodes.registry import NodeRegistry
+        from quartermaster_nodes.registry import NodeCatalog
 
-        registry = NodeRegistry()
+        registry = NodeCatalog()
         registry.discover("quartermaster_nodes.nodes")
 
         for entry in registry.catalog_json():

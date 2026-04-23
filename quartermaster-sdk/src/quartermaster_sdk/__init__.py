@@ -51,7 +51,6 @@ from quartermaster_engine.context.current_context import (  # noqa: F401
     current_context,
 )
 from quartermaster_graph import (  # noqa: F401
-    AgentGraph,  # deprecated alias for GraphSpec — kept for backward compat
     Graph,
     GraphBuilder,
     GraphSpec,
@@ -129,7 +128,6 @@ __all__ = [
     "Graph",
     "GraphBuilder",
     "GraphSpec",
-    "AgentGraph",  # deprecated
     "NodeType",
     # Engine — runner + node-registry surface (low-level)
     "FlowRunner",

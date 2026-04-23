@@ -19,7 +19,7 @@ from __future__ import annotations
 import pytest
 
 from quartermaster_tools.builtin.observability.cost import (
-    CostTrackerTool,
+    cost_tracker,
     clear_local_pricing,
     register_local_pricing,
 )
@@ -28,17 +28,17 @@ from quartermaster_tools.builtin.observability.cost import (
 @pytest.fixture(autouse=True)
 def _clear_all():
     """Isolate cost and local-pricing state between tests."""
-    CostTrackerTool.clear()
+    cost_tracker.clear()
     clear_local_pricing()
     yield
-    CostTrackerTool.clear()
+    cost_tracker.clear()
     clear_local_pricing()
 
 
 class TestLocalGPUCost:
     def test_local_gpu_cost_basic(self):
         """1hr at $1/hr == $1."""
-        result = CostTrackerTool.run(
+        result = cost_tracker.run(
             model="gemma4:26b",
             duration_seconds=3600,
             local_gpu_cost_per_hour=1.0,
@@ -49,7 +49,7 @@ class TestLocalGPUCost:
 
     def test_local_gpu_cost_partial_hour(self):
         """0.5/hr * 1800s == 0.25."""
-        result = CostTrackerTool.run(
+        result = cost_tracker.run(
             model="mistral:7b",
             duration_seconds=1800,
             local_gpu_cost_per_hour=0.5,
@@ -62,7 +62,7 @@ class TestLocalGPUCost:
         """When a cloud-priced model name is used AND local GPU pricing
         is supplied, local pricing wins — the explicit duration +
         $/hr signal represents the caller's actual run."""
-        result = CostTrackerTool.run(
+        result = cost_tracker.run(
             model="gpt-4o",  # in the cloud pricing table
             input_tokens=1000,
             output_tokens=500,
@@ -83,21 +83,21 @@ class TestLocalGPUCost:
         ``duration_seconds`` is supplied — no explicit kwarg needed."""
         register_local_pricing("gemma4:26b", 0.85)
 
-        result_1 = CostTrackerTool.run(model="gemma4:26b", duration_seconds=10)
+        result_1 = cost_tracker.run(model="gemma4:26b", duration_seconds=10)
         assert result_1.success
         assert result_1.data["cost_basis"] == "local_gpu_time"
         assert result_1.data["total_cost"] == pytest.approx(10 / 3600.0 * 0.85)
         assert result_1.data["local_gpu_cost_per_hour"] == pytest.approx(0.85)
 
         # Second call still works — registration persists.
-        result_2 = CostTrackerTool.run(model="gemma4:26b", duration_seconds=20)
+        result_2 = cost_tracker.run(model="gemma4:26b", duration_seconds=20)
         assert result_2.data["cost_basis"] == "local_gpu_time"
         assert result_2.data["total_cost"] == pytest.approx(20 / 3600.0 * 0.85)
 
     def test_register_local_pricing_explicit_kwarg_overrides(self):
         """Explicit ``local_gpu_cost_per_hour`` wins over registered value."""
         register_local_pricing("gemma4:26b", 0.85)
-        result = CostTrackerTool.run(
+        result = cost_tracker.run(
             model="gemma4:26b",
             duration_seconds=3600,
             local_gpu_cost_per_hour=2.0,  # overrides the 0.85 registered price
@@ -109,7 +109,7 @@ class TestLocalGPUCost:
     def test_unregistered_model_no_duration_returns_zero(self):
         """Current default behaviour preserved: unknown model + no local
         pricing => cost 0, cost_basis 'unknown', warning emitted."""
-        result = CostTrackerTool.run(
+        result = cost_tracker.run(
             model="some-unknown-local-model",
             input_tokens=100,
             output_tokens=100,
@@ -124,19 +124,19 @@ class TestLocalGPUCost:
         allowed = {"local_gpu_time", "cloud_per_token", "unknown"}
 
         # local
-        r_local = CostTrackerTool.run(
+        r_local = cost_tracker.run(
             model="gemma4:26b",
             duration_seconds=60,
             local_gpu_cost_per_hour=1.0,
         )
         # cloud
-        r_cloud = CostTrackerTool.run(
+        r_cloud = cost_tracker.run(
             model="gpt-4o",
             input_tokens=100,
             output_tokens=50,
         )
         # unknown
-        r_unknown = CostTrackerTool.run(
+        r_unknown = cost_tracker.run(
             model="no-such-model",
             input_tokens=10,
             output_tokens=10,
@@ -156,7 +156,7 @@ class TestLocalGPUCost:
         price) should not trigger local pricing — cloud or unknown
         resolution still applies."""
         # gpt-4o is in the cloud table → cloud pricing used
-        r_cloud = CostTrackerTool.run(
+        r_cloud = cost_tracker.run(
             model="gpt-4o",
             input_tokens=1000,
             output_tokens=500,

@@ -186,7 +186,3 @@ def web_scraper(url: str, output_format: str = "text", timeout: int = _DEFAULT_T
         "url": url,
         "content_length": len(content),
     }
-
-
-# Backward-compatible alias
-WebScraperTool = web_scraper

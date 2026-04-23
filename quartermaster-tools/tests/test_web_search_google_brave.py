@@ -7,16 +7,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from quartermaster_tools.builtin.web_search.google import GoogleSearchTool
-from quartermaster_tools.builtin.web_search.brave import BraveSearchTool
+from quartermaster_tools.builtin.web_search.google import google_search
+from quartermaster_tools.builtin.web_search.brave import brave_search
 
 
-# --- GoogleSearchTool Tests ---
+# --- google_search Tests ---
 
 
 class TestGoogleSearchTool:
     def setup_method(self) -> None:
-        self.tool = GoogleSearchTool
+        self.tool = google_search
 
     def test_name(self) -> None:
         assert self.tool.name() == "google_search"
@@ -154,12 +154,12 @@ class TestGoogleSearchTool:
         assert params["num"] == 10  # clamped to max
 
 
-# --- BraveSearchTool Tests ---
+# --- brave_search Tests ---
 
 
 class TestBraveSearchTool:
     def setup_method(self) -> None:
-        self.tool = BraveSearchTool
+        self.tool = brave_search
 
     def test_name(self) -> None:
         assert self.tool.name() == "brave_search"

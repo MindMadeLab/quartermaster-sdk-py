@@ -469,17 +469,3 @@ def spawn_agent(
         return {"error": f"Could not start session '{session.id}'"}
 
     return {"session_id": session.id, "status": "running"}
-
-
-# Backward-compatible aliases
-CreateSessionTool = create_agent_session
-StartSessionTool = start_agent_session
-InjectMessageTool = inject_agent_message
-GetSessionStatusTool = get_agent_session_status
-ListSessionsTool = list_agent_sessions
-WaitSessionTool = wait_agent_session
-CollectResultsTool = collect_agent_results
-CancelSessionTool = cancel_agent_session
-AddFinishHookTool = add_agent_finish_hook
-NotifyParentTool = notify_parent
-SpawnAgentTool = spawn_agent

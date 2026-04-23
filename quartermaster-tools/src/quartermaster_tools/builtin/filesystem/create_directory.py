@@ -37,7 +37,3 @@ def create_directory(path: str, parents: bool = True) -> dict:
         return {"error": f"Failed to create directory: {e}"}
 
     return {"path": path, "created": True}
-
-
-# Backward-compatible alias
-CreateDirectoryTool = create_directory

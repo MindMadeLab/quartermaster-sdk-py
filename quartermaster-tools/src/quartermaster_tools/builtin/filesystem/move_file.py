@@ -42,7 +42,3 @@ def move_file(source: str, destination: str) -> dict:
         return {"error": f"Move failed: {e}"}
 
     return {"source": source, "destination": destination}
-
-
-# Backward-compatible alias
-MoveFileTool = move_file

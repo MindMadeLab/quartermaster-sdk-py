@@ -8,12 +8,12 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from quartermaster_tools.builtin.a2a.discover import A2ADiscoverTool
-from quartermaster_tools.builtin.a2a.register import A2ARegisterTool
+from quartermaster_tools.builtin.a2a.discover import a2a_discover
+from quartermaster_tools.builtin.a2a.register import a2a_register
 from quartermaster_tools.builtin.a2a.task import (
-    A2ACheckStatusTool,
-    A2ACollectResultTool,
-    A2ASendTaskTool,
+    a2a_check_status,
+    a2a_collect_result,
+    a2a_send_task,
 )
 
 
@@ -55,13 +55,13 @@ SSRF_PATCH = "quartermaster_tools.builtin.a2a.discover._is_private_url"
 
 
 # ---------------------------------------------------------------------------
-# A2ADiscoverTool
+# a2a_discover
 # ---------------------------------------------------------------------------
 
 
 class TestA2ADiscoverTool:
     def setup_method(self) -> None:
-        self.tool = A2ADiscoverTool
+        self.tool = a2a_discover
 
     def test_name_and_version(self) -> None:
         assert self.tool.name() == "a2a_discover"
@@ -141,13 +141,13 @@ class TestA2ADiscoverTool:
 
 
 # ---------------------------------------------------------------------------
-# A2ASendTaskTool
+# a2a_send_task
 # ---------------------------------------------------------------------------
 
 
 class TestA2ASendTaskTool:
     def setup_method(self) -> None:
-        self.tool = A2ASendTaskTool
+        self.tool = a2a_send_task
 
     def test_name_and_version(self) -> None:
         assert self.tool.name() == "a2a_send_task"
@@ -258,13 +258,13 @@ class TestA2ASendTaskTool:
 
 
 # ---------------------------------------------------------------------------
-# A2ACheckStatusTool
+# a2a_check_status
 # ---------------------------------------------------------------------------
 
 
 class TestA2ACheckStatusTool:
     def setup_method(self) -> None:
-        self.tool = A2ACheckStatusTool
+        self.tool = a2a_check_status
 
     def test_name(self) -> None:
         assert self.tool.name() == "a2a_check_status"
@@ -344,13 +344,13 @@ class TestA2ACheckStatusTool:
 
 
 # ---------------------------------------------------------------------------
-# A2ACollectResultTool
+# a2a_collect_result
 # ---------------------------------------------------------------------------
 
 
 class TestA2ACollectResultTool:
     def setup_method(self) -> None:
-        self.tool = A2ACollectResultTool
+        self.tool = a2a_collect_result
 
     def test_name(self) -> None:
         assert self.tool.name() == "a2a_collect_result"
@@ -411,13 +411,13 @@ class TestA2ACollectResultTool:
 
 
 # ---------------------------------------------------------------------------
-# A2ARegisterTool
+# a2a_register
 # ---------------------------------------------------------------------------
 
 
 class TestA2ARegisterTool:
     def setup_method(self) -> None:
-        self.tool = A2ARegisterTool
+        self.tool = a2a_register
 
     def test_name_and_version(self) -> None:
         assert self.tool.name() == "a2a_register"
@@ -517,8 +517,8 @@ class TestSSRFProtection:
     """Verify that private/internal IP URLs are blocked."""
 
     def setup_method(self) -> None:
-        self.discover = A2ADiscoverTool
-        self.send = A2ASendTaskTool
+        self.discover = a2a_discover
+        self.send = a2a_send_task
 
     @pytest.mark.parametrize(
         "url",

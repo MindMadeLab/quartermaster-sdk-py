@@ -73,9 +73,6 @@ def clear_traces() -> None:
 trace.get_spans = get_spans  # type: ignore[attr-defined]
 trace.clear = clear_traces  # type: ignore[attr-defined]
 
-# Backward-compatible alias
-TraceTool = trace
-
 
 # ── performance_profile tool ──────────────────────────────────────────
 
@@ -170,6 +167,3 @@ def clear_profiles() -> None:
 performance_profile.get_profiles = get_profiles  # type: ignore[attr-defined]
 performance_profile.get_summary = get_profile_summary  # type: ignore[attr-defined]
 performance_profile.clear = clear_profiles  # type: ignore[attr-defined]
-
-# Backward-compatible alias
-PerformanceProfileTool = performance_profile

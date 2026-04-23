@@ -9,24 +9,24 @@ from unittest.mock import patch
 import pytest
 
 from quartermaster_tools.builtin.code import (
-    EvalMathTool,
-    JavaScriptExecutorTool,
-    PythonExecutorTool,
-    ShellExecutorTool,
+    eval_math,
+    javascript_executor,
+    python_executor,
+    shell_executor,
 )
 from quartermaster_tools.types import ToolResult
 
 
 # ---------------------------------------------------------------------------
-# PythonExecutorTool
+# python_executor
 # ---------------------------------------------------------------------------
 
 
 class TestPythonExecutorTool:
-    """Tests for PythonExecutorTool."""
+    """Tests for python_executor."""
 
     def setup_method(self) -> None:
-        self.tool = PythonExecutorTool
+        self.tool = python_executor
 
     def test_hello_world(self) -> None:
         """Execute a simple print statement."""
@@ -96,15 +96,15 @@ class TestPythonExecutorTool:
 
 
 # ---------------------------------------------------------------------------
-# ShellExecutorTool
+# shell_executor
 # ---------------------------------------------------------------------------
 
 
 class TestShellExecutorTool:
-    """Tests for ShellExecutorTool."""
+    """Tests for shell_executor."""
 
     def setup_method(self) -> None:
-        self.tool = ShellExecutorTool
+        self.tool = shell_executor
 
     def test_echo(self) -> None:
         """Simple echo command."""
@@ -180,15 +180,15 @@ class TestShellExecutorTool:
 
 
 # ---------------------------------------------------------------------------
-# EvalMathTool
+# eval_math
 # ---------------------------------------------------------------------------
 
 
 class TestEvalMathTool:
-    """Tests for EvalMathTool."""
+    """Tests for eval_math."""
 
     def setup_method(self) -> None:
-        self.tool = EvalMathTool
+        self.tool = eval_math
 
     def test_addition(self) -> None:
         """Simple addition."""
@@ -350,15 +350,15 @@ class TestEvalMathTool:
 
 
 # ---------------------------------------------------------------------------
-# JavaScriptExecutorTool
+# javascript_executor
 # ---------------------------------------------------------------------------
 
 
 class TestJavaScriptExecutorTool:
-    """Tests for JavaScriptExecutorTool."""
+    """Tests for javascript_executor."""
 
     def setup_method(self) -> None:
-        self.tool = JavaScriptExecutorTool
+        self.tool = javascript_executor
 
     @pytest.mark.skipif(
         shutil.which("node") is None,

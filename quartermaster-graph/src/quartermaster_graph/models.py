@@ -119,11 +119,3 @@ class Agent(BaseModel):
     tags: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
-
-
-# Backward-compat aliases. ``AgentGraph`` was the previous name; ``AgentVersion``
-# was the name before that. Both resolve to ``GraphSpec`` so existing downstream
-# code keeps working. Plan is to remove them in a future release once users have
-# had time to migrate.
-AgentGraph = GraphSpec
-AgentVersion = GraphSpec

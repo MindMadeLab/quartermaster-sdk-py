@@ -91,7 +91,3 @@ def embed_text(text: str, model: str = "builtin", dimensions: int = 384) -> dict
         )
     except Exception as e:
         raise RuntimeError(f"Embedding failed: {e}")
-
-
-# Backward-compatible alias
-EmbedTextTool = embed_text

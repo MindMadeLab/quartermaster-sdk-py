@@ -120,7 +120,3 @@ def a2a_discover(agent_url: str) -> dict:
         raise ConnectionError(f"Connection error: {e}")
     except httpx.HTTPError as e:
         raise RuntimeError(f"HTTP error: {e}")
-
-
-# Backward-compatible alias
-A2ADiscoverTool = a2a_discover

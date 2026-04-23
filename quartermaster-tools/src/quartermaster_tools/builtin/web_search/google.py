@@ -101,7 +101,3 @@ def google_search(
         "results": results,
         "result_count": len(results),
     }
-
-
-# Backward-compatible alias
-GoogleSearchTool = google_search

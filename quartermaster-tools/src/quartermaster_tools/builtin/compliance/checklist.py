@@ -182,7 +182,3 @@ def compliance_checklist(risk_level: str, system_type: str = "") -> dict:
         "checklist": checklist,
         "total_items": len(checklist),
     }
-
-
-# Backward-compatible alias
-ComplianceChecklistTool = compliance_checklist

@@ -145,7 +145,3 @@ def write_file(path: str, content: str, encoding: str = "utf-8", append: bool = 
         append: If true, append to the file instead of overwriting.
     """
     return _write_file_impl(path, content, encoding=encoding, append=append)
-
-
-# Backward-compatible alias
-WriteFileTool = write_file

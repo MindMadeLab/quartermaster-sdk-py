@@ -45,7 +45,3 @@ def copy_file(source: str, destination: str) -> dict:
         return {"error": f"Copy failed: {e}"}
 
     return {"source": source, "destination": destination}
-
-
-# Backward-compatible alias
-CopyFileTool = copy_file

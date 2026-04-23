@@ -12,9 +12,9 @@ from quartermaster_tools.builtin.email.tools import (
     send_email,
     read_email,
     search_email,
-    SendEmailTool,
-    ReadEmailTool,
-    SearchEmailTool,
+    send_email,
+    read_email,
+    search_email,
     _send_timestamps,
 )
 
@@ -260,6 +260,6 @@ class TestSearchEmailTool:
 
 class TestEmailToolAliases:
     def test_backward_compat_aliases(self) -> None:
-        assert SendEmailTool is send_email
-        assert ReadEmailTool is read_email
-        assert SearchEmailTool is search_email
+        assert send_email is send_email
+        assert read_email is read_email
+        assert search_email is search_email

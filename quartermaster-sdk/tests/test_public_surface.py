@@ -23,7 +23,6 @@ _REQUIRED_PUBLIC_NAMES: tuple[str, ...] = (
     "Graph",
     "GraphBuilder",
     "GraphSpec",
-    "AgentGraph",  # deprecated alias kept for back-compat
     "NodeType",
     # Engine — runner + node-registry surface
     "FlowRunner",

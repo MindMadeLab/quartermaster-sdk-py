@@ -151,7 +151,3 @@ def duckduckgo_search(query: str, max_results: int = _DEFAULT_MAX_RESULTS) -> di
         "results": results,
         "result_count": len(results),
     }
-
-
-# Backward-compatible alias
-DuckDuckGoSearchTool = duckduckgo_search

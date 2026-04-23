@@ -132,5 +132,7 @@ graph = agent.build()
 print(f"Graph: {len(graph.nodes)} nodes, {len(graph.edges)} edges")
 print()
 
-result = qm.run(graph, "The feeling of writing code at 3am when everything finally clicks")
+result = qm.run(
+    graph, "The feeling of writing code at 3am when everything finally clicks"
+)
 print(result.text)

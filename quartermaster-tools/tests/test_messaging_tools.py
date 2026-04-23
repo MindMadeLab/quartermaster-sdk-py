@@ -7,16 +7,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from quartermaster_tools.builtin.messaging.tools import (
-    DiscordMessageTool,
-    SlackMessageTool,
-    SlackReadTool,
-    WebhookNotifyTool,
+    discord_message,
+    slack_message,
+    slack_read,
+    webhook_notify,
 )
 
 
 class TestSlackMessageTool:
     def setup_method(self) -> None:
-        self.tool = SlackMessageTool
+        self.tool = slack_message
 
     def test_name(self) -> None:
         assert self.tool.name() == "slack_message"
@@ -104,7 +104,7 @@ class TestSlackMessageTool:
 
 class TestSlackReadTool:
     def setup_method(self) -> None:
-        self.tool = SlackReadTool
+        self.tool = slack_read
 
     def test_name(self) -> None:
         assert self.tool.name() == "slack_read"
@@ -159,7 +159,7 @@ class TestSlackReadTool:
 
 class TestWebhookNotifyTool:
     def setup_method(self) -> None:
-        self.tool = WebhookNotifyTool
+        self.tool = webhook_notify
 
     def test_name(self) -> None:
         assert self.tool.name() == "webhook_notify"
@@ -239,7 +239,7 @@ class TestWebhookNotifyTool:
 
 class TestDiscordMessageTool:
     def setup_method(self) -> None:
-        self.tool = DiscordMessageTool
+        self.tool = discord_message
 
     def test_name(self) -> None:
         assert self.tool.name() == "discord_message"

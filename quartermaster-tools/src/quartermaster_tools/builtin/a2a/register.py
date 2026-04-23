@@ -85,7 +85,3 @@ def a2a_register(
         "agent_card": agent_card,
         "saved_to": saved_to,
     }
-
-
-# Backward-compatible alias
-A2ARegisterTool = a2a_register

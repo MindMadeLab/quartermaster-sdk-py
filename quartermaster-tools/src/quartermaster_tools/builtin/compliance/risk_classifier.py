@@ -149,7 +149,3 @@ def risk_classifier(
         "obligations": obligations,
         "reasoning": reasoning,
     }
-
-
-# Backward-compatible alias
-RiskClassifierTool = risk_classifier

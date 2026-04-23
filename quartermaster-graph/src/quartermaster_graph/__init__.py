@@ -42,8 +42,6 @@ from quartermaster_graph.metadata import (
 )
 from quartermaster_graph.models import (
     Agent,
-    AgentGraph,  # backward-compat alias for GraphSpec
-    AgentVersion,  # backward-compat alias for GraphSpec
     GraphEdge,
     GraphNode,
     GraphSpec,
@@ -76,8 +74,6 @@ __all__ = [
     # Models
     "Agent",
     "GraphSpec",
-    "AgentGraph",  # deprecated alias for GraphSpec
-    "AgentVersion",  # deprecated alias for GraphSpec
     "GraphEdge",
     "GraphNode",
     "NodePosition",

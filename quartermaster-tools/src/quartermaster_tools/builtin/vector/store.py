@@ -85,7 +85,3 @@ def vector_store(
         _memory_store.update(store)
 
     return {"id": doc_id, "collection": collection, "stored": True}
-
-
-# Backward-compatible alias
-VectorStoreTool = vector_store
