@@ -546,6 +546,8 @@ class OpenAIProvider(AbstractLLMProvider):
             params["presence_penalty"] = config.presence_penalty
         if tools:
             params["tools"] = tools
+        if config.tool_choice is not None:
+            params["tool_choice"] = config.tool_choice
         if response_format:
             params["response_format"] = response_format
         if config.stream:

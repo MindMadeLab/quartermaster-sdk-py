@@ -1088,10 +1088,58 @@ class DecisionExecutor(NodeExecutor):
             temperature_override=0.0,
         )
 
+        # Forced tool-call path: give the LLM one tool, ``pick_branch``,
+        # with a single ``choice`` parameter constrained to the edge
+        # labels via ``enum``. Providers that honour ``tool_choice``
+        # (OpenAI, vLLM with ``--tool-call-parser``, OpenAI-compat) will
+        # return a structured ``tool_calls[0].parameters["choice"]`` that
+        # exactly matches one of the options — no fuzzy matching needed.
+        # Providers that ignore ``tool_choice`` fall through to the
+        # free-form text path below.
+        forced_tool: dict[str, Any] | None = None
+        if options:
+            forced_tool = {
+                "name": "pick_branch",
+                "description": "Pick exactly one branch label.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "choice": {
+                            "type": "string",
+                            "enum": list(options),
+                            "description": "The chosen branch label.",
+                        }
+                    },
+                    "required": ["choice"],
+                },
+            }
+            config.tool_choice = {
+                "type": "function",
+                "function": {"name": "pick_branch"},
+            }
+
         try:
-            response = await provider.generate_text_response(prompt, config)
-            picked = response.content.strip()
-            # Fuzzy match against options
+            if forced_tool:
+                native = await provider.generate_native_response(prompt, [forced_tool], config)
+                tool_calls = getattr(native, "tool_calls", None) or []
+                if tool_calls:
+                    params = getattr(tool_calls[0], "parameters", None)
+                    if isinstance(params, dict):
+                        choice = params.get("choice")
+                        if isinstance(choice, str) and choice in options:
+                            return NodeResult(
+                                success=True,
+                                data={},
+                                output_text="",
+                                picked_node=choice,
+                            )
+
+                picked = (getattr(native, "text_content", "") or "").strip()
+            else:
+                response = await provider.generate_text_response(prompt, config)
+                picked = response.content.strip()
+            # Fuzzy-match fallback for the free-form path (or for
+            # providers that didn't honour the forced tool-call).
             for opt in options:
                 if opt.lower() in picked.lower():
                     picked = opt
@@ -1403,36 +1451,63 @@ class InstructionFormExecutor(NodeExecutor):
             system_message=full_system,
         )
 
+        # Build a single-tool definition from the JSON schema and force
+        # the provider to call it. When the provider supports forced
+        # ``tool_choice`` (OpenAI / vLLM with ``--tool-call-parser``,
+        # OpenAI-compat), the response comes back with structured
+        # ``tool_calls[0].parameters`` — no text parsing needed. When
+        # the provider ignores ``tool_choice`` (older local models,
+        # some Anthropic routes), the call still returns a free-form
+        # answer that we fall through to ``_parse_json_progressive``
+        # exactly like before — no regression.
+        forced_tool: dict[str, Any] | None = None
+        if schema_json:
+            try:
+                input_schema = json.loads(schema_json)
+                if isinstance(input_schema, dict) and input_schema.get("type") == "object":
+                    forced_tool = {
+                        "name": "emit_result",
+                        "description": "Emit the structured result for this node.",
+                        "input_schema": input_schema,
+                    }
+                    config.tool_choice = {
+                        "type": "function",
+                        "function": {"name": "emit_result"},
+                    }
+            except (json.JSONDecodeError, ValueError, TypeError):
+                forced_tool = None
+
         conversation = _get_conversation(context)
         user_input = str(context.memory.get("__user_input__", ""))
         prompt = _format_conversation(conversation, user_input)
 
         try:
-            response = await provider.generate_native_response(prompt, None, config)
+            response = await provider.generate_native_response(
+                prompt,
+                [forced_tool] if forced_tool else None,
+                config,
+            )
         except Exception as exc:
             return NodeResult(success=False, data={}, error=str(exc))
 
+        # Preferred path: provider honoured the forced tool-call and
+        # returned a structured ``tool_calls[0].parameters`` dict.
+        parsed: Any = None
+        tool_calls = getattr(response, "tool_calls", None) or []
+        if tool_calls:
+            first = tool_calls[0]
+            params = getattr(first, "parameters", None)
+            if isinstance(params, dict) and params:
+                parsed = params
+
         raw_text = getattr(response, "text_content", "") or ""
-        context.emit_token(raw_text)
+        if parsed is None and raw_text:
+            context.emit_token(raw_text)
 
-        # Fallback: on the final turn the model occasionally emits the
-        # whole answer as a text-form tool-call block. The provider
-        # salvage (v0.6.0 / v0.6.1) strips those into structured
-        # ``tool_calls`` and leaves ``text_content`` empty, so when the
-        # text is empty but a tool call is present we use its arguments
-        # dict as the candidate payload.
-        if not raw_text.strip():
-            tool_calls = getattr(response, "tool_calls", None) or []
-            if tool_calls:
-                first = tool_calls[0]
-                params = getattr(first, "parameters", None)
-                if isinstance(params, dict) and params:
-                    raw_text = json.dumps(params)
-
-        cleaned = re.sub(r"\A\s*```[A-Za-z0-9_-]*\s*\n?", "", raw_text)
-        cleaned = re.sub(r"\n?\s*```\s*\Z", "", cleaned).strip()
-
-        parsed = _parse_json_progressive(cleaned, raw_text)
+        if parsed is None:
+            cleaned = re.sub(r"\A\s*```[A-Za-z0-9_-]*\s*\n?", "", raw_text)
+            cleaned = re.sub(r"\n?\s*```\s*\Z", "", cleaned).strip()
+            parsed = _parse_json_progressive(cleaned, raw_text)
 
         if parsed is None:
             logger.warning(
