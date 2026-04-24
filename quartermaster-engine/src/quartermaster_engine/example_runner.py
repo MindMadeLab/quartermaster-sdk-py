@@ -19,9 +19,11 @@ Or force a provider:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import pathlib
+import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -1303,6 +1305,50 @@ class MemoryReadExecutor(NodeExecutor):
         return NodeResult(success=True, data={}, output_text=str(value))
 
 
+_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
+
+
+def _parse_json_progressive(cleaned: str, raw_text: str) -> Any:
+    """Three-stage JSON parse mirroring ``parse_partial``'s tier-1 path.
+
+    1. Strict ``json.loads`` on the fence-stripped text.
+    2. Walk every ``{``/``[`` with ``raw_decode`` and keep the widest match.
+    3. Greedy ``\\{.*\\}`` scan on the original ``raw_text`` (fences and
+       prose not pre-stripped) — catches cases where the anchored
+       fence strip at the executor level missed the fence.
+
+    Returns the parsed dict/list or ``None`` if nothing stuck.
+    """
+    try:
+        return json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    decoder = json.JSONDecoder()
+    last_good: tuple[Any, int] | None = None
+    for i, ch in enumerate(cleaned):
+        if ch in "{[":
+            try:
+                obj, end = decoder.raw_decode(cleaned, i)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if end > (last_good[1] if last_good else 0):
+                last_good = (obj, end)
+    if last_good:
+        return last_good[0]
+
+    for match in reversed(list(_JSON_OBJECT_RE.finditer(raw_text))):
+        snippet = match.group(0)
+        try:
+            candidate = json.loads(snippet)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(candidate, dict):
+            return candidate
+
+    return None
+
+
 class InstructionFormExecutor(NodeExecutor):
     """LLM node that returns typed JSON validated against a schema.
 
@@ -1316,9 +1362,6 @@ class InstructionFormExecutor(NodeExecutor):
         self._registry = provider_registry
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
-        import json
-        import re
-
         system_instruction = context.get_meta("llm_system_instruction", "")
         schema_json = context.get_meta("schema_json", "")
 
@@ -1372,34 +1415,35 @@ class InstructionFormExecutor(NodeExecutor):
         raw_text = getattr(response, "text_content", "") or ""
         context.emit_token(raw_text)
 
-        # Strip markdown fences
+        # Fallback: on the final turn the model occasionally emits the
+        # whole answer as a text-form tool-call block. The provider
+        # salvage (v0.6.0 / v0.6.1) strips those into structured
+        # ``tool_calls`` and leaves ``text_content`` empty, so when the
+        # text is empty but a tool call is present we use its arguments
+        # dict as the candidate payload.
+        if not raw_text.strip():
+            tool_calls = getattr(response, "tool_calls", None) or []
+            if tool_calls:
+                first = tool_calls[0]
+                params = getattr(first, "parameters", None)
+                if isinstance(params, dict) and params:
+                    raw_text = json.dumps(params)
+
         cleaned = re.sub(r"\A\s*```[A-Za-z0-9_-]*\s*\n?", "", raw_text)
         cleaned = re.sub(r"\n?\s*```\s*\Z", "", cleaned).strip()
 
-        # Try to parse JSON — walk brace positions if direct parse fails
-        parsed = None
-        try:
-            parsed = json.loads(cleaned)
-        except (json.JSONDecodeError, ValueError):
-            # Gemma preamble fallback: find last valid JSON object
-            decoder = json.JSONDecoder()
-            last_good = None
-            for i, ch in enumerate(cleaned):
-                if ch in "{[":
-                    try:
-                        obj, end = decoder.raw_decode(cleaned, i)
-                        if end > (last_good[1] if last_good else 0):
-                            last_good = (obj, end)
-                    except (json.JSONDecodeError, ValueError):
-                        continue
-            if last_good:
-                parsed = last_good[0]
+        parsed = _parse_json_progressive(cleaned, raw_text)
 
         if parsed is None:
+            logger.warning(
+                "InstructionForm could not parse JSON from LLM response. "
+                "Raw text (first 500 chars): %r",
+                raw_text[:500],
+            )
             return NodeResult(
                 success=False,
                 data={"raw_text": raw_text},
-                error=f"Could not parse JSON from LLM response",
+                error="Could not parse JSON from LLM response",
                 output_text=raw_text,
             )
 
