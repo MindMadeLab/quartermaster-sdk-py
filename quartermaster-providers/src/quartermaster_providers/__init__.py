@@ -57,7 +57,7 @@ from quartermaster_providers.types import (
     ToolDefinition,
 )
 
-__version__ = "0.6.3"
+__version__ = "0.7.0"
 __author__ = "MindMade"
 
 __all__ = [
