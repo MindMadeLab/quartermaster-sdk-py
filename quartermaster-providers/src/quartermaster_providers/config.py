@@ -88,6 +88,19 @@ class LLMConfig:
     # Google, Groq, xAI ignore it (or will once they grow bespoke
     # pass-through slots of their own).
     extra_body: dict[str, Any] | None = None
+    # v0.7.0 — OpenAI-style ``tool_choice`` passthrough. Forces the model
+    # to call a specific tool (``{"type": "function", "function": {"name": "..."}}``),
+    # call *any* tool (``"required"`` or ``"any"``), or disable tools
+    # (``"none"``). Used by structured-output nodes (``instruction_form``,
+    # ``decision``) to make the LLM return via a known tool shape
+    # instead of free-form text that needs parsing.
+    #
+    # Provider mapping:
+    #   OpenAI / OpenAI-compat (vLLM, Ollama, LiteLLM) — passed verbatim.
+    #   Anthropic — translated to ``tool_choice={"type":"tool","name":...}``
+    #               by its own provider (future work).
+    #   Google / Groq / xAI — best-effort, may be ignored.
+    tool_choice: str | dict[str, Any] | None = None
 
     def validate(self) -> None:
         """Validate configuration parameters.
