@@ -394,7 +394,13 @@ class TestStreamDeadlineSeconds:
         original_run = FlowRunner.run
 
         def slow_run(
-            self, input_message, *, images=None, flow_id=None, llm_timeouts=None
+            self,
+            input_message,
+            *,
+            images=None,
+            flow_id=None,
+            llm_timeouts=None,
+            history=None,
         ):
             # Block for well past the 0.3s deadline — lets the
             # iterator's deadline check fire before any chunk arrives.
@@ -405,6 +411,7 @@ class TestStreamDeadlineSeconds:
                 images=images,
                 flow_id=flow_id,
                 llm_timeouts=llm_timeouts,
+                history=history,
             )
 
         with patch.object(FlowRunner, "run", slow_run):
@@ -435,7 +442,13 @@ class TestStreamDeadlineSeconds:
         original_run = FlowRunner.run
 
         def slow_run(
-            self, input_message, *, images=None, flow_id=None, llm_timeouts=None
+            self,
+            input_message,
+            *,
+            images=None,
+            flow_id=None,
+            llm_timeouts=None,
+            history=None,
         ):
             time.sleep(2.0)
             return original_run(
@@ -444,6 +457,7 @@ class TestStreamDeadlineSeconds:
                 images=images,
                 flow_id=flow_id,
                 llm_timeouts=llm_timeouts,
+                history=history,
             )
 
         async def _main() -> None:
