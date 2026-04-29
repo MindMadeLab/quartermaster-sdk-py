@@ -771,8 +771,11 @@ class AgentExecutor(NodeExecutor):
 
         # Build the LLMConfig once: per-turn fields (system message, max
         # tokens, thinking budget, vision) don't change between iterations
-        # of the same node.  Streaming stays off so the agent can read the
-        # full ``NativeResponse`` (text + tool_calls + stop_reason) atomically.
+        # of the same node.  ``stream=False`` here means "don't return an
+        # AsyncIterator from generate_text_response" — the streaming
+        # tool-aware path below uses ``stream_native_response`` which
+        # internally drives a streaming SSE loop while still assembling
+        # tool_calls atomically.
         config = _build_llm_config(
             context,
             provider_name=provider_name,
@@ -781,11 +784,27 @@ class AgentExecutor(NodeExecutor):
             system_message=system_instruction,
         )
 
+        # v0.7.1: hybrid streaming. Visible-text deltas flow to
+        # ``context.emit_token`` as they arrive (so the chat UI sees a
+        # progressive response instead of one big chunk at end-of-turn);
+        # tool_calls accumulate silently and surface only on the final
+        # NativeResponse so the dispatch logic below stays atomic.
+        # Providers that don't override ``stream_native_response`` get the
+        # base-class shim that emits the full text in one go — matches
+        # the v0.7.0 behaviour for those providers exactly.
+        from quartermaster_providers.cancellation import set_cancel_check
+
         while requires_another_call and (max_iterations == 0 or iteration < max_iterations):
             iteration += 1
 
             try:
-                response = await provider.generate_native_response(prompt, tools, config)
+                with set_cancel_check(lambda: context.cancelled):
+                    response = await provider.stream_native_response(
+                        prompt,
+                        tools,
+                        config,
+                        on_token=context.emit_token,
+                    )
             except Exception as exc:
                 # Bubble the failure into FlowResult.error via the runner's
                 # NodeResult-failure path; keep the verbose detail in logs
@@ -802,8 +821,10 @@ class AgentExecutor(NodeExecutor):
             text_chunk = getattr(response, "text_content", "") or ""
             if text_chunk:
                 final_text = text_chunk
-                # Stream tokens to listeners so the chat UI sees progress.
-                context.emit_token(text_chunk)
+                # Token streaming already happened inside
+                # ``stream_native_response`` via the ``on_token``
+                # callback above — no need to re-emit the buffered text
+                # here (would double up the chat UI's transcript).
 
             tool_calls = list(getattr(response, "tool_calls", None) or [])
 
