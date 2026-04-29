@@ -268,6 +268,7 @@ class FlowRunner:
         images: list[tuple[str, str]] | None = None,
         flow_id: UUID | None = None,
         llm_timeouts: dict[str, float | None] | None = None,
+        history: list[dict[str, Any]] | None = None,
     ) -> FlowResult:
         """Execute the graph synchronously.
 
@@ -289,6 +290,15 @@ class FlowRunner:
                 Added in v0.4.0 — the SDK populates it from
                 ``qm.configure`` defaults and per-call
                 ``qm.run(..., read_timeout=...)`` overrides.
+            history: Optional v0.8.1 multi-turn seed. Each entry is a
+                ``{"role": "user"|"assistant"|"system", "content": str}``
+                dict pre-loaded into ``__conversation__`` so the FIRST
+                LLM node sees prior turns as proper user/assistant
+                alternation in the outbound ``messages`` array — instead
+                of being concatenated into ``input_message`` as a flat
+                ``Uporabnik:``/``Asistent:`` blob. Entries are stored
+                with ``node_name=None`` so they pass through the role
+                translator unchanged.
 
         Returns:
             A FlowResult with the final output and metadata.
@@ -303,6 +313,33 @@ class FlowRunner:
 
             # Store the initial user input in flow memory
             self.store.save_memory(fid, "__user_input__", input_message)
+
+            # v0.8.1: pre-seed __conversation__ from caller-supplied
+            # multi-turn history so downstream LLM nodes can build a
+            # proper messages array via ``_build_history_for_node``.
+            # Defensive: skip entries missing a recognised role or any
+            # content; the engine's role translator is also defensive
+            # but cleaner to filter at ingest.
+            if history:
+                seeded: list[dict[str, Any]] = []
+                for entry in history:
+                    if not isinstance(entry, dict):
+                        continue
+                    role = entry.get("role")
+                    content = entry.get("content")
+                    if role not in ("user", "assistant", "system"):
+                        continue
+                    if not isinstance(content, str) or not content:
+                        continue
+                    seeded.append(
+                        {
+                            "role": role,
+                            "content": content,
+                            "node_name": None,
+                        }
+                    )
+                if seeded:
+                    self.store.save_memory(fid, "__conversation__", seeded)
             # Store any attached images so vision-capable nodes can pick
             # them up via ``context.memory["__user_images__"]`` without
             # the caller having to touch the store directly. Stored as

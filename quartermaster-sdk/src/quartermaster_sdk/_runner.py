@@ -394,6 +394,7 @@ class _RunCallable:
         read_timeout: float | None = None,
         session: SessionStore | None = None,
         session_id: str | None = None,
+        history: list[dict[str, Any]] | None = None,
     ) -> Result:
         """Execute *graph* against *user_input* and return a :class:`Result`.
 
@@ -433,14 +434,30 @@ class _RunCallable:
                 v0.4.0.
             session_id: Session key for the session store.  Required
                 when *session* is set; ignored otherwise.
+            history: Optional v0.8.1 multi-turn seed. Each entry is a
+                ``{"role": "user"|"assistant"|"system", "content": str}``
+                dict that the engine pre-loads into ``__conversation__``
+                so the first LLM node sees prior turns as proper
+                user/assistant alternation in the outbound ``messages``
+                array — instead of being folded into ``user_input`` as
+                a flat ``Uporabnik:``/``Asistent:`` blob. Mutually
+                exclusive with the legacy ``session=`` shape (which
+                still works but produces the older blob-style turn).
         """
-        # ── v0.4.0 session: load history ──────────────────────────────
-        if session is not None:
+        # ── v0.8.1 explicit history seed wins over the legacy session
+        # path. A caller passing both gets the explicit history (clean
+        # multi-turn) and we ignore the session blob; that's the
+        # forward-compatible direction for the SDK API.
+        seeded_history: list[dict[str, Any]] | None = list(history) if history else None
+
+        # ── v0.4.0 session: load history (legacy blob path; kept for
+        # back-compat. Only fires when ``history=`` was NOT passed.)
+        if session is not None and seeded_history is None:
             if session_id is None:
                 raise ValueError("run(): session= requires session_id=")
-            history: list[ChatTurn] = session.load(session_id)
-            if history:
-                parts = [f"{t.role.capitalize()}: {t.content}" for t in history]
+            chat_turns: list[ChatTurn] = session.load(session_id)
+            if chat_turns:
+                parts = [f"{t.role.capitalize()}: {t.content}" for t in chat_turns]
                 parts.append(f"User: {user_input}")
                 user_input = "\n".join(parts)
 
@@ -487,6 +504,7 @@ class _RunCallable:
             user_input,
             images=prepared_images or None,
             llm_timeouts=llm_timeouts,
+            history=seeded_history,
         )
         elapsed = time.perf_counter() - started
 
@@ -520,6 +538,7 @@ class _RunCallable:
         connect_timeout: float | None = None,
         read_timeout: float | None = None,
         deadline_seconds: float | None = None,
+        history: list[dict[str, Any]] | None = None,
     ) -> _Stream:
         """Run the graph and yield typed :class:`Chunk` events as they arrive.
 
@@ -602,6 +621,7 @@ class _RunCallable:
                 read_timeout=read_timeout,
                 deadline_seconds=deadline_seconds,
                 stop_handle=stop_handle,
+                history=history,
             ),
             on_exit=_on_exit,
         )
@@ -620,6 +640,7 @@ class _RunCallable:
         read_timeout: float | None = None,
         deadline_seconds: float | None = None,
         stop_handle: dict[str, Any] | None = None,
+        history: list[dict[str, Any]] | None = None,
     ) -> Iterator[Chunk]:
         """Inner generator that powers :meth:`stream`.
 
@@ -696,6 +717,7 @@ class _RunCallable:
                     images=prepared_images or None,
                     flow_id=flow_id,
                     llm_timeouts=llm_timeouts,
+                    history=list(history) if history else None,
                 )
                 with holder_lock:
                     holder["result"] = fr
