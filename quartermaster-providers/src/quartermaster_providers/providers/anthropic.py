@@ -22,6 +22,7 @@ from quartermaster_providers.exceptions import (
     ServiceUnavailableError,
 )
 from quartermaster_providers.types import (
+    Message,
     NativeResponse,
     StructuredResponse,
     ThinkingResponse,
@@ -236,7 +237,14 @@ class AnthropicProvider(AbstractLLMProvider):
         self,
         prompt: str,
         config: LLMConfig,
+        history: list[Message] | None = None,
     ) -> TokenResponse | AsyncIterator[TokenResponse]:
+        # v0.8.0 ``history`` accepted for protocol parity with the
+        # OpenAI provider but currently not translated into Anthropic's
+        # ``messages`` shape — the Anthropic-side _build_params still
+        # uses the legacy single-prompt path. Tracked as follow-up work
+        # for the Anthropic / Google / Groq providers.
+        del history  # unused — see note above
         client = self._get_client()
         params = self._build_params(prompt, config)
 
@@ -281,7 +289,11 @@ class AnthropicProvider(AbstractLLMProvider):
         prompt: str,
         tools: list[ToolDefinition],
         config: LLMConfig,
+        history: list[Message] | None = None,
     ) -> ToolCallResponse:
+        # See generate_text_response — ``history`` accepted for protocol
+        # parity, not yet translated for Anthropic.
+        del history
         client = self._get_client()
         prepared_tools = [self.prepare_tool(t) for t in tools]
         params = self._build_params(prompt, config, tools=prepared_tools)
@@ -319,7 +331,11 @@ class AnthropicProvider(AbstractLLMProvider):
         prompt: str,
         tools: list[ToolDefinition] | None = None,
         config: LLMConfig | None = None,
+        history: list[Message] | None = None,
     ) -> NativeResponse:
+        # See generate_text_response — ``history`` accepted for protocol
+        # parity, not yet translated for Anthropic.
+        del history
         if config is None:
             raise InvalidRequestError("config is required", provider=self.PROVIDER_NAME)
 

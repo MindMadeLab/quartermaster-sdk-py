@@ -24,6 +24,7 @@ from quartermaster_providers.exceptions import (
     ServiceUnavailableError,
 )
 from quartermaster_providers.types import (
+    Message,
     NativeResponse,
     StructuredResponse,
     TokenResponse,
@@ -514,11 +515,46 @@ class OpenAIProvider(AbstractLLMProvider):
         parts.append({"type": "text", "text": prompt})
         return parts
 
-    def _build_messages(self, prompt: str, config: LLMConfig) -> list[dict[str, Any]]:
-        """Build OpenAI messages array from prompt and config."""
+    def _build_messages(
+        self,
+        prompt: str,
+        config: LLMConfig,
+        history: list[Message] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Build OpenAI messages array from prompt + optional history.
+
+        Layout (in order):
+
+        1. ``system`` message from ``config.system_message`` (skipped on
+           o-series — they don't accept a system role).
+        2. Each entry in ``history`` as its own ``{role, content}``
+           message — ``role`` must be one of ``"user"`` / ``"assistant"``
+           (or ``"system"`` for advanced cases). v0.8.0 introduced this
+           parameter so multi-node graphs can present prior nodes' outputs
+           as proper user-role turns instead of squashing the whole
+           conversation into one user message.
+        3. The final ``user`` message carrying the current ``prompt``
+           (and any vision attachments via ``_build_user_content``).
+
+        ``history=None`` preserves the pre-v0.8.0 wire format exactly —
+        a single user message — so existing callers don't change shape.
+        """
         messages: list[dict[str, Any]] = []
         if config.system_message and not _is_o_series(config.model):
             messages.append({"role": "system", "content": config.system_message})
+        if history:
+            for entry in history:
+                # Defensive: skip malformed entries rather than erroring —
+                # the engine's history builder is the canonical source,
+                # but a caller passing through user-supplied history
+                # shouldn't crash the request on a typo.
+                role = entry.get("role") if isinstance(entry, dict) else None
+                content = entry.get("content") if isinstance(entry, dict) else None
+                if not role or content is None:
+                    continue
+                if role not in ("user", "assistant", "system"):
+                    continue
+                messages.append({"role": role, "content": str(content)})
         messages.append({"role": "user", "content": self._build_user_content(prompt, config)})
         return messages
 
@@ -620,9 +656,10 @@ class OpenAIProvider(AbstractLLMProvider):
         self,
         prompt: str,
         config: LLMConfig,
+        history: list[Message] | None = None,
     ) -> TokenResponse | AsyncIterator[TokenResponse]:
         client = self._get_client()
-        messages = self._build_messages(prompt, config)
+        messages = self._build_messages(prompt, config, history=history)
         params = self._build_params(config, messages)
 
         try:
@@ -716,9 +753,10 @@ class OpenAIProvider(AbstractLLMProvider):
         prompt: str,
         tools: list[ToolDefinition],
         config: LLMConfig,
+        history: list[Message] | None = None,
     ) -> ToolCallResponse:
         client = self._get_client()
-        messages = self._build_messages(prompt, config)
+        messages = self._build_messages(prompt, config, history=history)
         prepared_tools = [self.prepare_tool(t) for t in tools]
         params = self._build_params(config, messages, tools=prepared_tools)
         params.pop("stream", None)
@@ -776,12 +814,13 @@ class OpenAIProvider(AbstractLLMProvider):
         prompt: str,
         tools: list[ToolDefinition] | None = None,
         config: LLMConfig | None = None,
+        history: list[Message] | None = None,
     ) -> NativeResponse:
         if config is None:
             raise InvalidRequestError("config is required", provider=self.PROVIDER_NAME)
 
         client = self._get_client()
-        messages = self._build_messages(prompt, config)
+        messages = self._build_messages(prompt, config, history=history)
         prepared_tools = [self.prepare_tool(t) for t in tools] if tools else None
         params = self._build_params(config, messages, tools=prepared_tools)
         params.pop("stream", None)
@@ -849,6 +888,7 @@ class OpenAIProvider(AbstractLLMProvider):
         tools: list[ToolDefinition] | None = None,
         config: LLMConfig | None = None,
         on_token: Callable[[str], None] | None = None,
+        history: list[Message] | None = None,
     ) -> NativeResponse:
         """Streaming counterpart to :meth:`generate_native_response`.
 
@@ -877,7 +917,7 @@ class OpenAIProvider(AbstractLLMProvider):
             raise InvalidRequestError("config is required", provider=self.PROVIDER_NAME)
 
         client = self._get_client()
-        messages = self._build_messages(prompt, config)
+        messages = self._build_messages(prompt, config, history=history)
         prepared_tools = [self.prepare_tool(t) for t in tools] if tools else None
         params = self._build_params(config, messages, tools=prepared_tools)
         # Force streaming — config.stream may be False when the agent

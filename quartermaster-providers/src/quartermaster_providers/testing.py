@@ -68,6 +68,7 @@ class MockProvider(AbstractLLMProvider):
         self.last_prompt: str | None = None
         self.last_config: LLMConfig | None = None
         self.last_tools: list[ToolDefinition] | None = None
+        self.last_history: list[Message] | None = None
 
     def _track_call(
         self,
@@ -75,17 +76,20 @@ class MockProvider(AbstractLLMProvider):
         prompt: str,
         config: LLMConfig | None = None,
         tools: list[ToolDefinition] | None = None,
+        history: list[Message] | None = None,
     ) -> None:
         self.call_count += 1
         self.last_prompt = prompt
         self.last_config = config
         self.last_tools = tools
+        self.last_history = history
         self.calls.append(
             {
                 "method": method,
                 "prompt": prompt,
                 "config": config,
                 "tools": tools,
+                "history": history,
             }
         )
 
@@ -146,8 +150,9 @@ class MockProvider(AbstractLLMProvider):
         self,
         prompt: str,
         config: LLMConfig,
+        history: list[Message] | None = None,
     ) -> TokenResponse | AsyncIterator[TokenResponse]:
-        self._track_call("generate_text_response", prompt, config)
+        self._track_call("generate_text_response", prompt, config, history=history)
 
         if config.stream:
             return self._stream_response(prompt, config)
@@ -170,8 +175,9 @@ class MockProvider(AbstractLLMProvider):
         prompt: str,
         tools: list[ToolDefinition],
         config: LLMConfig,
+        history: list[Message] | None = None,
     ) -> ToolCallResponse:
-        self._track_call("generate_tool_parameters", prompt, config, tools)
+        self._track_call("generate_tool_parameters", prompt, config, tools, history=history)
         return self._next_tool_response()
 
     async def generate_native_response(
@@ -179,8 +185,9 @@ class MockProvider(AbstractLLMProvider):
         prompt: str,
         tools: list[ToolDefinition] | None = None,
         config: LLMConfig | None = None,
+        history: list[Message] | None = None,
     ) -> NativeResponse:
-        self._track_call("generate_native_response", prompt, config, tools)
+        self._track_call("generate_native_response", prompt, config, tools, history=history)
         return self._next_native_response()
 
     async def generate_structured_response(
