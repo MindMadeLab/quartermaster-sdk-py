@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, AsyncIterator, NoReturn, cast
 
@@ -25,11 +26,11 @@ from quartermaster_providers.exceptions import (
 from quartermaster_providers.types import (
     NativeResponse,
     StructuredResponse,
+    TokenResponse,
+    TokenUsage,
     ToolCall,
     ToolCallResponse,
     ToolDefinition,
-    TokenResponse,
-    TokenUsage,
 )
 
 logger = logging.getLogger(__name__)
@@ -841,6 +842,155 @@ class OpenAIProvider(AbstractLLMProvider):
             raise
         except Exception as e:
             self._handle_api_error(e)
+
+    async def stream_native_response(
+        self,
+        prompt: str,
+        tools: list[ToolDefinition] | None = None,
+        config: LLMConfig | None = None,
+        on_token: Callable[[str], None] | None = None,
+    ) -> NativeResponse:
+        """Streaming counterpart to :meth:`generate_native_response`.
+
+        Drives a ``chat.completions.create(stream=True, ...)`` loop and
+        delivers visible-text chunks to ``on_token`` as they arrive while
+        accumulating tool_calls (which split across deltas) into a unified
+        list returned in the final :class:`NativeResponse`. The agent loop
+        gets atomic tool dispatch AND incremental UI feedback.
+
+        Cancellation is honoured between chunks via the
+        :func:`should_cancel` contextvar — same mechanism as
+        :meth:`_stream_text` — so the engine's ``runner.stop(flow_id)``
+        closes the openai AsyncStream and stops vLLM mid-token.
+
+        Tool-call delta assembly:
+          OpenAI streams ``delta.tool_calls`` as a list of partial entries
+          keyed by ``index``. Each delta may contribute id, function.name,
+          or a fragment of function.arguments (typically split across many
+          chunks for large arg payloads). We accumulate per-index,
+          json.loads the assembled arguments at end-of-stream, and emit
+          structured :class:`ToolCall` objects.
+        """
+        from quartermaster_providers.cancellation import should_cancel
+
+        if config is None:
+            raise InvalidRequestError("config is required", provider=self.PROVIDER_NAME)
+
+        client = self._get_client()
+        messages = self._build_messages(prompt, config)
+        prepared_tools = [self.prepare_tool(t) for t in tools] if tools else None
+        params = self._build_params(config, messages, tools=prepared_tools)
+        # Force streaming — config.stream may be False when the agent
+        # executor calls us; this method is the streaming entrypoint
+        # regardless of the flag.
+        params["stream"] = True
+        params["stream_options"] = {"include_usage": True}
+
+        text_buf: list[str] = []
+        # index → {"id": str, "name": str, "args": list[str]}
+        partial_calls: dict[int, dict[str, Any]] = {}
+        finish_reason: str | None = None
+        usage_obj: TokenUsage | None = None
+
+        try:
+            stream = await client.chat.completions.create(**params)
+            try:
+                async for chunk in stream:
+                    # Usage chunk arrives last (when ``include_usage`` is on).
+                    if hasattr(chunk, "usage") and chunk.usage:
+                        usage_obj = TokenUsage(
+                            input_tokens=chunk.usage.prompt_tokens,
+                            output_tokens=chunk.usage.completion_tokens,
+                        )
+
+                    if not chunk.choices:
+                        continue
+                    choice = chunk.choices[0]
+                    delta = getattr(choice, "delta", None)
+                    if choice.finish_reason:
+                        finish_reason = choice.finish_reason
+
+                    if delta is None:
+                        continue
+
+                    # Visible text — flow to caller immediately.
+                    content_chunk = getattr(delta, "content", None) or ""
+                    if not content_chunk:
+                        # Reasoning-channel fallback for o-series / vLLM
+                        # reasoning models — surface as visible text so the
+                        # agent loop sees it.
+                        content_chunk = _extract_reasoning_text(delta)
+                    if content_chunk:
+                        text_buf.append(content_chunk)
+                        if on_token is not None:
+                            on_token(content_chunk)
+
+                    # Tool-call deltas — assemble per index.
+                    delta_tool_calls = getattr(delta, "tool_calls", None) or []
+                    for tc_delta in delta_tool_calls:
+                        idx = getattr(tc_delta, "index", 0) or 0
+                        slot = partial_calls.setdefault(idx, {"id": "", "name": "", "args": []})
+                        tc_id = getattr(tc_delta, "id", None)
+                        if tc_id:
+                            slot["id"] = tc_id
+                        fn = getattr(tc_delta, "function", None)
+                        if fn is not None:
+                            fn_name = getattr(fn, "name", None)
+                            if fn_name:
+                                slot["name"] = fn_name
+                            fn_args = getattr(fn, "arguments", None)
+                            if fn_args:
+                                slot["args"].append(fn_args)
+
+                    if should_cancel():
+                        await _aclose_stream(stream)
+                        finish_reason = "cancelled"
+                        break
+            finally:
+                await _aclose_stream(stream)
+        except (AuthenticationError, RateLimitError, ProviderError):
+            raise
+        except Exception as e:
+            self._handle_api_error(e)
+
+        # ── Post-stream assembly ──────────────────────────────────────
+        text_content = "".join(text_buf)
+        tool_calls: list[ToolCall] = []
+        for idx in sorted(partial_calls.keys()):
+            slot = partial_calls[idx]
+            args_str = "".join(slot["args"])
+            try:
+                parameters = json.loads(args_str) if args_str else {}
+            except json.JSONDecodeError:
+                # The delta concatenation can occasionally fail on
+                # mid-token splits — mirror generate_native_response's
+                # raw-fallback behaviour so the tool name + args still
+                # surface for ops to inspect rather than silently dropping.
+                parameters = {"raw": args_str}
+            tool_calls.append(
+                ToolCall(
+                    tool_name=slot["name"],
+                    tool_id=slot["id"],
+                    parameters=parameters,
+                )
+            )
+
+        # Text-form tool-call salvage — same path as generate_native_response.
+        # Only fires when the server didn't return any structured tool_calls
+        # AND the text contains literal ``<|tool_call|>`` markers.
+        if not tool_calls and text_content:
+            salvaged, residual = _parse_text_form_tool_calls(text_content)
+            if salvaged:
+                tool_calls = salvaged
+                text_content = residual
+
+        return NativeResponse(
+            text_content=text_content,
+            thinking=[],
+            tool_calls=tool_calls,
+            stop_reason=finish_reason,
+            usage=usage_obj,
+        )
 
     async def generate_structured_response(
         self,

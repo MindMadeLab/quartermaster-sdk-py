@@ -5,15 +5,16 @@ from AbstractLLMProvider and implement its abstract methods.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any, AsyncIterator, TypeVar
 
 from quartermaster_providers.config import LLMConfig
 from quartermaster_providers.types import (
     NativeResponse,
     StructuredResponse,
+    TokenResponse,
     ToolCallResponse,
     ToolDefinition,
-    TokenResponse,
 )
 
 T = TypeVar("T")
@@ -146,6 +147,47 @@ class AbstractLLMProvider(ABC):
             NativeResponse containing text, thinking, tool calls, usage.
         """
         ...
+
+    async def stream_native_response(
+        self,
+        prompt: str,
+        tools: list[ToolDefinition] | None = None,
+        config: LLMConfig | None = None,
+        on_token: Callable[[str], None] | None = None,
+    ) -> NativeResponse:
+        """Stream tokens to ``on_token`` while assembling tool_calls atomically.
+
+        The agent loop needs the full response (text + tool_calls + stop_reason)
+        as a unit so it can decide whether to dispatch tools or return; but it
+        also wants to surface visible-text deltas to the UI as they arrive
+        instead of dumping the whole reply at the end of the turn. This method
+        threads the needle: every visible-text chunk flows through ``on_token``
+        as soon as the network emits it, while ``tool_calls`` accumulate
+        silently and are returned in the final :class:`NativeResponse`.
+
+        The default implementation here is a no-op compatibility shim — it
+        delegates to :meth:`generate_native_response` and emits the whole
+        ``text_content`` to ``on_token`` after the response arrives. Real
+        streaming providers (currently :class:`OpenAIProvider`) override this
+        to wire up the SSE chunk loop with assembled-tool-call bookkeeping.
+
+        Args:
+            prompt: Input prompt.
+            tools: Optional list of available tools.
+            config: LLM configuration.
+            on_token: Callable invoked once per visible-text chunk. Tool-call
+                deltas are NOT delivered through this callback; they only
+                appear on the returned :class:`NativeResponse`.
+
+        Returns:
+            :class:`NativeResponse` with the complete text, tool_calls,
+            stop_reason, and usage — same shape as
+            :meth:`generate_native_response`.
+        """
+        response = await self.generate_native_response(prompt, tools, config)
+        if on_token is not None and response.text_content:
+            on_token(response.text_content)
+        return response
 
     @abstractmethod
     async def generate_structured_response(
