@@ -1152,6 +1152,48 @@ class AgentExecutor(NodeExecutor):
                 ),
             )
 
+        # v0.8.2: force a final-answer turn when the loop exited with no
+        # visible-text response BUT one or more tool calls were
+        # dispatched. Symptom diagnosed in printer-app's Sora chat —
+        # Gemma-4 (and other tool-savvy models) sometimes finish a turn
+        # by returning ``tool_calls=[]`` AND empty ``text_content`` on
+        # the iteration after a tool dispatch, leaving the agent with
+        # no text. Without this guard ``final_text`` stays empty and
+        # ``FlowResult.final_output`` falls back to the latest non-
+        # empty node — typically the User node — so ``result.text``
+        # echoes the user's question back as if it were the answer.
+        #
+        # Re-runs the LAST iteration's prompt (which already carries
+        # the ``<tool_execution_log>`` block ending with "Use the tool
+        # results above to produce your final answer.") with
+        # ``tools=None`` so the model can only emit text, no further
+        # tool calls. Adds at most one extra LLM call per agent run
+        # and only fires when the loop produced tools but no answer.
+        if not final_text.strip() and tool_call_log and not hit_iteration_cap:
+            logger.info(
+                "AgentExecutor: model returned no text after %d tool call(s); "
+                "forcing one final-answer LLM call without tools to elicit "
+                "the response.",
+                len(tool_call_log),
+            )
+            try:
+                with set_cancel_check(lambda: context.cancelled):
+                    forced_response = await provider.stream_native_response(
+                        prompt,
+                        None,  # no tools — model must produce text now
+                        config,
+                        on_token=context.emit_token,
+                        history=history,
+                    )
+                forced_text = getattr(forced_response, "text_content", "") or ""
+                if forced_text.strip():
+                    final_text = forced_text
+            except Exception as exc:
+                # The forced call is best-effort — log and fall through
+                # so the user still gets the empty-text NodeResult and
+                # downstream salvage paths can do their thing.
+                logger.warning("AgentExecutor: forced-final-answer call raised: %s", exc)
+
         # Append the assistant turn to the conversation memory.
         node_name = context.current_node.name if context.current_node else "Agent"
         round_num = context.memory.get("round_number")
