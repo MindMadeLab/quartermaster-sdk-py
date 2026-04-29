@@ -22,6 +22,7 @@ from quartermaster_providers.exceptions import (
     ServiceUnavailableError,
 )
 from quartermaster_providers.types import (
+    Message,
     NativeResponse,
     StructuredResponse,
     ToolCall,
@@ -213,7 +214,13 @@ class GoogleProvider(AbstractLLMProvider):
         self,
         prompt: str,
         config: LLMConfig,
+        history: list[Message] | None = None,
     ) -> TokenResponse | AsyncIterator[TokenResponse]:
+        # v0.8.0: ``history`` accepted for protocol parity. Google's
+        # generate_content takes a ``contents`` array which can carry
+        # multi-turn history natively, but the translation layer hasn't
+        # been built yet — see follow-up work for non-OpenAI providers.
+        del history
         model = self._get_model(config)
 
         content = self._build_content_parts(prompt, config)
@@ -257,7 +264,9 @@ class GoogleProvider(AbstractLLMProvider):
         prompt: str,
         tools: list[ToolDefinition],
         config: LLMConfig,
+        history: list[Message] | None = None,
     ) -> ToolCallResponse:
+        del history  # see generate_text_response — not yet translated
         import google.generativeai as genai
 
         model = self._get_model(config)
@@ -307,7 +316,9 @@ class GoogleProvider(AbstractLLMProvider):
         prompt: str,
         tools: list[ToolDefinition] | None = None,
         config: LLMConfig | None = None,
+        history: list[Message] | None = None,
     ) -> NativeResponse:
+        del history  # see generate_text_response — not yet translated
         if config is None:
             raise InvalidRequestError("config is required", provider=self.PROVIDER_NAME)
 

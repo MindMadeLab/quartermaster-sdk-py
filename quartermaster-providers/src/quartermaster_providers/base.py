@@ -10,6 +10,7 @@ from typing import Any, AsyncIterator, TypeVar
 
 from quartermaster_providers.config import LLMConfig
 from quartermaster_providers.types import (
+    Message,
     NativeResponse,
     StructuredResponse,
     TokenResponse,
@@ -83,12 +84,20 @@ class AbstractLLMProvider(ABC):
         self,
         prompt: str,
         config: LLMConfig,
+        history: list[Message] | None = None,
     ) -> TokenResponse | AsyncIterator[TokenResponse]:
         """Generate a text response from a prompt.
 
         Args:
-            prompt: Input prompt text.
+            prompt: Input prompt text — appended as the trailing
+                ``role="user"`` message in the outbound chat-completions
+                payload.
             config: LLM configuration (temperature, max_tokens, etc.).
+            history: Optional v0.8.0 multi-turn history. Each entry maps to
+                its own ``{role, content}`` message in the outbound payload,
+                slotted between ``config.system_message`` and the trailing
+                ``prompt`` user-message. ``None`` (the default) preserves
+                the pre-v0.8.0 single-user-message wire format.
 
         Returns:
             Single TokenResponse if not streaming, otherwise AsyncIterator
@@ -107,6 +116,7 @@ class AbstractLLMProvider(ABC):
         prompt: str,
         tools: list[ToolDefinition],
         config: LLMConfig,
+        history: list[Message] | None = None,
     ) -> ToolCallResponse:
         """Generate tool calls with parameters.
 
@@ -117,6 +127,9 @@ class AbstractLLMProvider(ABC):
             prompt: Input prompt requesting tool use.
             tools: List of available tools the model can call.
             config: LLM configuration.
+            history: Optional v0.8.0 multi-turn history — see
+                :meth:`generate_text_response` for the role-translation
+                contract.
 
         Returns:
             ToolCallResponse with tool_calls and any text_content.
@@ -132,6 +145,7 @@ class AbstractLLMProvider(ABC):
         prompt: str,
         tools: list[ToolDefinition] | None = None,
         config: LLMConfig | None = None,
+        history: list[Message] | None = None,
     ) -> NativeResponse:
         """Generate the complete/native response from the model.
 
@@ -142,6 +156,9 @@ class AbstractLLMProvider(ABC):
             prompt: Input prompt.
             tools: Optional list of available tools.
             config: LLM configuration.
+            history: Optional v0.8.0 multi-turn history — see
+                :meth:`generate_text_response` for the role-translation
+                contract.
 
         Returns:
             NativeResponse containing text, thinking, tool calls, usage.
@@ -154,6 +171,7 @@ class AbstractLLMProvider(ABC):
         tools: list[ToolDefinition] | None = None,
         config: LLMConfig | None = None,
         on_token: Callable[[str], None] | None = None,
+        history: list[Message] | None = None,
     ) -> NativeResponse:
         """Stream tokens to ``on_token`` while assembling tool_calls atomically.
 
@@ -184,7 +202,7 @@ class AbstractLLMProvider(ABC):
             stop_reason, and usage — same shape as
             :meth:`generate_native_response`.
         """
-        response = await self.generate_native_response(prompt, tools, config)
+        response = await self.generate_native_response(prompt, tools, config, history=history)
         if on_token is not None and response.text_content:
             on_token(response.text_content)
         return response

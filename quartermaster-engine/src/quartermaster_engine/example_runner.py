@@ -150,36 +150,127 @@ def _get_conversation(context: ExecutionContext) -> list[dict]:
 
 def _append_to_conversation(
     conversation: list[dict],
-    role: str,
+    node_name: str,
     text: str,
     round_num: Any = None,
+    role: str = "assistant",
 ) -> list[dict]:
-    """Append an entry to conversation history."""
+    """Append an entry to ``__conversation__``.
+
+    v0.8.0 entry shape:
+      ``{"role": "user"|"assistant"|"system", "content": str, "node_name": str | None, "round": int | None}``
+
+    *node_name* identifies which node produced the entry — used by
+    :func:`_build_history_for_node` to translate "my own past turn"
+    (``role=assistant``) vs "another node's output" (``role=user`` from
+    the consuming node's perspective).
+
+    For pure user turns coming from the human (CLI / SDK
+    ``history=`` seed), pass ``role="user"`` and ``node_name=""``.
+    For node outputs, callers pass the node's name and the default
+    ``role="assistant"`` applies.
+
+    The legacy v0.7.x shape ``{"role": <node_name>, "text": str}`` is
+    read-tolerated by :func:`_build_history_for_node` but never produced
+    by this helper.
+    """
     if not text or not text.strip():
         return conversation
-    entry = {"role": role, "text": text}
+    entry: dict[str, Any] = {
+        "role": role,
+        "content": text,
+        "node_name": node_name or None,
+    }
     if round_num is not None:
         entry["round"] = round_num
     conversation.append(entry)
     return conversation
 
 
-def _format_conversation(conversation: list[dict], user_input: str) -> str:
-    """Format conversation history as a prompt string."""
-    if not conversation:
-        return user_input
+def _build_history_for_node(
+    conversation: list[dict],
+    current_node_name: str | None,
+    *,
+    drop_trailing_user_match: str | None = None,
+) -> list[dict]:
+    """Translate ``__conversation__`` into a provider-ready history list.
 
-    parts = []
-    current_round = None
+    v0.8.0 fix: previously every entry got mashed into a single
+    ``[NodeName]: text`` blob inside one ``role="user"`` message —
+    multi-node graphs (User → Agent → InstructionForm, or
+    Agent1 → Agent2) collapsed into a wire format where the LLM
+    couldn't tell upstream-node output from its own past turn.
+
+    Translation rules per entry, in priority order:
+
+    1. **Legacy shape** (``{"role": "<NodeName>", "text": ...}``, no
+       ``content`` key) — translate as if ``node_name=role``,
+       ``content=text``. Pre-v0.8.0 conversations stay readable so
+       in-flight flows don't break across upgrade.
+    2. **User-supplied turns** (``node_name`` is ``None``) — pass
+       through with the entry's stored ``role`` ("user" / "assistant" /
+       "system"). These come from the SDK runner's ``history=`` kwarg
+       and represent prior chat turns the caller is replaying.
+    3. **Same-node entries** (``node_name == current_node_name``) —
+       role becomes ``"assistant"`` regardless of stored value. Multi-
+       turn within a single node (Sora chat across iterations) stays
+       coherent.
+    4. **Other-node entries** (``node_name != current_node_name`` and
+       not ``None``) — role becomes ``"user"``. From the current node's
+       perspective, an upstream node's output is *input it must act on*,
+       not its own past speech.
+
+    No prefix injection: the OpenAI role markers carry the semantics
+    on their own. Adding ``[Agent1]:`` to the content would burn
+    tokens, leak graph internals into the model's view, and tempt
+    output mimicry — see the audit notes that motivated this change.
+    """
+    history: list[dict] = []
     for entry in conversation:
-        r = entry.get("round")
-        if r is not None and r != current_round:
-            current_round = r
-            parts.append(f"--- Round {r} ---")
-        parts.append(f"[{entry['role']}]: {entry['text']}")
+        if not isinstance(entry, dict):
+            continue
+        # Legacy v0.7.x shape — text key, role=node_name.
+        if "content" not in entry and "text" in entry:
+            stored_role = entry.get("role")
+            text = entry.get("text") or ""
+            if not text:
+                continue
+            if isinstance(stored_role, str) and stored_role == current_node_name:
+                role = "assistant"
+            else:
+                role = "user"
+            history.append({"role": role, "content": text})
+            continue
 
-    history = "\n\n".join(parts)
-    return f"{history}\n\n---\nOriginal case: {user_input}"
+        content = entry.get("content")
+        if not isinstance(content, str) or not content:
+            continue
+        node_name = entry.get("node_name")
+        stored_role = entry.get("role")
+
+        if node_name is None:
+            # User-supplied turn — preserve the role the caller stored.
+            role = stored_role if stored_role in ("user", "assistant", "system") else "user"
+        elif current_node_name is not None and node_name == current_node_name:
+            role = "assistant"
+        else:
+            role = "user"
+        history.append({"role": role, "content": content})
+
+    # ``drop_trailing_user_match`` exists because ``FlowRunner`` appends
+    # User/UserForm output to ``__conversation__`` so ``.back()`` loops
+    # remember user turns. Without this guard, the trailing user turn
+    # would appear BOTH in ``history`` (from the conversation log) AND
+    # as the provider's trailing user message (built from ``prompt``).
+    # Strip the duplicate so the wire format has the user input once.
+    if (
+        drop_trailing_user_match is not None
+        and history
+        and history[-1].get("role") == "user"
+        and history[-1].get("content") == drop_trailing_user_match
+    ):
+        history = history[:-1]
+    return history
 
 
 # ---------------------------------------------------------------------------
@@ -379,10 +470,18 @@ class LLMExecutor(NodeExecutor):
                 ),
             )
 
-        # Build prompt from conversation history + original user input
+        # v0.8.0: build proper multi-turn history for the provider
+        # instead of squashing the conversation into a single user
+        # message. ``prompt`` carries only the trailing user turn;
+        # ``history`` carries each prior turn as its own ``role``-tagged
+        # message (translated based on whether it came from this node).
         conversation = _get_conversation(context)
         user_input = str(context.memory.get("__user_input__", "Hello"))
-        prompt = _format_conversation(conversation, user_input)
+        prompt = user_input
+        node_name = context.current_node.name if context.current_node else "Assistant"
+        history = _build_history_for_node(
+            conversation, node_name, drop_trailing_user_match=user_input
+        )
 
         config = _build_llm_config(
             context,
@@ -402,7 +501,7 @@ class LLMExecutor(NodeExecutor):
             # the openai AsyncStream → httpx response, so vLLM / Ollama
             # stop generating mid-token instead of draining to completion.
             with set_cancel_check(lambda: context.cancelled):
-                stream = await provider.generate_text_response(prompt, config)
+                stream = await provider.generate_text_response(prompt, config, history=history)
                 chunks = []
                 async for token_response in stream:
                     if token_response.stop_reason == "cancelled":
@@ -412,8 +511,8 @@ class LLMExecutor(NodeExecutor):
                         context.emit_token(token_response.content)
             text = "".join(chunks)
 
-            # Append to conversation history
-            node_name = context.current_node.name if context.current_node else "Assistant"
+            # Append to conversation history (v0.8.0: stores
+            # role="assistant" with node_name=current node).
             round_num = context.memory.get("round_number")
             _append_to_conversation(conversation, node_name, text, round_num)
             return NodeResult(
@@ -750,11 +849,27 @@ class AgentExecutor(NodeExecutor):
         if max_iterations < 0:
             max_iterations = self.DEFAULT_MAX_ITERATIONS
 
+        # v0.8.0: prior conversation flows into the provider as a
+        # proper multi-turn ``history`` list (each entry its own
+        # role-tagged message), not as a squashed user blob. The agent
+        # loop's iteration-internal "tool log" appends after the user
+        # input within ``prompt`` — same shape the model has always
+        # seen for the trailing turn.
         conversation = _get_conversation(context)
         user_input = str(context.memory.get("__user_input__", ""))
-        base_prompt = _format_conversation(conversation, user_input)
+        node_name_for_history = context.current_node.name if context.current_node else "Agent"
+        history = _build_history_for_node(
+            conversation, node_name_for_history, drop_trailing_user_match=user_input
+        )
 
         # ── agent loop ────────────────────────────────────────────────
+        # ``base_prompt`` is the seed user-message text — kept as an
+        # invariant across iterations so the sliding-window truncation
+        # has a stable reference and so each iteration's
+        # ``<tool_execution_log>`` block is prepended to the SAME
+        # original user message rather than to the previous iteration's
+        # already-augmented prompt (which would duplicate the log).
+        base_prompt = user_input
         prompt = base_prompt
         final_text = ""
         accumulated_tool_log: list[str] = []
@@ -804,6 +919,7 @@ class AgentExecutor(NodeExecutor):
                         tools,
                         config,
                         on_token=context.emit_token,
+                        history=history,
                     )
             except Exception as exc:
                 # Bubble the failure into FlowResult.error via the runner's
@@ -1089,10 +1205,15 @@ class DecisionExecutor(NodeExecutor):
             picked = options[0] if options else ""
             return NodeResult(success=True, data={}, output_text="", picked_node=picked)
 
-        # Build prompt from conversation history
+        # v0.8.0: prior conversation flows in as proper multi-turn
+        # history; the prompt carries only the current user turn.
         conversation = _get_conversation(context)
         user_input = str(context.memory.get("__user_input__", "Choose"))
-        prompt = _format_conversation(conversation, user_input)
+        prompt = user_input
+        node_name_for_history = context.current_node.name if context.current_node else "Decision"
+        history = _build_history_for_node(
+            conversation, node_name_for_history, drop_trailing_user_match=user_input
+        )
 
         # Decision nodes pin temperature=0 for determinism regardless of
         # what the per-node ``llm_temperature`` says.  Use the helper's
@@ -1141,7 +1262,9 @@ class DecisionExecutor(NodeExecutor):
 
         try:
             if forced_tool:
-                native = await provider.generate_native_response(prompt, [forced_tool], config)
+                native = await provider.generate_native_response(
+                    prompt, [forced_tool], config, history=history
+                )
                 tool_calls = getattr(native, "tool_calls", None) or []
                 if tool_calls:
                     params = getattr(tool_calls[0], "parameters", None)
@@ -1157,7 +1280,7 @@ class DecisionExecutor(NodeExecutor):
 
                 picked = (getattr(native, "text_content", "") or "").strip()
             else:
-                response = await provider.generate_text_response(prompt, config)
+                response = await provider.generate_text_response(prompt, config, history=history)
                 picked = response.content.strip()
             # Fuzzy-match fallback for the free-form path (or for
             # providers that didn't honour the forced tool-call).
@@ -1498,15 +1621,26 @@ class InstructionFormExecutor(NodeExecutor):
             except (json.JSONDecodeError, ValueError, TypeError):
                 forced_tool = None
 
+        # v0.8.0: prior conversation flows in as proper multi-turn
+        # history; the prompt carries only the current user turn so the
+        # forced tool call sees the schema-extraction request as a
+        # clean ``role="user"`` message.
         conversation = _get_conversation(context)
         user_input = str(context.memory.get("__user_input__", ""))
-        prompt = _format_conversation(conversation, user_input)
+        prompt = user_input
+        node_name_for_history = (
+            context.current_node.name if context.current_node else "InstructionForm"
+        )
+        history = _build_history_for_node(
+            conversation, node_name_for_history, drop_trailing_user_match=user_input
+        )
 
         try:
             response = await provider.generate_native_response(
                 prompt,
                 [forced_tool] if forced_tool else None,
                 config,
+                history=history,
             )
         except Exception as exc:
             return NodeResult(success=False, data={}, error=str(exc))
@@ -2072,7 +2206,7 @@ def run_graph(
 
         # Append to conversation so LLM nodes see it
         conversation = list(store.get_all_memory(result.flow_id).get("__conversation__", []))
-        _append_to_conversation(conversation, "User", user_text)
+        _append_to_conversation(conversation, "", user_text, role="user")
         store.save_memory(result.flow_id, "__conversation__", conversation)
         store.save_memory(result.flow_id, "__user_input__", user_text)
 

@@ -20,7 +20,7 @@ from quartermaster_engine.example_runner import (
     UserFormExecutor,
     VarExecutor,
     _append_to_conversation,
-    _format_conversation,
+    _build_history_for_node,
     _get_conversation,
 )
 from quartermaster_engine.nodes import NodeResult
@@ -182,250 +182,215 @@ class TestGetConversation:
 
 
 class TestAppendToConversation:
-    """Tests for _append_to_conversation helper."""
+    """v0.8.0 entry shape: ``{"role", "content", "node_name", "round"}``.
 
-    def test_appends_entry_with_role_and_text(self):
+    The ``role`` is now a wire-format role ("user"/"assistant"/"system");
+    the node identity moved to ``node_name``. Default role is
+    ``"assistant"`` because by far the most common caller is a node
+    appending its own output."""
+
+    def test_default_role_is_assistant(self):
         conv: list[dict] = []
-        _append_to_conversation(conv, "user", "hello")
+        _append_to_conversation(conv, "Researcher", "hello")
         assert len(conv) == 1
-        assert conv[0] == {"role": "user", "text": "hello"}
+        assert conv[0]["role"] == "assistant"
+        assert conv[0]["content"] == "hello"
+        assert conv[0]["node_name"] == "Researcher"
+
+    def test_explicit_user_role_for_user_turn(self):
+        """The CLI/SDK history seed path passes ``role='user'`` and an
+        empty node_name to mark a turn that came from the human."""
+        conv: list[dict] = []
+        _append_to_conversation(conv, "", "what's up?", role="user")
+        assert conv[0]["role"] == "user"
+        assert conv[0]["content"] == "what's up?"
+        assert conv[0]["node_name"] is None
 
     def test_includes_round_num_when_provided(self):
         conv: list[dict] = []
-        _append_to_conversation(conv, "assistant", "hi", round_num=3)
+        _append_to_conversation(conv, "Agent", "hi", round_num=3)
         assert conv[0]["round"] == 3
 
     def test_skips_empty_text(self):
         conv: list[dict] = []
-        result = _append_to_conversation(conv, "user", "")
+        result = _append_to_conversation(conv, "Agent", "")
         assert len(conv) == 0
         assert result is conv
 
     def test_skips_whitespace_only_text(self):
         conv: list[dict] = []
-        _append_to_conversation(conv, "user", "   \t\n  ")
+        _append_to_conversation(conv, "Agent", "   \t\n  ")
         assert len(conv) == 0
 
     def test_none_round_num_not_included(self):
         conv: list[dict] = []
-        _append_to_conversation(conv, "user", "hello", round_num=None)
+        _append_to_conversation(conv, "Agent", "hello", round_num=None)
         assert "round" not in conv[0]
 
     def test_zero_round_num_is_included(self):
         conv: list[dict] = []
-        _append_to_conversation(conv, "user", "hello", round_num=0)
+        _append_to_conversation(conv, "Agent", "hello", round_num=0)
         assert conv[0]["round"] == 0
-
-    def test_returns_same_list_mutated(self):
-        conv: list[dict] = []
-        result = _append_to_conversation(conv, "user", "hi")
-        assert result is conv
 
     def test_multiple_appends_accumulate(self):
         conv: list[dict] = []
-        _append_to_conversation(conv, "user", "first")
-        _append_to_conversation(conv, "assistant", "second")
-        _append_to_conversation(conv, "user", "third")
+        _append_to_conversation(conv, "Researcher", "first")
+        _append_to_conversation(conv, "Summariser", "second")
+        _append_to_conversation(conv, "Reviewer", "third")
         assert len(conv) == 3
-        assert conv[0]["text"] == "first"
-        assert conv[1]["text"] == "second"
-        assert conv[2]["text"] == "third"
+        assert [e["content"] for e in conv] == ["first", "second", "third"]
+        assert [e["node_name"] for e in conv] == ["Researcher", "Summariser", "Reviewer"]
 
-    def test_unicode_text(self):
+    def test_unicode_content(self):
         conv: list[dict] = []
-        _append_to_conversation(conv, "user", "Привет мир 🌍")
-        assert conv[0]["text"] == "Привет мир 🌍"
-
-    def test_very_long_text(self):
-        conv: list[dict] = []
-        long_text = "x" * 100_000
-        _append_to_conversation(conv, "user", long_text)
-        assert len(conv[0]["text"]) == 100_000
-
-    def test_text_with_newlines(self):
-        conv: list[dict] = []
-        _append_to_conversation(conv, "user", "line1\nline2\nline3")
-        assert conv[0]["text"] == "line1\nline2\nline3"
-
-    def test_round_num_negative(self):
-        conv: list[dict] = []
-        _append_to_conversation(conv, "user", "hello", round_num=-1)
-        assert conv[0]["round"] == -1
-
-    def test_round_num_large_int(self):
-        conv: list[dict] = []
-        _append_to_conversation(conv, "user", "hello", round_num=999999)
-        assert conv[0]["round"] == 999999
-
-    def test_role_can_be_any_string(self):
-        conv: list[dict] = []
-        _append_to_conversation(conv, "CustomAgent", "hello")
-        assert conv[0]["role"] == "CustomAgent"
-
-    def test_does_not_append_for_only_spaces(self):
-        conv: list[dict] = []
-        _append_to_conversation(conv, "user", "     ")
-        assert len(conv) == 0
+        _append_to_conversation(conv, "Agent", "Привет мир 🌍")
+        assert conv[0]["content"] == "Привет мир 🌍"
 
 
 # ===================================================================
-# 3. _format_conversation tests
+# 3. _build_history_for_node tests (v0.8.0)
 # ===================================================================
 
 
-class TestFormatConversation:
-    """Tests for _format_conversation helper."""
+class TestBuildHistoryForNode:
+    """v0.8.0 role-translation contract.
 
-    def test_empty_conversation_returns_user_input(self):
-        result = _format_conversation([], "hello")
-        assert result == "hello"
+    ``__conversation__`` entries get translated to OpenAI-format
+    messages based on ``node_name`` vs the consuming node:
 
-    def test_single_entry_formatted_correctly(self):
-        conv = [{"role": "user", "text": "hi"}]
-        result = _format_conversation(conv, "original")
-        assert "[user]: hi" in result
-        assert "Original case: original" in result
+    - Same node → ``role="assistant"`` (my own past turn).
+    - Different node → ``role="user"`` (input from upstream).
+    - ``node_name=None`` → preserve stored role (user-supplied seed).
+    - Legacy v0.7.x ``{"role": <NodeName>, "text": ...}`` → translate
+      ``role==current_node_name`` ⇒ assistant, else user.
+    """
 
-    def test_multiple_entries_same_round(self):
+    def test_empty_conversation_returns_empty_history(self):
+        assert _build_history_for_node([], "Agent") == []
+
+    def test_same_node_entries_become_assistant(self):
         conv = [
-            {"role": "user", "text": "hi", "round": 1},
-            {"role": "assistant", "text": "hello", "round": 1},
+            {"role": "assistant", "content": "previous turn", "node_name": "Agent"},
         ]
-        result = _format_conversation(conv, "q")
-        # Round marker should appear once
-        assert result.count("--- Round 1 ---") == 1
+        history = _build_history_for_node(conv, "Agent")
+        assert history == [{"role": "assistant", "content": "previous turn"}]
 
-    def test_round_markers_appear_when_round_changes(self):
+    def test_other_node_output_becomes_user(self):
+        """The whole point of v0.8.0: Agent2 sees Agent1's output as
+        ``role="user"`` (input it must act on), not as ``"assistant"``."""
         conv = [
-            {"role": "user", "text": "a", "round": 1},
-            {"role": "user", "text": "b", "round": 2},
+            {"role": "assistant", "content": "research notes", "node_name": "Agent1"},
         ]
-        result = _format_conversation(conv, "q")
-        assert "--- Round 1 ---" in result
-        assert "--- Round 2 ---" in result
+        history = _build_history_for_node(conv, "Agent2")
+        assert history == [{"role": "user", "content": "research notes"}]
 
-    def test_no_duplicate_round_markers_for_same_round(self):
+    def test_user_supplied_seed_preserves_role(self):
+        """SDK ``run(history=[Message(role="user", ...)])`` seed: stored
+        with ``node_name=None`` and the original role survives."""
         conv = [
-            {"role": "user", "text": "a", "round": 1},
-            {"role": "assistant", "text": "b", "round": 1},
-            {"role": "user", "text": "c", "round": 1},
+            {"role": "user", "content": "/stranka PIGO", "node_name": None},
+            {"role": "assistant", "content": "PIGO is...", "node_name": None},
+            {"role": "user", "content": "kakšen je status?", "node_name": None},
         ]
-        result = _format_conversation(conv, "q")
-        assert result.count("--- Round 1 ---") == 1
+        history = _build_history_for_node(conv, "ChatAgent")
+        assert history == [
+            {"role": "user", "content": "/stranka PIGO"},
+            {"role": "assistant", "content": "PIGO is..."},
+            {"role": "user", "content": "kakšen je status?"},
+        ]
 
-    def test_multiple_rounds_with_proper_separators(self):
+    def test_pipeline_user_then_agent1_then_agent2_seen_by_agent2(self):
+        """Concrete trace of ``User → Agent1 → Agent2``:
+        Agent2 sees the original user turn as user, Agent1's output as
+        user (it's Agent2's input), and nothing as assistant (Agent2
+        hasn't replied yet)."""
         conv = [
-            {"role": "user", "text": "a", "round": 1},
-            {"role": "assistant", "text": "b", "round": 1},
-            {"role": "user", "text": "c", "round": 2},
-            {"role": "assistant", "text": "d", "round": 2},
-            {"role": "user", "text": "e", "round": 3},
+            {"role": "user", "content": "research Acme", "node_name": None},
+            {"role": "assistant", "content": "Acme is a widget co", "node_name": "Agent1"},
         ]
-        result = _format_conversation(conv, "q")
-        assert "--- Round 1 ---" in result
-        assert "--- Round 2 ---" in result
-        assert "--- Round 3 ---" in result
+        history = _build_history_for_node(conv, "Agent2")
+        assert history == [
+            {"role": "user", "content": "research Acme"},
+            {"role": "user", "content": "Acme is a widget co"},
+        ]
 
-    def test_entries_without_round_field_no_round_marker(self):
+    def test_multi_turn_same_node_chat_pattern(self):
+        """Sora chat turn 3 — Agent sees alternating user/assistant of
+        its OWN past turns plus the new user turn at the end."""
         conv = [
-            {"role": "user", "text": "a"},
-            {"role": "assistant", "text": "b"},
+            {"role": "user", "content": "/stranka PIGO", "node_name": None},
+            {"role": "assistant", "content": "PIGO d.o.o.", "node_name": "ChatAgent"},
+            {"role": "user", "content": "in status naročila?", "node_name": None},
+            {"role": "assistant", "content": "Naročilo SO-123 je...", "node_name": "ChatAgent"},
         ]
-        result = _format_conversation(conv, "q")
-        assert "--- Round" not in result
-        assert "[user]: a" in result
-        assert "[assistant]: b" in result
+        history = _build_history_for_node(conv, "ChatAgent")
+        assert history == [
+            {"role": "user", "content": "/stranka PIGO"},
+            {"role": "assistant", "content": "PIGO d.o.o."},
+            {"role": "user", "content": "in status naročila?"},
+            {"role": "assistant", "content": "Naročilo SO-123 je..."},
+        ]
 
-    def test_mix_of_entries_with_and_without_round(self):
+    def test_legacy_v07_shape_with_text_key_translates(self):
+        """Pre-v0.8.0 entries had ``{"role": <NodeName>, "text": ...}``.
+        Read-tolerated so in-flight flows don't break across upgrade."""
         conv = [
-            {"role": "user", "text": "a"},
-            {"role": "assistant", "text": "b", "round": 1},
-            {"role": "user", "text": "c"},
+            {"role": "Agent1", "text": "old-shape output"},
+            {"role": "Agent2", "text": "another old entry"},
         ]
-        result = _format_conversation(conv, "q")
-        assert "--- Round 1 ---" in result
-        # Only one round marker
-        assert result.count("--- Round") == 1
+        # Consuming as Agent2: Agent1 → user, Agent2 → assistant.
+        history = _build_history_for_node(conv, "Agent2")
+        assert history == [
+            {"role": "user", "content": "old-shape output"},
+            {"role": "assistant", "content": "another old entry"},
+        ]
 
-    def test_original_case_appended_at_end(self):
-        conv = [{"role": "user", "text": "hi"}]
-        result = _format_conversation(conv, "my question")
-        assert result.endswith("Original case: my question")
-
-    def test_very_long_conversation(self):
-        conv = [{"role": "user", "text": f"msg{i}", "round": i} for i in range(100)]
-        result = _format_conversation(conv, "q")
-        assert "--- Round 0 ---" in result
-        assert "--- Round 99 ---" in result
-        assert result.count("[user]:") == 100
-
-    def test_special_characters_in_text(self):
-        conv = [{"role": "user", "text": "Hello <world> & 'friends' \"test\""}]
-        result = _format_conversation(conv, "q")
-        assert "[user]: Hello <world> & 'friends' \"test\"" in result
-
-    def test_empty_user_input(self):
-        conv = [{"role": "user", "text": "hi"}]
-        result = _format_conversation(conv, "")
-        assert "Original case: " in result
-
-    def test_parts_joined_with_double_newline(self):
+    def test_no_prefix_injected_in_content(self):
+        """Critical fix: we must NOT prepend ``[NodeName]:`` to the
+        content. The role marker carries the semantics on its own."""
         conv = [
-            {"role": "user", "text": "a", "round": 1},
-            {"role": "assistant", "text": "b", "round": 1},
+            {"role": "assistant", "content": "research output", "node_name": "Agent1"},
         ]
-        result = _format_conversation(conv, "q")
-        # Round marker, entry a, entry b separated by \n\n
-        assert "\n\n" in result
+        history = _build_history_for_node(conv, "Agent2")
+        assert history[0]["content"] == "research output"
+        assert "[Agent1]" not in history[0]["content"]
+        assert "[Agent2]" not in history[0]["content"]
 
-    def test_separator_between_history_and_original(self):
-        conv = [{"role": "user", "text": "hi"}]
-        result = _format_conversation(conv, "q")
-        assert "\n\n---\nOriginal case:" in result
-
-    def test_round_none_is_treated_as_no_round(self):
-        conv = [{"role": "user", "text": "a", "round": None}]
-        result = _format_conversation(conv, "q")
-        # round=None should NOT produce a round marker
-        assert "--- Round" not in result
-
-    def test_round_zero_produces_marker(self):
-        conv = [{"role": "user", "text": "a", "round": 0}]
-        result = _format_conversation(conv, "q")
-        assert "--- Round 0 ---" in result
-
-    def test_format_preserves_entry_order(self):
+    def test_skips_entries_with_no_content(self):
         conv = [
-            {"role": "A", "text": "first"},
-            {"role": "B", "text": "second"},
-            {"role": "C", "text": "third"},
+            {"role": "assistant", "content": "", "node_name": "Agent1"},
+            {"role": "assistant", "content": "real output", "node_name": "Agent1"},
+            {"role": "assistant", "node_name": "Agent1"},  # missing content
         ]
-        result = _format_conversation(conv, "q")
-        idx_first = result.index("[A]: first")
-        idx_second = result.index("[B]: second")
-        idx_third = result.index("[C]: third")
-        assert idx_first < idx_second < idx_third
+        history = _build_history_for_node(conv, "Agent2")
+        assert history == [{"role": "user", "content": "real output"}]
 
-    def test_unicode_in_conversation_and_input(self):
-        conv = [{"role": "用户", "text": "你好世界"}]
-        result = _format_conversation(conv, "日本語")
-        assert "[用户]: 你好世界" in result
-        assert "Original case: 日本語" in result
-
-    def test_multiline_text_in_entries(self):
-        conv = [{"role": "user", "text": "line1\nline2\nline3"}]
-        result = _format_conversation(conv, "q")
-        assert "[user]: line1\nline2\nline3" in result
-
-    def test_same_round_repeated_after_different_round(self):
+    def test_skips_legacy_entries_with_no_text(self):
         conv = [
-            {"role": "user", "text": "a", "round": 1},
-            {"role": "user", "text": "b", "round": 2},
-            {"role": "user", "text": "c", "round": 1},
+            {"role": "Agent1", "text": ""},
+            {"role": "Agent1", "text": "real"},
+            {"role": "Agent1"},  # no text or content
         ]
-        result = _format_conversation(conv, "q")
-        # Round 1 should appear twice because current_round changes
-        assert result.count("--- Round 1 ---") == 2
+        history = _build_history_for_node(conv, "Agent2")
+        assert history == [{"role": "user", "content": "real"}]
+
+    def test_invalid_user_seed_role_falls_back_to_user(self):
+        """A seed entry with a junk role gets coerced to ``user``."""
+        conv = [
+            {"role": "weird_role", "content": "hi", "node_name": None},
+        ]
+        history = _build_history_for_node(conv, "Agent")
+        assert history == [{"role": "user", "content": "hi"}]
+
+    def test_current_node_name_none_treats_all_as_user(self):
+        """When the consuming node has no name (rare), entries from
+        named nodes still resolve to ``user`` because they're not
+        ``current_node_name``."""
+        conv = [
+            {"role": "assistant", "content": "from agent1", "node_name": "Agent1"},
+        ]
+        history = _build_history_for_node(conv, None)
+        assert history == [{"role": "user", "content": "from agent1"}]
 
 
 # ===================================================================
@@ -803,8 +768,10 @@ class TestTextExecutor:
         assert "memory_updates" in result.data
         conv = result.data["memory_updates"]["__conversation__"]
         assert len(conv) == 1
-        assert conv[0]["text"] == "Some text"
-        assert conv[0]["role"] == "Narrator"
+        # v0.8.0: stored as role=assistant with node_name=Narrator.
+        assert conv[0]["content"] == "Some text"
+        assert conv[0]["role"] == "assistant"
+        assert conv[0]["node_name"] == "Narrator"
 
     def test_includes_round_number_in_conversation_entry(self):
         ctx = _make_context(
@@ -877,8 +844,8 @@ class TestTextExecutor:
         result2 = _run(TextExecutor().execute(ctx2))
         conv2 = result2.data["memory_updates"]["__conversation__"]
         assert len(conv2) == 2
-        assert conv2[0]["text"] == "First"
-        assert conv2[1]["text"] == "Second"
+        assert conv2[0]["content"] == "First"
+        assert conv2[1]["content"] == "Second"
 
     def test_template_error_falls_back_to_raw_string(self):
         ctx = _make_context(
@@ -914,7 +881,9 @@ class TestTextExecutor:
         assert result.output_text == ""
         assert result.data == {}
 
-    def test_node_name_used_as_role_in_conversation(self):
+    def test_node_name_recorded_on_conversation_entry(self):
+        """v0.8.0: node identity moves from ``role`` to ``node_name``.
+        The role is always ``"assistant"`` for node outputs."""
         ctx = _make_context(
             node_metadata={"text": "Hello"},
             memory={},
@@ -922,7 +891,8 @@ class TestTextExecutor:
         )
         result = _run(TextExecutor().execute(ctx))
         conv = result.data["memory_updates"]["__conversation__"]
-        assert conv[0]["role"] == "CustomRole"
+        assert conv[0]["role"] == "assistant"
+        assert conv[0]["node_name"] == "CustomRole"
 
     def test_template_with_integer_variable(self):
         ctx = _make_context(
@@ -951,7 +921,8 @@ class TestTextExecutor:
         assert "round" not in conv[0]
 
     def test_preserves_existing_conversation(self):
-        existing = [{"role": "user", "text": "existing"}]
+        # v0.8.0 entry shape — content key, node_name on the seed.
+        existing = [{"role": "user", "content": "existing", "node_name": None}]
         ctx = _make_context(
             node_metadata={"text": "New"},
             memory={"__conversation__": existing},
@@ -960,8 +931,8 @@ class TestTextExecutor:
         result = _run(TextExecutor().execute(ctx))
         conv = result.data["memory_updates"]["__conversation__"]
         assert len(conv) == 2
-        assert conv[0]["text"] == "existing"
-        assert conv[1]["text"] == "New"
+        assert conv[0]["content"] == "existing"
+        assert conv[1]["content"] == "New"
 
 
 # ===================================================================
@@ -1008,7 +979,8 @@ class TestStaticExecutor:
         assert "__conversation__" in result.data.get("memory_updates", {})
         conv = result.data["memory_updates"]["__conversation__"]
         assert len(conv) == 1
-        assert conv[0]["text"] == "hello"
+        assert conv[0]["content"] == "hello"
+        assert conv[0]["role"] == "assistant"
 
     def test_empty_text_returns_empty_data(self):
         ctx = _make_context(

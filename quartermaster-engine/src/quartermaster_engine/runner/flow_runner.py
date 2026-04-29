@@ -539,10 +539,10 @@ class FlowRunner:
         # lose user turns: the LLM sees its own prior replies but not
         # what the user said.
         #
-        # This block fills that gap: when a User or UserForm node
-        # finishes with output, append a ``{role: "User", text: ...}``
-        # entry to ``__conversation__`` so subsequent LLM nodes see the
-        # full multi-turn history.
+        # This block fills that gap: v0.8.0 stores entries in the new
+        # shape (``role="user"``, ``node_name=None`` so the
+        # ``_build_history_for_node`` translator preserves the user role
+        # regardless of which downstream node consumes it).
         #
         # We also update ``__user_input__`` so downstream nodes in this
         # iteration see the CURRENT turn's input, not the stale initial
@@ -554,7 +554,13 @@ class FlowRunner:
             and node.type in (NodeType.USER, NodeType.USER_FORM)
         ):
             conversation = list(self.store.get_memory(flow_id, "__conversation__") or [])
-            conversation.append({"role": "User", "text": result.output_text})
+            conversation.append(
+                {
+                    "role": "user",
+                    "content": result.output_text,
+                    "node_name": None,
+                }
+            )
             self.store.save_memory(flow_id, "__conversation__", conversation)
             self.store.save_memory(flow_id, "__user_input__", result.output_text)
 

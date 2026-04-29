@@ -71,9 +71,11 @@ class _StreamingMockProvider(AbstractLLMProvider):
         prompt: str,
         tools: list[Any] | None = None,
         config: LLMConfig | None = None,
+        history: Any = None,
     ) -> NativeResponse:
         # Tracked so the test can prove we DIDN'T fall back to non-streaming.
         self.native_call_count += 1
+        self.last_history = history
         return NativeResponse(
             text_content="".join(self.text_chunks),
             thinking=[],
@@ -87,8 +89,10 @@ class _StreamingMockProvider(AbstractLLMProvider):
         tools: list[Any] | None = None,
         config: LLMConfig | None = None,
         on_token: Any = None,
+        history: Any = None,
     ) -> NativeResponse:
         self.stream_call_count += 1
+        self.last_history = history
         for chunk in self.text_chunks:
             if on_token is not None:
                 on_token(chunk)
