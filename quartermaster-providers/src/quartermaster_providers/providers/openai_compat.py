@@ -51,39 +51,12 @@ class OpenAICompatibleProvider(OpenAIProvider):
         else:
             super().__init__(api_key=api_key, base_url=base_url)
 
-    def _get_client(self):
-        # Per-loop client cache — same rationale as OpenAIProvider._get_client,
-        # but this subclass has to build its own httpx.AsyncClient on the same
-        # loop as the wrapping openai.AsyncOpenAI (for basic-auth / extra
-        # headers), so we can't just delegate to super() — we have to
-        # replicate the cache lookup around the extra httpx construction.
-        import asyncio
+    def _create_async_client(self) -> Any:
+        """Build AsyncOpenAI, injecting httpx.AsyncClient for basic-auth / headers.
 
-        # Back-compat external injection — see OpenAIProvider._get_client.
-        if self._client is not None and not any(
-            c is self._client for (_, c) in self._clients_by_loop.values()
-        ):
-            return self._client
-
-        try:
-            current_loop = asyncio.get_running_loop()
-        except RuntimeError:
-            current_loop = None
-
-        dead_keys = [
-            key
-            for key, (loop, _client) in self._clients_by_loop.items()
-            if loop is not None and loop.is_closed()
-        ]
-        for key in dead_keys:
-            self._clients_by_loop.pop(key, None)
-
-        loop_key = id(current_loop) if current_loop is not None else 0
-        entry = self._clients_by_loop.get(loop_key)
-        if entry is not None and entry[0] is current_loop:
-            self._client = entry[1]
-            return self._client
-
+        Cache + ``aclose`` stay on :class:`OpenAIProvider` so this subclass
+        cannot leak a per-loop pool of its own.
+        """
         import openai
 
         kwargs: dict[str, Any] = {
@@ -110,10 +83,7 @@ class OpenAICompatibleProvider(OpenAIProvider):
                 client_kwargs["headers"] = dict(extra_headers)
             kwargs["http_client"] = httpx.AsyncClient(**client_kwargs)
 
-        client = openai.AsyncOpenAI(**kwargs)
-        self._clients_by_loop[loop_key] = (current_loop, client)
-        self._client = client
-        return client
+        return openai.AsyncOpenAI(**kwargs)
 
     async def list_models(self) -> list[str]:
         """List models from the remote endpoint."""

@@ -34,7 +34,9 @@ class TestOpenAIProviderClientPerLoop:
         provider = OpenAIProvider(api_key="sk-test")
 
         async def _inner():
-            return provider._get_client(), provider._get_client()
+            a, b = provider._get_client(), provider._get_client()
+            await provider.aclose()
+            return a, b
 
         a, b = asyncio.run(_inner())
         assert a is b, "client cache must be reused within the same loop"
@@ -46,7 +48,9 @@ class TestOpenAIProviderClientPerLoop:
         provider = OpenAIProvider(api_key="sk-test")
 
         async def _probe():
-            return provider._get_client()
+            client = provider._get_client()
+            await provider.aclose()
+            return client
 
         first = asyncio.run(_probe())
         second = asyncio.run(_probe())
@@ -69,7 +73,9 @@ class TestOpenAIProviderClientPerLoop:
 
             def _tool_body():
                 async def _inner_loop():
-                    return provider._get_client()
+                    inner = provider._get_client()
+                    await provider.aclose()
+                    return inner
 
                 return asyncio.run(_inner_loop())
 
@@ -79,6 +85,7 @@ class TestOpenAIProviderClientPerLoop:
             # Outer loop is still alive here; second call from loop A
             # must return the SAME object as the first outer call.
             outer_client_again = provider._get_client()
+            await provider.aclose()
             return outer_client, inner_client, outer_client_again
 
         outer, inner, outer_again = asyncio.run(_outer())
@@ -95,9 +102,9 @@ class TestOpenAIProviderClientPerLoop:
 
 
 class TestOpenAICompatibleProviderClientPerLoop:
-    """Same guarantees for the OpenAI-compatible subclass — it has its own
-    ``_get_client`` override to build the inner httpx.AsyncClient for
-    basic auth / extra headers, and must also respect loop changes."""
+    """Same guarantees for the OpenAI-compatible subclass — it overrides
+    ``_create_async_client`` to inject httpx.AsyncClient for basic auth /
+    extra headers, and must share the parent's per-loop cache + aclose."""
 
     def test_new_loop_rebuilds_client(self):
         provider = OpenAICompatibleProvider(
@@ -107,7 +114,9 @@ class TestOpenAICompatibleProviderClientPerLoop:
         )
 
         async def _probe():
-            return provider._get_client()
+            client = provider._get_client()
+            await provider.aclose()
+            return client
 
         first = asyncio.run(_probe())
         second = asyncio.run(_probe())
@@ -123,7 +132,9 @@ class TestOpenAICompatibleProviderClientPerLoop:
         )
 
         async def _probe():
-            return provider._get_client()
+            client = provider._get_client()
+            await provider.aclose()
+            return client
 
         first = asyncio.run(_probe())
         second = asyncio.run(_probe())
