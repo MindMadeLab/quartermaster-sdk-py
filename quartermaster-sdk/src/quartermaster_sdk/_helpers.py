@@ -139,6 +139,7 @@ def instruction(
     temperature: float = 0.7,
     max_output_tokens: int | None = None,
     thinking_level: str = "off",
+    extra_body: dict[str, Any] | None = None,
     image: ImageInput | None = None,
     images: list[ImageInput] | None = None,
     provider_registry: ProviderRegistry | None = None,
@@ -160,6 +161,12 @@ def instruction(
         max_output_tokens: Hard cap on output tokens.
         thinking_level: ``off``/``low``/``medium``/``high`` — forwarded
             to reasoning-capable models.
+        extra_body: Optional provider-specific OpenAI-compat body fields
+            (spliced into ``chat.completions.create(..., extra_body=)``).
+            Typical use: vLLM ``chat_template_kwargs``, e.g.
+            ``{"chat_template_kwargs": {"enable_thinking": False}}``.
+            Forwarded to the underlying ``.instruction()`` /
+            ``.vision()`` graph node.
         image: Optional single image input (``bytes``,
             :class:`pathlib.Path`, or path string). When set, the
             one-node graph is built as a ``.vision()`` node so the
@@ -197,6 +204,7 @@ def instruction(
             system_instruction=system,
             max_output_tokens=max_output_tokens,
             thinking_level=thinking_level,
+            extra_body=extra_body,
         )
     else:
         builder = builder.instruction(
@@ -207,6 +215,7 @@ def instruction(
             system_instruction=system,
             max_output_tokens=max_output_tokens,
             thinking_level=thinking_level,
+            extra_body=extra_body,
         )
     graph = builder.build()
 
@@ -231,6 +240,7 @@ def instruction_form(
     provider: str = "",
     temperature: float = 0.1,
     max_output_tokens: int | None = None,
+    extra_body: dict[str, Any] | None = None,
     image: ImageInput | None = None,
     images: list[ImageInput] | None = None,
     provider_registry: ProviderRegistry | None = None,
@@ -265,6 +275,11 @@ def instruction_form(
         model: Model identifier (falls back to the configured default).
         temperature: Sampling temperature — default 0.1 for
             determinism.
+        extra_body: Optional provider-specific OpenAI-compat body fields.
+            Forwarded to :func:`instruction` (and from there onto the
+            graph node). Same shape as the Graph DSL ``extra_body=``
+            kwarg — e.g. vLLM
+            ``{"chat_template_kwargs": {"enable_thinking": False}}``.
 
     Returns:
         An instance of *schema* (Pydantic path) or a validated dict
@@ -348,6 +363,7 @@ def instruction_form(
         temperature=temperature,
         max_output_tokens=max_output_tokens,
         thinking_level="off",
+        extra_body=extra_body,
         image=image,
         images=images,
         provider_registry=provider_registry,
