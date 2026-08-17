@@ -277,14 +277,18 @@ class TestErrorHandling:
         )
 
         # After 3 retries, the executor still fails, so the result reflects that
+        failing = FailingExecutor("still failing")
         registry = SimpleNodeRegistry()
-        registry.register(NodeType.INSTRUCTION.value, FailingExecutor("still failing"))
+        registry.register(NodeType.INSTRUCTION.value, failing)
 
         runner = FlowRunner(graph=graph, node_registry=registry)
         result = runner.run("retry test")
 
-        # Should have attempted retries but ultimately failed
+        # Should have attempted retries but ultimately failed.
+        # 1 initial attempt + max_retries=3 re-dispatches — not unbounded
+        # recursion (retry_count used to reset on every _execute_node).
         assert not result.success
+        assert failing.call_count == 4
 
 
 class TestUserInputFlow:

@@ -56,7 +56,7 @@ from quartermaster_providers import register_local
 
 provider_registry = register_local(
     "ollama",
-    base_url="http://localhost:11434",   # or set $OLLAMA_HOST
+    base_url="http://localhost:11434",  # or set $OLLAMA_HOST
     default_model="gemma4:26b",
 )
 
@@ -115,8 +115,8 @@ registry = SimpleNodeRegistry()
 runner = FlowRunner(graph=graph, node_registry=registry)
 result = runner.run("Please summarize this article about AI safety.")
 
-print(result.success)          # True/False
-print(result.final_output)     # The final text output
+print(result.success)  # True/False
+print(result.final_output)  # The final text output
 print(result.duration_seconds)
 ```
 
@@ -131,8 +131,12 @@ graph = (
     GraphBuilder("Support Agent")
     .instruction("Classify", model="gpt-4o")
     .decision("Route", options=["billing", "technical"])
-    .on("billing").instruction("Handle billing").end()
-    .on("technical").instruction("Handle technical").end()
+    .on("billing")
+    .instruction("Handle billing")
+    .end()
+    .on("technical")
+    .instruction("Handle technical")
+    .end()
     .build()
 )
 
@@ -150,12 +154,18 @@ below).
 
 ```python
 from quartermaster_engine import (
-    FlowRunner, FlowEvent,
-    NodeStarted, NodeFinished, TokenGenerated,
-    ToolCallStarted, ToolCallFinished,
-    ProgressEvent, CustomEvent,
+    FlowRunner,
+    FlowEvent,
+    NodeStarted,
+    NodeFinished,
+    TokenGenerated,
+    ToolCallStarted,
+    ToolCallFinished,
+    ProgressEvent,
+    CustomEvent,
     FlowError,
 )
+
 
 def handle_event(event: FlowEvent):
     if isinstance(event, NodeStarted):
@@ -166,14 +176,15 @@ def handle_event(event: FlowEvent):
         print(f"\n[TOOL ->] {event.tool}({event.arguments})")
     elif isinstance(event, ToolCallFinished):
         print(f"[TOOL <-] {event.tool} = {event.result!r}")
-    elif isinstance(event, ProgressEvent):        # new in v0.3.0
+    elif isinstance(event, ProgressEvent):  # new in v0.3.0
         print(f"[PROGRESS] {event.message} ({event.percent})")
-    elif isinstance(event, CustomEvent):          # new in v0.3.0
+    elif isinstance(event, CustomEvent):  # new in v0.3.0
         print(f"[{event.name}] {event.payload}")
     elif isinstance(event, NodeFinished):
         print(f"\n[DONE] Node finished: {event.result[:50]}...")
     elif isinstance(event, FlowError):
         print(f"[ERROR] {event.error} (recoverable={event.recoverable})")
+
 
 runner = FlowRunner(graph=graph, node_registry=registry, on_event=handle_event)
 result = runner.run("Hello!")
@@ -188,16 +199,16 @@ can filter by chunk family instead of writing `isinstance` ladders:
 ```python
 import quartermaster_sdk as qm
 
-for token in qm.run.stream(graph, "Hello!").tokens():            # TokenGenerated
+for token in qm.run.stream(graph, "Hello!").tokens():  # TokenGenerated
     print(token, end="")
 
-for call in qm.run.stream(graph, "Research x").tool_calls():    # ToolCallStarted
+for call in qm.run.stream(graph, "Research x").tool_calls():  # ToolCallStarted
     ui.tool_card(call.tool, call.args)
 
-for prog in qm.run.stream(graph, "Crunch").progress():          # ProgressEvent
+for prog in qm.run.stream(graph, "Crunch").progress():  # ProgressEvent
     ui.status(prog.message, prog.percent)
 
-for evt in qm.run.stream(graph, "Research").custom(name="src"): # CustomEvent by name
+for evt in qm.run.stream(graph, "Research").custom(name="src"):  # CustomEvent by name
     ui.add(evt.payload)
 ```
 
@@ -209,9 +220,9 @@ finishes:
 
 ```python
 result = qm.run(graph, "Hello!")
-result.trace.text                        # concatenated TokenGenerated.token
-result.trace.tool_calls                  # list[dict] from every ToolCallFinished
-result.trace.progress                    # list[ProgressEvent]
+result.trace.text  # concatenated TokenGenerated.token
+result.trace.tool_calls  # list[dict] from every ToolCallFinished
+result.trace.progress  # list[ProgressEvent]
 result.trace.by_node["Researcher"].text  # per-node slice
 print(result.trace.as_jsonl())
 ```
@@ -222,11 +233,13 @@ print(result.trace.as_jsonl())
 import asyncio
 from quartermaster_engine import FlowRunner, TokenGenerated
 
+
 async def run_flow():
     runner = FlowRunner(graph=graph, node_registry=registry)
     async for event in runner.run_async("Hello!"):
         if isinstance(event, TokenGenerated):
             print(event.token, end="", flush=True)
+
 
 asyncio.run(run_flow())
 ```
@@ -263,12 +276,12 @@ from quartermaster_engine.dispatchers.sync_dispatcher import SyncDispatcher
 from quartermaster_engine.messaging.context_manager import ContextManager
 
 runner = FlowRunner(
-    graph=spec,                      # GraphSpec from quartermaster-graph
-    node_registry=registry,          # Maps node types to executors
-    store=InMemoryStore(),           # Execution state storage
-    dispatcher=SyncDispatcher(),     # How branches are dispatched
+    graph=spec,  # GraphSpec from quartermaster-graph
+    node_registry=registry,  # Maps node types to executors
+    store=InMemoryStore(),  # Execution state storage
+    dispatcher=SyncDispatcher(),  # How branches are dispatched
     context_manager=ContextManager(),  # LLM context window management
-    on_event=handle_event,           # Real-time event callback
+    on_event=handle_event,  # Real-time event callback
 )
 ```
 
@@ -324,6 +337,7 @@ Implement `ExecutionStore` for custom backends (Redis, PostgreSQL, etc.):
 ```python
 from quartermaster_engine import ExecutionStore
 
+
 class RedisStore:
     def save_node_execution(self, flow_id, node_id, execution) -> None: ...
     def get_node_execution(self, flow_id, node_id) -> NodeExecution | None: ...
@@ -351,9 +365,9 @@ memory = FlowMemory(flow_id=my_flow_id, store=store)
 memory.set("user_name", "Alice")
 memory.set("preferences", {"language": "en"})
 
-name = memory.get("user_name")            # "Alice"
-all_data = memory.get_all()                # {"user_name": "Alice", ...}
-keys = memory.list_keys()                  # ["user_name", "preferences"]
+name = memory.get("user_name")  # "Alice"
+all_data = memory.get_all()  # {"user_name": "Alice", ...}
+keys = memory.list_keys()  # ["user_name", "preferences"]
 memory.delete("preferences")
 memory.clear()
 ```
@@ -366,11 +380,11 @@ from quartermaster_engine import PersistentMemory, InMemoryPersistence
 persistence = InMemoryPersistence()
 
 persistence.write(agent_id, "user_pref", "dark_mode")
-value = persistence.read(agent_id, "user_pref")     # "dark_mode"
+value = persistence.read(agent_id, "user_pref")  # "dark_mode"
 persistence.update(agent_id, "user_pref", "light_mode")
 
-results = persistence.search(agent_id, "pref")      # Substring search
-keys = persistence.list_keys(agent_id)               # ["user_pref"]
+results = persistence.search(agent_id, "pref")  # Substring search
+keys = persistence.list_keys(agent_id)  # ["user_pref"]
 persistence.delete(agent_id, "user_pref")
 ```
 
@@ -452,6 +466,7 @@ Implement `NodeExecutor` to add custom node types:
 ```python
 from quartermaster_engine.nodes import NodeExecutor, NodeResult
 from quartermaster_engine.context.execution_context import ExecutionContext
+
 
 class MyInstructionExecutor:
     async def execute(self, context: ExecutionContext) -> NodeResult:

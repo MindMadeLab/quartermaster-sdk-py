@@ -72,7 +72,7 @@ from quartermaster_providers import register_local
 
 provider_registry = register_local(
     "ollama",
-    base_url="http://localhost:11434",   # or set $OLLAMA_HOST
+    base_url="http://localhost:11434",  # or set $OLLAMA_HOST
     default_model="gemma4:26b",
 )
 provider = provider_registry.get("ollama")
@@ -86,6 +86,7 @@ provider = provider_registry.get("ollama")
 import asyncio
 from quartermaster_providers import LLMConfig
 from quartermaster_providers.providers import OpenAIProvider
+
 
 async def main():
     provider = OpenAIProvider(api_key="sk-...")
@@ -103,6 +104,7 @@ async def main():
     print(response.content)  # str
     print(response.stop_reason)  # "end_turn", "max_tokens", etc.
 
+
 asyncio.run(main())
 ```
 
@@ -112,6 +114,7 @@ asyncio.run(main())
 import asyncio
 from quartermaster_providers import LLMConfig, ToolDefinition
 from quartermaster_providers.providers import AnthropicProvider
+
 
 async def main():
     provider = AnthropicProvider(api_key="sk-ant-...")
@@ -143,6 +146,7 @@ async def main():
 
     print(f"Usage: {response.usage.total_tokens} tokens")
 
+
 asyncio.run(main())
 ```
 
@@ -153,6 +157,7 @@ Tools created with `@tool()` integrate directly via `ToolDescriptor`:
 ```python
 from quartermaster_tools import tool
 
+
 @tool()
 def get_weather(city: str) -> dict:
     """Get current weather for a city.
@@ -161,6 +166,7 @@ def get_weather(city: str) -> dict:
         city: The city name to look up.
     """
     return {"city": city, "temperature": 22}
+
 
 # Convert to provider-compatible format
 tool_def = get_weather.info().to_anthropic_tools()
@@ -175,6 +181,7 @@ import asyncio
 from quartermaster_providers import LLMConfig
 from quartermaster_providers.providers import OpenAIProvider
 
+
 async def main():
     provider = OpenAIProvider(api_key="sk-...")
     config = LLMConfig(model="gpt-4o", provider="openai", stream=True)
@@ -185,6 +192,7 @@ async def main():
     ):
         print(chunk.content, end="", flush=True)
 
+
 asyncio.run(main())
 ```
 
@@ -194,6 +202,7 @@ asyncio.run(main())
 import asyncio
 from quartermaster_providers import LLMConfig
 from quartermaster_providers.providers import OpenAIProvider
+
 
 async def main():
     provider = OpenAIProvider(api_key="sk-...")
@@ -218,6 +227,7 @@ async def main():
     print(response.structured_output["title"])
     print(response.structured_output["topics"])
 
+
 asyncio.run(main())
 ```
 
@@ -231,22 +241,22 @@ Controls request behavior across all providers.
 from quartermaster_providers import LLMConfig
 
 config = LLMConfig(
-    model="gpt-4o",             # Provider model identifier
-    provider="openai",          # Provider name
-    stream=False,               # Stream token-by-token
-    temperature=0.7,            # 0.0 (deterministic) to 2.0 (creative)
-    system_message=None,        # System prompt
-    max_input_tokens=None,      # Input token limit
-    max_output_tokens=None,     # Output token limit
-    max_messages=None,          # Conversation context limit
-    vision=False,               # Enable image understanding
-    thinking_enabled=False,     # Extended thinking (Claude, o-series)
-    thinking_budget=None,       # Max thinking tokens
-    extra_body=None,            # OpenAI-compat passthrough (vLLM chat_template_kwargs, ...)
-    top_p=None,                 # Nucleus sampling
-    top_k=None,                 # Top-k sampling
-    frequency_penalty=None,     # Frequency penalty (OpenAI)
-    presence_penalty=None,      # Presence penalty (OpenAI)
+    model="gpt-4o",  # Provider model identifier
+    provider="openai",  # Provider name
+    stream=False,  # Stream token-by-token
+    temperature=0.7,  # 0.0 (deterministic) to 2.0 (creative)
+    system_message=None,  # System prompt
+    max_input_tokens=None,  # Input token limit
+    max_output_tokens=None,  # Output token limit
+    max_messages=None,  # Conversation context limit
+    vision=False,  # Enable image understanding
+    thinking_enabled=False,  # Extended thinking (Claude, o-series)
+    thinking_budget=None,  # Max thinking tokens
+    extra_body=None,  # OpenAI-compat passthrough (vLLM chat_template_kwargs, ...)
+    top_p=None,  # Nucleus sampling
+    top_k=None,  # Top-k sampling
+    frequency_penalty=None,  # Frequency penalty (OpenAI)
+    presence_penalty=None,  # Presence penalty (OpenAI)
 )
 ```
 
@@ -280,7 +290,7 @@ Cost estimation (non-abstract, returns `None` if pricing unavailable):
 **TokenResponse** -- single response or streaming chunk:
 
 ```python
-response.content      # str -- text content
+response.content  # str -- text content
 response.stop_reason  # str | None -- "end_turn", "max_tokens", "tool_use"
 ```
 
@@ -288,36 +298,36 @@ response.stop_reason  # str | None -- "end_turn", "max_tokens", "tool_use"
 
 ```python
 response.text_content  # str -- any text alongside tool calls
-response.tool_calls    # list[ToolCall] -- each has .tool_name, .tool_id, .parameters
-response.stop_reason   # str | None
-response.usage         # TokenUsage | None
+response.tool_calls  # list[ToolCall] -- each has .tool_name, .tool_id, .parameters
+response.stop_reason  # str | None
+response.usage  # TokenUsage | None
 ```
 
 **StructuredResponse** -- JSON-schema-constrained output:
 
 ```python
 response.structured_output  # dict[str, Any] -- parsed JSON
-response.raw_output         # str -- raw model text
-response.usage              # TokenUsage | None
+response.raw_output  # str -- raw model text
+response.usage  # TokenUsage | None
 ```
 
 **NativeResponse** -- complete model output:
 
 ```python
 response.text_content  # str
-response.thinking      # list[ThinkingResponse] -- reasoning blocks
-response.tool_calls    # list[ToolCall]
-response.usage         # TokenUsage | None
+response.thinking  # list[ThinkingResponse] -- reasoning blocks
+response.tool_calls  # list[ToolCall]
+response.usage  # TokenUsage | None
 ```
 
 **TokenUsage** -- token accounting:
 
 ```python
-usage.input_tokens                  # int
-usage.output_tokens                 # int
-usage.cache_creation_input_tokens   # int (Anthropic prompt caching)
-usage.cache_read_input_tokens       # int
-usage.total_tokens                  # property: input + output
+usage.input_tokens  # int
+usage.output_tokens  # int
+usage.cache_creation_input_tokens  # int (Anthropic prompt caching)
+usage.cache_read_input_tokens  # int
+usage.total_tokens  # property: input + output
 ```
 
 ### ProviderRegistry
@@ -366,13 +376,13 @@ All providers raise consistent exceptions from `quartermaster_providers.exceptio
 
 ```python
 from quartermaster_providers.exceptions import (
-    ProviderError,          # Base exception (has .provider, .status_code)
-    AuthenticationError,    # Invalid/missing API key (401)
-    RateLimitError,         # Rate limited (429, has .retry_after)
-    InvalidModelError,      # Model not available (404, has .model)
-    InvalidRequestError,    # Malformed request (400)
-    ContentFilterError,     # Blocked by safety filter (400)
-    ContextLengthError,     # Input exceeds context window (400)
+    ProviderError,  # Base exception (has .provider, .status_code)
+    AuthenticationError,  # Invalid/missing API key (401)
+    RateLimitError,  # Rate limited (429, has .retry_after)
+    InvalidModelError,  # Model not available (404, has .model)
+    InvalidRequestError,  # Malformed request (400)
+    ContentFilterError,  # Blocked by safety filter (400)
+    ContextLengthError,  # Input exceeds context window (400)
     ServiceUnavailableError,  # Provider temporarily down (503)
 )
 ```
@@ -385,10 +395,12 @@ Use `MockProvider` for unit tests without real API calls:
 from quartermaster_providers import LLMConfig, TokenResponse
 from quartermaster_providers.testing import MockProvider
 
-mock = MockProvider(responses=[
-    TokenResponse(content="Paris", stop_reason="end_turn"),
-    TokenResponse(content="Berlin", stop_reason="end_turn"),
-])
+mock = MockProvider(
+    responses=[
+        TokenResponse(content="Paris", stop_reason="end_turn"),
+        TokenResponse(content="Berlin", stop_reason="end_turn"),
+    ]
+)
 
 config = LLMConfig(model="mock", provider="mock")
 

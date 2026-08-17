@@ -61,7 +61,7 @@ import quartermaster_sdk as qm
 
 qm.configure(
     provider="ollama",
-    base_url="http://localhost:11434",   # or set $OLLAMA_HOST
+    base_url="http://localhost:11434",  # or set $OLLAMA_HOST
     default_model="gemma4:26b",
 )
 
@@ -79,9 +79,11 @@ reply = qm.instruction(system="Respond in Slovenian.", user="Pozdravljen!")
 # prompt → Pydantic model (typed JSON extraction)
 from pydantic import BaseModel
 
+
 class Classification(BaseModel):
     category: str
     priority: str
+
 
 data = qm.instruction_form(Classification, system="Classify.", user=email_body)
 ```
@@ -95,8 +97,8 @@ graph = (
     .instruction_form(CustomerData, system="Extract.", capture_as="data")
 )
 result = qm.run(graph, "VT-Treyd Slovenija")
-result["notes"].output_text    # agent's free-text research
-result["data"].output_text     # extracted JSON
+result["notes"].output_text  # agent's free-text research
+result["data"].output_text  # extracted JSON
 ```
 
 ## Streaming (v0.3.0 filtered iterators)
@@ -145,12 +147,12 @@ carries a structured `Trace` built from the full `FlowEvent` stream:
 ```python
 result = qm.run(graph, "Hello!")
 
-result.trace.text                        # concatenated model output
-result.trace.tool_calls                  # list[dict] across every agent node
-result.trace.progress                    # list[ProgressEvent]
-result.trace.custom(name="source_found") # filtered CustomEvent list
+result.trace.text  # concatenated model output
+result.trace.tool_calls  # list[dict] across every agent node
+result.trace.progress  # list[ProgressEvent]
+result.trace.custom(name="source_found")  # filtered CustomEvent list
 result.trace.by_node["Researcher"].text  # tokens for a single node
-print(result.trace.as_jsonl())           # JSONL export for logs / fixtures
+print(result.trace.as_jsonl())  # JSONL export for logs / fixtures
 ```
 
 ## Progress events from inside tools
@@ -162,9 +164,10 @@ the UI alongside model tokens:
 ```python
 from quartermaster_tools import tool
 
+
 @tool()
 def slow_research(topic: str) -> dict:
-    ctx = qm.current_context()      # None when called outside a flow -- safe
+    ctx = qm.current_context()  # None when called outside a flow -- safe
     if ctx is not None:
         ctx.emit_progress("Gathering sources", percent=0.25, topic=topic)
         ctx.emit_custom("source_found", {"url": "https://example.com"})
@@ -184,6 +187,7 @@ tools that were dispatched via `.agent(tools=[...])` in parallel.
 from django.http import StreamingHttpResponse
 import json
 import quartermaster_sdk as qm
+
 
 def enrich_sse(request):
     graph = build_enrichment_graph()
@@ -228,7 +232,7 @@ def long_list_orders() -> list[dict]:
     orders: list[dict] = []
     for i, row in enumerate(db.iter_orders()):
         if ctx and ctx.cancelled:
-            raise qm.Cancelled()      # propagates as ErrorChunk(cancelled)
+            raise qm.Cancelled()  # propagates as ErrorChunk(cancelled)
         if ctx and i % 25 == 0:
             ctx.emit_progress(f"Loaded {i} orders", percent=i / TOTAL)
         orders.append(row)
@@ -244,8 +248,8 @@ pip install 'quartermaster-sdk[telemetry]'
 ```python
 from quartermaster_sdk import telemetry
 
-telemetry.instrument()     # uses the global tracer provider
-qm.run(graph, "Hello!")    # every node + tool call is now a span
+telemetry.instrument()  # uses the global tracer provider
+qm.run(graph, "Hello!")  # every node + tool call is now a span
 ```
 
 Spans follow the OpenTelemetry GenAI semantic conventions
@@ -259,7 +263,9 @@ Honeycomb, Logfire, Phoenix, or any OTLP collector.
 agent = (
     qm.Graph("My Agent")
     .user("What can I help you with?")
-    .instruction("Respond", model="gpt-4o", system_instruction="You are a helpful assistant.")
+    .instruction(
+        "Respond", model="gpt-4o", system_instruction="You are a helpful assistant."
+    )
 )
 result = qm.run(agent, "How does photosynthesis work?")
 ```

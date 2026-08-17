@@ -527,8 +527,14 @@ class FlowRunner:
         if existing and existing.status.is_terminal and not self._is_loop_target(flow_id, node_id):
             return
 
-        # Create execution record
-        execution = NodeExecution(node_id=node_id)
+        # Create execution record. ErrorStrategy.RETRY re-dispatches with
+        # status PENDING and an incremented retry_count — keep that count
+        # or every attempt starts at 0 and recurses until RecursionError.
+        # Loop re-entry (terminal existing) starts a fresh budget.
+        retry_count = (
+            existing.retry_count if existing is not None and not existing.status.is_terminal else 0
+        )
+        execution = NodeExecution(node_id=node_id, retry_count=retry_count)
         execution.start()
         self.store.save_node_execution(flow_id, node_id, execution)
 
@@ -786,7 +792,16 @@ class FlowRunner:
         try:
             result = self._run_with_retry(executor, context, node, flow_id)
         except Exception as e:
-            return self._handle_node_error(flow_id, node, execution, str(e))
+            # Leave the except block before RETRY re-enters asyncio.run().
+            # Nested event loops while sys.exception() is still set chain
+            # ``__context__`` until pytest 9.1's unraisable hook RecursionErrors
+            # formatting the traceback.
+            error_msg = str(e)
+        else:
+            error_msg = None
+
+        if error_msg is not None:
+            return self._handle_node_error(flow_id, node, execution, error_msg)
 
         # Save output messages
         output_messages = list(messages)
@@ -873,7 +888,7 @@ class FlowRunner:
                 # the outer error handler runs.  Otherwise return the
                 # final result (success or failure) as-is.
                 if last_exc is not None:
-                    raise last_exc
+                    raise last_exc from None
                 return result
 
             # Decide whether to retry based on the predicate.  ``last_exc``
@@ -950,13 +965,13 @@ class FlowRunner:
         returns is too late: the loop is already gone and stderr prints
         ``RuntimeError: generator didn't stop after athrow()``.
         """
-        coro = executor.execute(context)
 
         async def _execute_then_aclose() -> NodeResult:
             try:
+                exec_coro = executor.execute(context)
                 if node.timeout is not None and node.timeout > 0:
-                    return await asyncio.wait_for(coro, timeout=node.timeout)
-                return await coro
+                    return await asyncio.wait_for(exec_coro, timeout=node.timeout)
+                return await exec_coro
             finally:
                 await self._aclose_provider_clients()
 

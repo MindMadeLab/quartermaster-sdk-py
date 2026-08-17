@@ -30,6 +30,7 @@ pip install quartermaster-mcp-client
 import asyncio
 from quartermaster_mcp_client import McpClient
 
+
 async def main():
     async with McpClient("http://localhost:8000/mcp") as client:
         # Get server info
@@ -44,6 +45,7 @@ async def main():
         # Call a tool
         result = await client.call_tool("weather", {"location": "San Francisco"})
         print(f"Result: {result}")
+
 
 asyncio.run(main())
 ```
@@ -76,6 +78,7 @@ from quartermaster_mcp_client.errors import (
     McpServerError,
 )
 
+
 async def main():
     try:
         async with McpClient("http://localhost:8000/mcp", timeout=10.0) as client:
@@ -91,6 +94,7 @@ async def main():
     except McpServerError as e:
         print(f"Server error (code {e.code}): {e}")
 
+
 asyncio.run(main())
 ```
 
@@ -105,6 +109,7 @@ from quartermaster_tools import ToolRegistry, tool
 
 registry = ToolRegistry()
 
+
 # Register a local tool
 @registry.tool()
 def local_calculator(expression: str) -> dict:
@@ -115,6 +120,7 @@ def local_calculator(expression: str) -> dict:
     """
     return {"result": eval(expression)}
 
+
 # Discover and use MCP remote tools
 async def main():
     async with McpClient("http://localhost:8000/mcp") as client:
@@ -124,6 +130,7 @@ async def main():
 
         result = await client.call_tool("weather", {"location": "Berlin"})
         print(result)
+
 
 asyncio.run(main())
 ```
@@ -137,10 +144,10 @@ The main client class. Supports both async and sync context managers.
 ```python
 client = McpClient(
     url="http://localhost:8000/mcp",  # MCP server URL (http/https required)
-    transport="sse",       # "sse" (default) or "streamable"
-    timeout=30.0,          # Request timeout in seconds
-    max_retries=3,         # Retries on transient failures
-    auth_token="sk-...",   # Optional Bearer token
+    transport="sse",  # "sse" (default) or "streamable"
+    timeout=30.0,  # Request timeout in seconds
+    max_retries=3,  # Retries on transient failures
+    auth_token="sk-...",  # Optional Bearer token
     headers={"X-Custom": "value"},  # Additional HTTP headers
 )
 ```
@@ -180,10 +187,10 @@ Every async method has a sync counterpart with `_sync` suffix:
 ```python
 @dataclass
 class McpTool:
-    name: str                        # Tool identifier
-    description: str                 # Human-readable description
+    name: str  # Tool identifier
+    description: str  # Human-readable description
     parameters: list[ToolParameter]  # Parameter metadata
-    input_schema: dict[str, Any]     # Full JSON Schema
+    input_schema: dict[str, Any]  # Full JSON Schema
 ```
 
 **McpServerInfo** -- server metadata returned by `server_info()`:
@@ -191,9 +198,9 @@ class McpTool:
 ```python
 @dataclass
 class McpServerInfo:
-    name: str                     # Server name
-    version: str                  # Server version
-    protocol_version: str         # MCP protocol version
+    name: str  # Server name
+    version: str  # Server version
+    protocol_version: str  # MCP protocol version
     capabilities: dict[str, Any]  # Supported capabilities
 ```
 
@@ -203,7 +210,7 @@ class McpServerInfo:
 @dataclass
 class ToolParameter:
     name: str
-    type: str             # JSON Schema type (string, number, integer, boolean, etc.)
+    type: str  # JSON Schema type (string, number, integer, boolean, etc.)
     description: str
     required: bool = False
     default: Any = None
@@ -270,8 +277,8 @@ The client retries on `McpConnectionError` and `McpTimeoutError` with exponentia
 ```python
 client = McpClient(
     "http://localhost:8000/mcp",
-    timeout=60.0,      # 60-second timeout per request
-    max_retries=5,     # Up to 5 attempts on transient failures
+    timeout=60.0,  # 60-second timeout per request
+    max_retries=5,  # Up to 5 attempts on transient failures
 )
 ```
 

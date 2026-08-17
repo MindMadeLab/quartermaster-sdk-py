@@ -68,8 +68,10 @@ class FailingExecutor:
 
     def __init__(self, error: str = "Node execution failed") -> None:
         self._error = error
+        self.call_count = 0
 
     async def execute(self, context: ExecutionContext) -> NodeResult:
+        self.call_count += 1
         raise RuntimeError(self._error)
 
 
