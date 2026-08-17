@@ -266,13 +266,13 @@ When neither `AUTH_TOKEN` nor `CODE_RUNNER_API_KEYS` is set, authentication is d
 
 ```python
 from quartermaster_code_runner import (
-    CodeRunnerError,          # Base exception
-    DockerError,              # Docker communication failure
-    ExecutionError,           # Code execution failure
-    InvalidLanguageError,     # Unsupported runtime
-    ResourceExhaustedError,   # Resource limit exceeded
-    RuntimeNotAvailableError, # Runtime image not found
-    TimeoutError,             # Execution timeout
+    CodeRunnerError,  # Base exception
+    DockerError,  # Docker communication failure
+    ExecutionError,  # Code execution failure
+    InvalidLanguageError,  # Unsupported runtime
+    ResourceExhaustedError,  # Resource limit exceeded
+    RuntimeNotAvailableError,  # Runtime image not found
+    TimeoutError,  # Execution timeout
 )
 ```
 

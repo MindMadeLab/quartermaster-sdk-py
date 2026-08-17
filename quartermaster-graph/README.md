@@ -41,11 +41,19 @@ from quartermaster_graph import Graph
 graph = (
     Graph("Customer Support Agent")
     .user("How can I help you?")
-    .instruction("Classify intent", model="gpt-4o", system_instruction="Classify the user's intent.")
+    .instruction(
+        "Classify intent", model="gpt-4o", system_instruction="Classify the user's intent."
+    )
     .decision("Route by intent", options=["billing", "technical", "general"])
-    .on("billing").instruction("Handle billing", model="gpt-4o").end()
-    .on("technical").instruction("Handle technical", model="gpt-4o").end()
-    .on("general").instruction("Handle general", model="gpt-4o").end()
+    .on("billing")
+    .instruction("Handle billing", model="gpt-4o")
+    .end()
+    .on("technical")
+    .instruction("Handle technical", model="gpt-4o")
+    .end()
+    .on("general")
+    .instruction("Handle general", model="gpt-4o")
+    .end()
     .end()
 )
 ```
@@ -58,8 +66,8 @@ from quartermaster_graph import GraphBuilder
 builder = GraphBuilder("My Agent")
 builder.instruction("Process", model="gpt-4o").end()
 
-spec = builder.build()       # returns GraphSpec
-spec = builder.to_graph()    # same thing
+spec = builder.build()  # returns GraphSpec
+spec = builder.to_graph()  # same thing
 ```
 
 ### Load a Graph from YAML
@@ -234,8 +242,12 @@ agent = (
     .instruction("Process", system_instruction="Improve the text")
     .var("Increment", variable="round", expression="round + 1")
     .if_node("Done?", expression="round > 3")
-    .on("true").text("Done", template="Complete").end()
-    .on("false").text("Continue", template="", show_output=False).end()
+    .on("true")
+    .text("Done", template="Complete")
+    .end()
+    .on("false")
+    .text("Continue", template="", show_output=False)
+    .end()
     .end()
 )
 agent.connect("Continue", "Header", label="loop")
@@ -280,8 +292,13 @@ schema = json_schema()
 
 ```python
 from quartermaster_graph import (
-    get_start_node, get_successors, get_predecessors,
-    get_path, topological_sort, find_merge_points, find_decision_points,
+    get_start_node,
+    get_successors,
+    get_predecessors,
+    get_path,
+    topological_sort,
+    find_merge_points,
+    find_decision_points,
 )
 
 start = get_start_node(agent_graph)

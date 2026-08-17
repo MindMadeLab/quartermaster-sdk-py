@@ -47,6 +47,7 @@ The `@tool()` decorator is the primary way to define tools. It extracts paramete
 ```python
 from quartermaster_tools import tool
 
+
 @tool()
 def analyze_sentiment(text: str, language: str = "en") -> dict:
     """Analyze text sentiment.
@@ -60,6 +61,7 @@ def analyze_sentiment(text: str, language: str = "en") -> dict:
     # Your sentiment logic here
     return {"sentiment": "positive", "score": 0.92}
 
+
 # Call it like a normal function
 result = analyze_sentiment(text="I love this product!")
 
@@ -68,8 +70,10 @@ tool_result = analyze_sentiment.run(text="I love this product!")
 print(tool_result.data)  # {"sentiment": "positive", "score": 0.92}
 
 # Introspect metadata
-print(analyze_sentiment.name())        # "analyze_sentiment"
-print(analyze_sentiment.parameters())  # [ToolParameter(name="text", ...), ToolParameter(name="language", ...)]
+print(analyze_sentiment.name())  # "analyze_sentiment"
+print(
+    analyze_sentiment.parameters()
+)  # [ToolParameter(name="text", ...), ToolParameter(name="language", ...)]
 
 # Export JSON Schema for LLM function calling
 schema = analyze_sentiment.info().to_input_schema()
@@ -79,8 +83,7 @@ You can override the tool name and description:
 
 ```python
 @tool(name="sentiment_v2", description="Advanced sentiment analysis")
-def analyze(text: str) -> dict:
-    ...
+def analyze(text: str) -> dict: ...
 ```
 
 ### Using the Tool Registry
@@ -97,6 +100,7 @@ registry.register(ReadFileTool)
 registry.register(WriteFileTool)
 registry.register(WebRequestTool)
 
+
 # Or use the registry's own @tool decorator to create and register in one step
 @registry.tool()
 def summarize(text: str, max_length: int = 100) -> dict:
@@ -107,6 +111,7 @@ def summarize(text: str, max_length: int = 100) -> dict:
         max_length: Maximum length of the summary.
     """
     return {"summary": text[:max_length]}
+
 
 # Lookup by name (returns latest version)
 reader = registry.get("read_file")
@@ -128,28 +133,30 @@ json_schemas = registry.to_json_schema()
 ```python
 from quartermaster_tools import Chain, Handler
 
+
 class ValidateInput(Handler):
     def handle(self, data: dict) -> dict:
         if "query" not in data:
             raise ValueError("Missing required field: query")
         return data
 
+
 class NormalizeText(Handler):
     def handle(self, data: dict) -> dict:
         data["query"] = data["query"].strip().lower()
         return data
 
+
 class AddTimestamp(Handler):
     def handle(self, data: dict) -> dict:
         from datetime import datetime
+
         data["timestamp"] = datetime.now().isoformat()
         return data
 
+
 chain = (
-    Chain()
-    .add_handler(ValidateInput())
-    .add_handler(NormalizeText())
-    .add_handler(AddTimestamp())
+    Chain().add_handler(ValidateInput()).add_handler(NormalizeText()).add_handler(AddTimestamp())
 )
 
 result = chain.run({"query": "  Hello World  "})
@@ -163,6 +170,7 @@ For cases where you need full control over tool construction (e.g., custom valid
 ```python
 from quartermaster_tools import AbstractTool, ToolDescriptor, ToolParameter, ToolResult
 
+
 class DatabaseQueryTool(AbstractTool):
     def __init__(self, connection_string: str):
         self._conn = connection_string
@@ -172,7 +180,9 @@ class DatabaseQueryTool(AbstractTool):
 
     def parameters(self) -> list[ToolParameter]:
         return [
-            ToolParameter(name="sql", description="SQL query to execute", type="string", required=True),
+            ToolParameter(
+                name="sql", description="SQL query to execute", type="string", required=True
+            ),
         ]
 
     def info(self) -> ToolDescriptor:
@@ -188,6 +198,7 @@ class DatabaseQueryTool(AbstractTool):
         sql = kwargs.get("sql", "")
         # Execute query...
         return ToolResult(success=True, data={"rows": []})
+
 
 tool = DatabaseQueryTool(connection_string="sqlite:///mydb.db")
 result = tool.safe_run(sql="SELECT * FROM users LIMIT 10")
@@ -364,9 +375,10 @@ All built-in tools are `FunctionTool` instances created with `@tool()`. The `*To
 ```python
 from quartermaster_tools import register_tool, get_default_registry, AbstractTool
 
+
 @register_tool
-class MyTool(AbstractTool):
-    ...
+class MyTool(AbstractTool): ...
+
 
 # The tool is automatically registered in the default registry
 registry = get_default_registry()

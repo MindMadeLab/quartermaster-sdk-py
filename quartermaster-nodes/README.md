@@ -69,6 +69,7 @@ from quartermaster_nodes.enums import (
     AvailableMessageTypes,
 )
 
+
 class HttpRequestNode(AbstractAssistantNode):
     """Fetch data from an HTTP endpoint."""
 
@@ -100,6 +101,7 @@ class HttpRequestNode(AbstractAssistantNode):
     @classmethod
     def think(cls, ctx) -> None:
         import urllib.request
+
         url = cls.get_metadata_key_value(ctx, "url", "")
         method = cls.get_metadata_key_value(ctx, "method", "GET")
 
@@ -116,6 +118,7 @@ Nodes are framework-agnostic. Implement the `NodeContext` protocol to integrate 
 
 ```python
 from quartermaster_nodes.protocols import NodeContext
+
 
 class MyRuntimeContext:
     """Adapts your runtime to the NodeContext protocol."""
@@ -151,6 +154,7 @@ class MyRuntimeContext:
     @property
     def chat_id(self):
         return None
+
 
 # Execute a node
 ctx = MyRuntimeContext(node_config, thought)
@@ -319,8 +323,10 @@ result = chain.run({"memory_id": thought_id, "flow_node_id": node_id, "ctx": ctx
 Enums are re-exported from quartermaster-graph for consistency:
 
 ```python
-from quartermaster_nodes.enums import AvailableNodeTypes  # Alias for quartermaster_graph.enums.NodeType
-from quartermaster_graph.enums import NodeType             # Canonical source
+from quartermaster_nodes.enums import (
+    AvailableNodeTypes,
+)  # Alias for quartermaster_graph.enums.NodeType
+from quartermaster_graph.enums import NodeType  # Canonical source
 ```
 
 ### With quartermaster-engine (execution runtime)

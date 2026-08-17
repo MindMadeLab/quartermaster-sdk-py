@@ -190,13 +190,15 @@ class TestErrorStrategyRetry:
             start,
         )
 
+        failing = FailingExecutor("always")
         registry = SimpleNodeRegistry()
-        registry.register(NodeType.INSTRUCTION.value, FailingExecutor("always"))
+        registry.register(NodeType.INSTRUCTION.value, failing)
 
         runner = FlowRunner(graph=graph, node_registry=registry)
         result = runner.run("retry exhaust")
 
         assert not result.success
+        assert failing.call_count == 3  # 1 initial + max_retries=2
 
     def test_retry_recovers_after_transient_failure(self):
         """Node fails twice then succeeds on third attempt."""
