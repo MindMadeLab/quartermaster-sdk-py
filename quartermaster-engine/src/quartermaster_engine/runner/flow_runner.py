@@ -910,12 +910,24 @@ class FlowRunner:
         If the node has a ``timeout`` set (in seconds), execution is wrapped
         in ``asyncio.wait_for`` so that a ``TimeoutError`` is raised when the
         node exceeds its time budget.
+
+        After the executor coroutine finishes — still on the live loop —
+        we ``aclose()`` the provider registry so ``openai.AsyncOpenAI`` /
+        ``httpx.AsyncClient`` drain httpcore2's async connection-pool
+        generator *before* ``asyncio.run()`` calls
+        ``loop.shutdown_asyncgens()``. Closing after ``asyncio.run()``
+        returns is too late: the loop is already gone and stderr prints
+        ``RuntimeError: generator didn't stop after athrow()``.
         """
         coro = executor.execute(context)
 
-        # Wrap with timeout if configured
-        if node.timeout is not None and node.timeout > 0:
-            coro = asyncio.wait_for(coro, timeout=node.timeout)
+        async def _execute_then_aclose() -> NodeResult:
+            try:
+                if node.timeout is not None and node.timeout > 0:
+                    return await asyncio.wait_for(coro, timeout=node.timeout)
+                return await coro
+            finally:
+                await self._aclose_provider_clients()
 
         try:
             loop = asyncio.get_running_loop()
@@ -936,12 +948,35 @@ class FlowRunner:
                 ctx_snapshot = contextvars.copy_context()
 
                 def _worker() -> NodeResult:
-                    return asyncio.run(coro)
+                    return asyncio.run(_execute_then_aclose())
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                     future = pool.submit(ctx_snapshot.run, _worker)
                     return future.result(timeout=node.timeout)
-            return asyncio.run(coro)
+            return asyncio.run(_execute_then_aclose())
+
+    async def _aclose_provider_clients(self) -> None:
+        """Close HTTP clients for the current loop while it is still running.
+
+        Duck-typed so a runner constructed with only a ``node_registry``
+        (no ``provider_registry``) is a no-op. Failures are logged and
+        swallowed — this is a ``finally`` path.
+        """
+        registry = getattr(self, "provider_registry", None)
+        if registry is None:
+            return
+        aclose = getattr(registry, "aclose", None)
+        if not callable(aclose):
+            return
+        try:
+            result = aclose()
+            if hasattr(result, "__await__"):
+                await result
+        except Exception:
+            logger.debug(
+                "FlowRunner: provider registry aclose() failed",
+                exc_info=True,
+            )
 
     def _handle_node_error(
         self,
