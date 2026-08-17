@@ -769,9 +769,16 @@ class OpenAIProvider(AbstractLLMProvider):
                     # Some OpenAI-compatible reasoning models leave content
                     # empty and place the answer in a ``reasoning`` field.
                     content = _extract_reasoning_text(choice.message)
+                usage = None
+                if response.usage:
+                    usage = TokenUsage(
+                        input_tokens=response.usage.prompt_tokens,
+                        output_tokens=response.usage.completion_tokens,
+                    )
                 return TokenResponse(
                     content=content,
                     stop_reason=choice.finish_reason,
+                    usage=usage,
                 )
         except (AuthenticationError, RateLimitError, ProviderError):
             raise
@@ -823,6 +830,10 @@ class OpenAIProvider(AbstractLLMProvider):
                         yield TokenResponse(
                             content="",
                             stop_reason="usage",
+                            usage=TokenUsage(
+                                input_tokens=chunk.usage.prompt_tokens,
+                                output_tokens=chunk.usage.completion_tokens,
+                            ),
                         )
                     if should_cancel():
                         # Close the openai AsyncStream (→ httpx response)

@@ -25,6 +25,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, Union
 
+from quartermaster_providers.types import TokenUsage
+
 if TYPE_CHECKING:
     from ._result import Result
 
@@ -127,9 +129,16 @@ class CustomChunk:
 
 @dataclass
 class DoneChunk:
-    """The flow finished — carries the final :class:`Result`."""
+    """The flow finished — carries the final :class:`Result`.
+
+    ``usage`` is provider token usage when an LLM node reported it,
+    else ``None``. Never estimated from SSE event counts. Equivalent
+    to ``result.usage``; duplicated here so stream consumers can read
+    the terminal chunk without digging into ``Result``.
+    """
 
     result: Result
+    usage: TokenUsage | None = None
     type: Literal["done"] = "done"
 
 

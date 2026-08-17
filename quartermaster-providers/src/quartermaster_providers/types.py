@@ -9,32 +9,6 @@ from typing import Any, Protocol, TypedDict
 
 
 @dataclass
-class TokenResponse:
-    """A single token or chunk of response content.
-
-    Attributes:
-        content: The text content of this response chunk.
-        stop_reason: Why the response stopped ('end_turn', 'max_tokens', 'tool_use', etc.).
-    """
-
-    content: str
-    stop_reason: str | None = None
-
-
-@dataclass
-class ThinkingResponse:
-    """Extended thinking/reasoning content from models like Claude.
-
-    Attributes:
-        thinking: The internal reasoning/thinking text.
-        type: Type of thinking block ('thinking', 'planning', etc.).
-    """
-
-    thinking: str
-    type: str = "thinking"
-
-
-@dataclass
 class TokenUsage:
     """Token usage statistics for a response.
 
@@ -59,6 +33,38 @@ class TokenUsage:
     def total_input_tokens(self) -> int:
         """Total input tokens including cache creation."""
         return self.input_tokens + self.cache_creation_input_tokens
+
+
+@dataclass
+class TokenResponse:
+    """A single token or chunk of response content.
+
+    Attributes:
+        content: The text content of this response chunk.
+        stop_reason: Why the response stopped ('end_turn', 'max_tokens',
+            'tool_use', 'usage', etc.).
+        usage: Token usage when this chunk carries it. Streaming providers
+            that honour ``stream_options.include_usage`` attach usage on
+            a trailing chunk (typically ``stop_reason="usage"``) rather
+            than inventing counts. ``None`` when the provider omitted it.
+    """
+
+    content: str
+    stop_reason: str | None = None
+    usage: TokenUsage | None = None
+
+
+@dataclass
+class ThinkingResponse:
+    """Extended thinking/reasoning content from models like Claude.
+
+    Attributes:
+        thinking: The internal reasoning/thinking text.
+        type: Type of thinking block ('thinking', 'planning', etc.).
+    """
+
+    thinking: str
+    type: str = "thinking"
 
 
 class ToolParameter(TypedDict, total=False):

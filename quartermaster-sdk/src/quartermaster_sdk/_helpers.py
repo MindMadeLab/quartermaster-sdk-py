@@ -179,6 +179,12 @@ def instruction(
     Returns:
         The assistant's reply as a plain ``str``.  Raises
         ``RuntimeError`` when the underlying flow fails.
+
+    Token usage is not attached to this return value (it stays a
+    ``str``). Use ``qm.run(Graph.instruction(...), user)`` and read
+    ``result.usage`` (``input_tokens`` / ``output_tokens``) when you
+    need provider counts. Streaming via ``qm.run.stream`` puts the
+    same usage on the terminal :class:`~quartermaster_sdk.DoneChunk`.
     """
     resolved_model = model or get_default_model()
     if not resolved_model:

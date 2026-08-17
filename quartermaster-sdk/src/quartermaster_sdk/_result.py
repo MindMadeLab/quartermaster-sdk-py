@@ -11,7 +11,9 @@ if r.node_type == NodeType.INSTRUCTION_FORM: ...``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from quartermaster_providers.types import TokenUsage
 
 from ._trace import Trace
 
@@ -51,6 +53,11 @@ class Result:
         error: Concatenated error messages from any failed node, or
             ``None`` on success.
         duration_seconds: Wall-clock time the flow took to execute.
+        usage: Aggregated provider token usage (``input_tokens`` /
+            ``output_tokens``) when an LLM node reported it, else
+            ``None``. Never estimated. ``qm.instruction()`` still
+            returns a plain ``str``; use ``qm.run(graph)`` to read
+            ``result.usage``.
         trace: Structured :class:`Trace` carrying every
             :class:`FlowEvent` emitted during the run — tokens, tool
             calls, progress, custom events, per-node buckets, and a
@@ -69,6 +76,7 @@ class Result:
     success: bool = True
     error: str | None = None
     duration_seconds: float = 0.0
+    usage: TokenUsage | None = None
     trace: Trace = field(default_factory=Trace)
     raw: FlowResult | None = None
 
@@ -95,8 +103,45 @@ class Result:
             success=fr.success,
             error=fr.error,
             duration_seconds=fr.duration_seconds,
+            usage=_usage_from_flow_result(fr),
             raw=fr,
         )
+
+
+def _parse_usage(raw: Any) -> TokenUsage | None:
+    """Coerce NodeResult/FlowResult usage into :class:`TokenUsage`.
+
+    Returns ``None`` when usage is missing or incomplete — never fills
+    zeros for absent counts.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, TokenUsage):
+        return raw
+    if isinstance(raw, dict):
+        inp = raw.get("input_tokens")
+        out = raw.get("output_tokens")
+        if isinstance(inp, int) and isinstance(out, int):
+            return TokenUsage(input_tokens=inp, output_tokens=out)
+    return None
+
+
+def _usage_from_flow_result(fr: FlowResult) -> TokenUsage | None:
+    """Prefer the engine's aggregated ``FlowResult.usage``, else sum nodes."""
+    parsed = _parse_usage(getattr(fr, "usage", None))
+    if parsed is not None:
+        return parsed
+    parts: list[TokenUsage] = []
+    for nr in (fr.node_results or {}).values():
+        node_parsed = _parse_usage((nr.data or {}).get("usage"))
+        if node_parsed is not None:
+            parts.append(node_parsed)
+    if not parts:
+        return None
+    return TokenUsage(
+        input_tokens=sum(p.input_tokens for p in parts),
+        output_tokens=sum(p.output_tokens for p in parts),
+    )
 
 
 __all__ = ["Result", "format_missing_capture_error"]
