@@ -306,7 +306,7 @@ All built-in tools are `FunctionTool` instances created with `@tool()`. The `*To
 | **Web Search** | `duckduckgo_search` | Search the web via DuckDuckGo HTML (no API key needed) |
 | **Web Search** | `brave_search` | Search the web via Brave Search API (requires BRAVE_API_KEY) |
 | **Web Search** | `google_search` | Search the web via Google Custom Search API |
-| **Web Search** | `web_scraper` | Fetch a web page and return content as text, markdown, or HTML |
+| **Web Search** | `web_scraper` | Fetch a page as text/markdown/HTML; same-host redirects only; `max_chars` truncation |
 | **Web Search** | `json_api` | Call a JSON API with optional JMESPath response filtering |
 | **Vector/RAG** | `embed_text` | Generate text embeddings (built-in hash-based or sentence-transformers) |
 | **Vector/RAG** | `vector_store` | Store text with vector embeddings in memory or JSON files |
