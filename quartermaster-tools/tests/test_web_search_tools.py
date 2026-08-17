@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import json
 import sys
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from quartermaster_tools.builtin.web_search.duckduckgo import duckduckgo_search
 from quartermaster_tools.builtin.web_search.json_api import json_api
 from quartermaster_tools.builtin.web_search.scraper import web_scraper
-from quartermaster_tools.types import ToolResult
 
 
 # ---------------------------------------------------------------------------
@@ -328,6 +325,134 @@ class TestWebScraperTool:
                 sys.modules["httpx"] = httpx_mod
             else:
                 sys.modules.pop("httpx", None)
+
+    def test_markdown_nested_lists_and_tables(self) -> None:
+        html = """
+        <html><body>
+          <ul>
+            <li>Item 1
+              <ul><li>Nested</li></ul>
+            </li>
+            <li>Item 2</li>
+          </ul>
+          <table>
+            <tr><th>Name</th><th>Age</th></tr>
+            <tr><td>Alice</td><td>30</td></tr>
+          </table>
+        </body></html>
+        """
+        mock_httpx = _make_mock_httpx()
+        mock_response = _make_mock_response(text=html)
+        _mock_client(mock_httpx, mock_response)
+
+        sys.modules["httpx"] = mock_httpx
+        try:
+            result = web_scraper.run(url="https://example.com", output_format="markdown")
+            assert result.success is True
+            content = result.data["content"]
+            assert "- Item 1" in content
+            assert "- Nested" in content
+            assert "- Item 2" in content
+            assert "| Name | Age |" in content
+            assert "| Alice | 30 |" in content
+        finally:
+            sys.modules.pop("httpx", None)
+
+    def test_script_and_style_stripped(self) -> None:
+        html = (
+            "<html><head><style>.x { color: red }</style></head>"
+            "<body><p>Visible</p><script>alert(1)</script><!--secret--></body></html>"
+        )
+        mock_httpx = _make_mock_httpx()
+        mock_response = _make_mock_response(text=html)
+        _mock_client(mock_httpx, mock_response)
+
+        sys.modules["httpx"] = mock_httpx
+        try:
+            for fmt in ("text", "markdown"):
+                result = web_scraper.run(url="https://example.com", output_format=fmt)
+                assert result.success is True
+                content = result.data["content"]
+                assert "Visible" in content
+                assert "alert(1)" not in content
+                assert "color: red" not in content
+                assert "secret" not in content
+        finally:
+            sys.modules.pop("httpx", None)
+
+    def test_follows_same_host_www_redirect(self) -> None:
+        redirect = _make_mock_response(
+            status_code=301,
+            headers={"location": "https://www.example.com/page"},
+        )
+        final = _make_mock_response(
+            text="<html><body><p>Arrived</p></body></html>",
+            url="https://www.example.com/page",
+        )
+        mock_httpx = _make_mock_httpx()
+        client = MagicMock()
+        client.__enter__ = MagicMock(return_value=client)
+        client.__exit__ = MagicMock(return_value=False)
+        client.get.side_effect = [redirect, final]
+        mock_httpx.Client.return_value = client
+
+        sys.modules["httpx"] = mock_httpx
+        try:
+            result = web_scraper.run(url="https://example.com/page")
+
+            assert result.success is True
+            assert "Arrived" in result.data["content"]
+            assert mock_httpx.Client.call_args.kwargs.get("follow_redirects") is False
+            assert client.get.call_count == 2
+            assert client.get.call_args_list[0].args[0] == "https://example.com/page"
+            assert client.get.call_args_list[1].args[0] == "https://www.example.com/page"
+        finally:
+            sys.modules.pop("httpx", None)
+
+    def test_rejects_cross_host_redirect(self) -> None:
+        redirect = _make_mock_response(
+            status_code=302,
+            headers={"location": "https://evil.example/steal"},
+        )
+        mock_httpx = _make_mock_httpx()
+        client = _mock_client(mock_httpx, redirect)
+
+        sys.modules["httpx"] = mock_httpx
+        try:
+            result = web_scraper.run(url="https://example.com/page")
+
+            assert result.success is False
+            error = result.error
+            assert "redirect" in error.lower()
+            assert "https://example.com/page" in error
+            assert "https://evil.example/steal" in error
+            assert "302" in error
+            assert client.get.call_count == 1
+            fetched = client.get.call_args_list[0].args[0]
+            assert "evil.example" not in fetched
+        finally:
+            sys.modules.pop("httpx", None)
+
+    def test_max_chars_truncates_converted_text(self) -> None:
+        html = "<html><body><p>" + ("x" * 500) + "</p></body></html>"
+        mock_httpx = _make_mock_httpx()
+        mock_response = _make_mock_response(text=html)
+        _mock_client(mock_httpx, mock_response)
+
+        sys.modules["httpx"] = mock_httpx
+        try:
+            result = web_scraper.run(
+                url="https://example.com",
+                output_format="text",
+                max_chars=50,
+            )
+            assert result.success is True
+            content = result.data["content"]
+            assert "[truncated]" in content
+            assert len(content) <= 50
+            assert result.data["content_length"] == len(content)
+        finally:
+            sys.modules.pop("httpx", None)
 
 
 # ---------------------------------------------------------------------------
