@@ -6,11 +6,14 @@ inference based on model name patterns.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
 from quartermaster_providers.base import AbstractLLMProvider
 from quartermaster_providers.exceptions import InvalidModelError, ProviderError
+
+logger = logging.getLogger(__name__)
 
 # Model name patterns mapped to provider names
 MODEL_PATTERNS: list[tuple[str, str]] = [
@@ -399,6 +402,60 @@ class ProviderRegistry:
     def default_provider(self) -> str | None:
         """Name of the catch-all fallback provider, if one is configured."""
         return self._default_provider
+
+    async def aclose(self) -> None:
+        """Close HTTP clients on every instantiated provider for this loop.
+
+        Safe to call when no providers have been created yet. Providers
+        that do not override :meth:`AbstractLLMProvider.aclose` no-op.
+        Nested ``qm.run()`` clients on other live loops are left open
+        (each provider's ``aclose`` is loop-scoped).
+        """
+        for provider in list(self._providers.values()):
+            aclose = getattr(provider, "aclose", None)
+            if not callable(aclose):
+                continue
+            try:
+                result = aclose()
+                if hasattr(result, "__await__"):
+                    await result
+            except Exception:
+                logger.debug(
+                    "ProviderRegistry.aclose: %s.aclose() failed",
+                    type(provider).__name__,
+                    exc_info=True,
+                )
+
+    def close(self) -> None:
+        """Synchronous wrapper around :meth:`aclose`.
+
+        Must not be called from a running event loop — use
+        ``await aclose()`` there instead.
+        """
+        import asyncio
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None and loop.is_running():
+            raise RuntimeError(
+                "ProviderRegistry.close() cannot be called from a running "
+                "event loop; use `await registry.aclose()` instead."
+            )
+        asyncio.run(self.aclose())
+
+    async def __aenter__(self) -> ProviderRegistry:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.aclose()
+
+    def __enter__(self) -> ProviderRegistry:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
 
 
 # Global default registry

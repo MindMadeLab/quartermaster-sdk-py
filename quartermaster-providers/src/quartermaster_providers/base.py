@@ -6,7 +6,7 @@ from AbstractLLMProvider and implement its abstract methods.
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, AsyncIterator, TypeVar
+from typing import Any, AsyncIterator, Self, TypeVar
 
 from quartermaster_providers.config import LLMConfig
 from quartermaster_providers.types import (
@@ -309,6 +309,49 @@ class AbstractLLMProvider(ABC):
         # Only read_timeout set → a scalar is sufficient and keeps the
         # code path simple for providers that don't need the split.
         return float(read)
+
+    async def aclose(self) -> None:
+        """Release HTTP clients and connection pools held by this provider.
+
+        Default is a no-op. Providers that cache ``httpx.AsyncClient`` /
+        SDK clients (OpenAI, OpenAI-compatible, …) override this to
+        ``await client.close()`` **while the creating event loop is still
+        running**. Call this before ``asyncio.run()`` returns; otherwise
+        httpcore2 logs ``RuntimeError: generator didn't stop after athrow()``
+        during ``loop.shutdown_asyncgens()``.
+        """
+        return None
+
+    def close(self) -> None:
+        """Synchronous wrapper around :meth:`aclose`.
+
+        Must not be called from a running event loop — use
+        ``await aclose()`` there instead.
+        """
+        import asyncio
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None and loop.is_running():
+            raise RuntimeError(
+                f"{type(self).__name__}.close() cannot be called from a "
+                "running event loop; use `await provider.aclose()` instead."
+            )
+        asyncio.run(self.aclose())
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.aclose()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
 
     def estimate_cost(
         self,

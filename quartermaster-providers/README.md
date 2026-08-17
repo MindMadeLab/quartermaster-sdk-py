@@ -242,12 +242,15 @@ config = LLMConfig(
     vision=False,               # Enable image understanding
     thinking_enabled=False,     # Extended thinking (Claude, o-series)
     thinking_budget=None,       # Max thinking tokens
+    extra_body=None,            # OpenAI-compat passthrough (vLLM chat_template_kwargs, ...)
     top_p=None,                 # Nucleus sampling
     top_k=None,                 # Top-k sampling
     frequency_penalty=None,     # Frequency penalty (OpenAI)
     presence_penalty=None,      # Presence penalty (OpenAI)
 )
 ```
+
+On OpenAI-compatible providers (vLLM, Ollama, LM Studio, `openai-compatible`), `thinking_enabled=False` (`thinking_level="off"`) is mapped to `extra_body.chat_template_kwargs.enable_thinking=false`. Qwen3.6-style chat templates enable thinking by default and ignore a top-level `enable_thinking` field. Official OpenAI does **not** get this mapping — that would attach `extra_body` to every ChatGPT request. Explicit `extra_body.chat_template_kwargs.enable_thinking` still wins.
 
 ### AbstractLLMProvider Methods
 

@@ -169,6 +169,11 @@ class MockProvider(AbstractLLMProvider):
             prefix = " " if i > 0 else ""
             yield TokenResponse(content=prefix + word)
         yield TokenResponse(content="", stop_reason=resp.stop_reason or "end_turn")
+        # Honour stream_options.include_usage: when the canned response
+        # carries TokenUsage, emit it on a trailing chunk so instruction
+        # / stream consumers can surface real counts. Never invent them.
+        if resp.usage is not None:
+            yield TokenResponse(content="", stop_reason="usage", usage=resp.usage)
 
     async def generate_tool_parameters(
         self,

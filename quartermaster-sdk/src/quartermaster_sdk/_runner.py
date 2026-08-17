@@ -808,7 +808,7 @@ class _RunCallable:
             trace_events,
             duration_seconds=fr.duration_seconds or elapsed,
         )
-        yield DoneChunk(result=result)
+        yield DoneChunk(result=result, usage=result.usage)
 
 
 def _event_to_chunk(event: FlowEvent) -> Chunk | None:

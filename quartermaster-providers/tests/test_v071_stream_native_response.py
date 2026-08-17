@@ -323,3 +323,41 @@ class TestDefaultBaseImplementation:
         assert seen == ["hello world"]
         assert result.text_content == "hello world"
         assert len(result.tool_calls) == 1
+
+
+class TestGenerateTextStreamUsage:
+    """``generate_text_response`` must put real counts on the trailing
+    usage chunk instead of yielding an empty ``stop_reason="usage"``
+    TokenResponse (the leak that made instruction/stream omit tokens).
+    """
+
+    def test_stream_text_usage_chunk_carries_counts(self) -> None:
+        chunks = [
+            _content_delta("hi", finish_reason="stop"),
+            _usage_chunk(input_tokens=42, output_tokens=7),
+        ]
+        provider, _client = _provider_with_chunks(chunks)
+        config = LLMConfig(model="gpt-4o", provider="openai", stream=True)
+
+        async def _drain():
+            stream = await provider.generate_text_response("hi", config)
+            return [c async for c in stream]
+
+        responses = asyncio.run(_drain())
+        usage_chunks = [c for c in responses if c.usage is not None]
+        assert len(usage_chunks) == 1
+        assert usage_chunks[0].usage.input_tokens == 42
+        assert usage_chunks[0].usage.output_tokens == 7
+        assert usage_chunks[0].stop_reason == "usage"
+
+    def test_stream_text_omits_usage_when_provider_does(self) -> None:
+        chunks = [_content_delta("hi", finish_reason="stop")]
+        provider, _client = _provider_with_chunks(chunks)
+        config = LLMConfig(model="gpt-4o", provider="openai", stream=True)
+
+        async def _drain():
+            stream = await provider.generate_text_response("hi", config)
+            return [c async for c in stream]
+
+        responses = asyncio.run(_drain())
+        assert all(c.usage is None for c in responses)

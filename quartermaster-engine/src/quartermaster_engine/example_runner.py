@@ -436,6 +436,40 @@ def _build_llm_config(
     )
 
 
+def _usage_payload(usage: Any) -> dict[str, int] | None:
+    """Serialize provider TokenUsage into ``NodeResult.data["usage"]``.
+
+    Returns ``None`` when the provider omitted usage — never invents
+    token counts (decode benches must not fall back to fake tok/s).
+    Accepts a TokenUsage dataclass or a dict with ``input_tokens`` /
+    ``output_tokens`` ints.
+    """
+    if usage is None:
+        return None
+    if isinstance(usage, dict):
+        input_tokens = usage.get("input_tokens")
+        output_tokens = usage.get("output_tokens")
+    else:
+        input_tokens = getattr(usage, "input_tokens", None)
+        output_tokens = getattr(usage, "output_tokens", None)
+    if not isinstance(input_tokens, int) or not isinstance(output_tokens, int):
+        return None
+    return {"input_tokens": input_tokens, "output_tokens": output_tokens}
+
+
+def _accumulate_usage(current: dict[str, int] | None, incoming: Any) -> dict[str, int] | None:
+    """Sum two usage payloads. Missing sides are skipped, not zero-filled."""
+    payload = _usage_payload(incoming)
+    if payload is None:
+        return current
+    if current is None:
+        return payload
+    return {
+        "input_tokens": current["input_tokens"] + payload["input_tokens"],
+        "output_tokens": current["output_tokens"] + payload["output_tokens"],
+    }
+
+
 class LLMExecutor(NodeExecutor):
     """Calls a real LLM for Instruction, Summarize, and Agent (no-tool) nodes.
 
@@ -503,9 +537,13 @@ class LLMExecutor(NodeExecutor):
             with set_cancel_check(lambda: context.cancelled):
                 stream = await provider.generate_text_response(prompt, config, history=history)
                 chunks = []
+                usage_payload: dict[str, int] | None = None
                 async for token_response in stream:
                     if token_response.stop_reason == "cancelled":
                         break
+                    maybe_usage = _usage_payload(getattr(token_response, "usage", None))
+                    if maybe_usage is not None:
+                        usage_payload = maybe_usage
                     if token_response.content:
                         chunks.append(token_response.content)
                         context.emit_token(token_response.content)
@@ -515,9 +553,12 @@ class LLMExecutor(NodeExecutor):
             # role="assistant" with node_name=current node).
             round_num = context.memory.get("round_number")
             _append_to_conversation(conversation, node_name, text, round_num)
+            data: dict[str, Any] = {"memory_updates": {"__conversation__": conversation}}
+            if usage_payload is not None:
+                data["usage"] = usage_payload
             return NodeResult(
                 success=True,
-                data={"memory_updates": {"__conversation__": conversation}},
+                data=data,
                 output_text=text,
             )
         except Exception as e:
@@ -883,6 +924,7 @@ class AgentExecutor(NodeExecutor):
         iteration = 0
         requires_another_call = True
         hit_iteration_cap = False
+        accumulated_usage: dict[str, int] | None = None
 
         # Build the LLMConfig once: per-turn fields (system message, max
         # tokens, thinking budget, vision) don't change between iterations
@@ -933,6 +975,10 @@ class AgentExecutor(NodeExecutor):
                     exc,
                 )
                 return NodeResult(success=False, data={}, error=str(exc))
+
+            accumulated_usage = _accumulate_usage(
+                accumulated_usage, getattr(response, "usage", None)
+            )
 
             text_chunk = getattr(response, "text_content", "") or ""
             if text_chunk:
@@ -1188,6 +1234,9 @@ class AgentExecutor(NodeExecutor):
                 forced_text = getattr(forced_response, "text_content", "") or ""
                 if forced_text.strip():
                     final_text = forced_text
+                accumulated_usage = _accumulate_usage(
+                    accumulated_usage, getattr(forced_response, "usage", None)
+                )
             except Exception as exc:
                 # The forced call is best-effort — log and fall through
                 # so the user still gets the empty-text NodeResult and
@@ -1198,17 +1247,20 @@ class AgentExecutor(NodeExecutor):
         node_name = context.current_node.name if context.current_node else "Agent"
         round_num = context.memory.get("round_number")
         _append_to_conversation(conversation, node_name, final_text, round_num)
+        data: dict[str, Any] = {
+            "memory_updates": {"__conversation__": conversation},
+            # Surface the structured tool-call log on NodeResult.data
+            # so the SDK's Result.captures["x"].data["tool_calls"]
+            # read matches what streaming ToolCallChunk / ToolResultChunk
+            # events carry.  Empty list when the agent didn't call tools.
+            "tool_calls": tool_call_log,
+            "iterations": iteration,
+        }
+        if accumulated_usage is not None:
+            data["usage"] = accumulated_usage
         return NodeResult(
             success=True,
-            data={
-                "memory_updates": {"__conversation__": conversation},
-                # Surface the structured tool-call log on NodeResult.data
-                # so the SDK's Result.captures["x"].data["tool_calls"]
-                # read matches what streaming ToolCallChunk / ToolResultChunk
-                # events carry.  Empty list when the agent didn't call tools.
-                "tool_calls": tool_call_log,
-                "iterations": iteration,
-            },
+            data=data,
             output_text=final_text,
         )
 
@@ -1736,12 +1788,16 @@ class InstructionFormExecutor(NodeExecutor):
         node_name = context.current_node.name if context.current_node else "InstructionForm"
         _append_to_conversation(conversation, node_name, json.dumps(parsed, default=str))
 
+        data: dict[str, Any] = {
+            "memory_updates": {"__conversation__": conversation},
+            "parsed": parsed,
+        }
+        usage_payload = _usage_payload(getattr(response, "usage", None))
+        if usage_payload is not None:
+            data["usage"] = usage_payload
         return NodeResult(
             success=True,
-            data={
-                "memory_updates": {"__conversation__": conversation},
-                "parsed": parsed,
-            },
+            data=data,
             output_text=json.dumps(parsed, indent=2, default=str),
         )
 

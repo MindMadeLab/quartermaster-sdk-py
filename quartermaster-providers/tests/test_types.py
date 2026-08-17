@@ -27,6 +27,16 @@ class TestTokenResponse:
         r = TokenResponse(content="")
         assert r.content == ""
 
+    def test_usage_defaults_none(self):
+        r = TokenResponse(content="Hello")
+        assert r.usage is None
+
+    def test_usage_attached(self):
+        u = TokenUsage(input_tokens=3, output_tokens=1)
+        r = TokenResponse(content="Hello", stop_reason="usage", usage=u)
+        assert r.usage is u
+        assert r.usage.input_tokens == 3
+
 
 class TestThinkingResponse:
     def test_basic(self):

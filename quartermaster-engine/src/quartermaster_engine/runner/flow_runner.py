@@ -107,6 +107,10 @@ class FlowResult:
     #: pattern matching.
     captures: dict[str, NodeResult] = field(default_factory=dict)
     duration_seconds: float = 0.0
+    #: Aggregated provider token usage across LLM nodes, or ``None`` when
+    #: no node reported usage. Never estimated — decode benches must not
+    #: invent tok/s from SSE event counts.
+    usage: dict[str, int] | None = None
 
     def __getitem__(self, name: str) -> NodeResult:
         """Syntactic sugar: ``result["research"]`` → the captured node result.
@@ -121,6 +125,33 @@ class FlowResult:
             return self.captures[name]
         except KeyError:
             raise KeyError(_format_missing_capture(name, self.captures)) from None
+
+
+def _aggregate_usage(executions: dict) -> dict[str, int] | None:
+    """Sum ``output_data["usage"]`` across finished nodes.
+
+    Missing usage is skipped rather than zero-filled so a flow with no
+    provider counts stays ``None``.
+    """
+    total_in = 0
+    total_out = 0
+    found = False
+    for execution in executions.values():
+        data = getattr(execution, "output_data", None) or {}
+        if not isinstance(data, dict):
+            continue
+        usage = data.get("usage")
+        if not isinstance(usage, dict):
+            continue
+        inp = usage.get("input_tokens")
+        out = usage.get("output_tokens")
+        if isinstance(inp, int) and isinstance(out, int):
+            total_in += inp
+            total_out += out
+            found = True
+    if not found:
+        return None
+    return {"input_tokens": total_in, "output_tokens": total_out}
 
 
 def _format_missing_capture(name: str, captures: dict[str, NodeResult]) -> str:
@@ -910,12 +941,24 @@ class FlowRunner:
         If the node has a ``timeout`` set (in seconds), execution is wrapped
         in ``asyncio.wait_for`` so that a ``TimeoutError`` is raised when the
         node exceeds its time budget.
+
+        After the executor coroutine finishes — still on the live loop —
+        we ``aclose()`` the provider registry so ``openai.AsyncOpenAI`` /
+        ``httpx.AsyncClient`` drain httpcore2's async connection-pool
+        generator *before* ``asyncio.run()`` calls
+        ``loop.shutdown_asyncgens()``. Closing after ``asyncio.run()``
+        returns is too late: the loop is already gone and stderr prints
+        ``RuntimeError: generator didn't stop after athrow()``.
         """
         coro = executor.execute(context)
 
-        # Wrap with timeout if configured
-        if node.timeout is not None and node.timeout > 0:
-            coro = asyncio.wait_for(coro, timeout=node.timeout)
+        async def _execute_then_aclose() -> NodeResult:
+            try:
+                if node.timeout is not None and node.timeout > 0:
+                    return await asyncio.wait_for(coro, timeout=node.timeout)
+                return await coro
+            finally:
+                await self._aclose_provider_clients()
 
         try:
             loop = asyncio.get_running_loop()
@@ -936,12 +979,35 @@ class FlowRunner:
                 ctx_snapshot = contextvars.copy_context()
 
                 def _worker() -> NodeResult:
-                    return asyncio.run(coro)
+                    return asyncio.run(_execute_then_aclose())
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                     future = pool.submit(ctx_snapshot.run, _worker)
                     return future.result(timeout=node.timeout)
-            return asyncio.run(coro)
+            return asyncio.run(_execute_then_aclose())
+
+    async def _aclose_provider_clients(self) -> None:
+        """Close HTTP clients for the current loop while it is still running.
+
+        Duck-typed so a runner constructed with only a ``node_registry``
+        (no ``provider_registry``) is a no-op. Failures are logged and
+        swallowed — this is a ``finally`` path.
+        """
+        registry = getattr(self, "provider_registry", None)
+        if registry is None:
+            return
+        aclose = getattr(registry, "aclose", None)
+        if not callable(aclose):
+            return
+        try:
+            result = aclose()
+            if hasattr(result, "__await__"):
+                await result
+        except Exception:
+            logger.debug(
+                "FlowRunner: provider registry aclose() failed",
+                exc_info=True,
+            )
 
     def _handle_node_error(
         self,
@@ -1115,6 +1181,7 @@ class FlowRunner:
             node_results=node_results,
             captures=captures,
             error="; ".join(errors) if errors else None,
+            usage=_aggregate_usage(executions),
         )
 
         self._emit(FlowFinished(flow_id=flow_id, final_output=final_output))

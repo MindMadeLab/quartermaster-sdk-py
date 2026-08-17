@@ -321,6 +321,38 @@ def _is_literal(node: Any) -> bool:
     return True
 
 
+async def _aclose_http_client(client: Any) -> None:
+    """Close an ``openai.AsyncOpenAI`` (or injected ``httpx.AsyncClient``).
+
+    ``AsyncOpenAI.close()`` awaits the underlying httpx client's
+    ``aclose()``, which is what drains httpcore2's ``PoolByteStream``
+    async generator *before* ``asyncio.run()`` calls
+    ``loop.shutdown_asyncgens()``. If that generator is still open when
+    the loop shuts down, Python logs::
+
+        RuntimeError: generator didn't stop after athrow()
+
+    Swallow close errors — this runs on a ``finally`` path and must not
+    hide the original request failure. Already-closed clients are a no-op.
+    """
+    if client is None:
+        return
+    for attr in ("close", "aclose"):
+        method = getattr(client, attr, None)
+        if not callable(method):
+            continue
+        try:
+            result = method()
+            if hasattr(result, "__await__"):
+                await result
+            return
+        except Exception:
+            logger.debug("HTTP client.%s() failed during aclose", attr, exc_info=True)
+    http_client = getattr(client, "_client", None)
+    if http_client is not None and http_client is not client:
+        await _aclose_http_client(http_client)
+
+
 async def _aclose_stream(stream: Any) -> None:
     """Close an openai streaming response defensively.
 
@@ -419,6 +451,22 @@ class OpenAIProvider(AbstractLLMProvider):
         # itself so we can GC-clean dead entries without holding refs.
         self._clients_by_loop: dict[int, tuple[Any, Any]] = {}
 
+    def _create_async_client(self) -> Any:
+        """Build a fresh ``openai.AsyncOpenAI`` for the current event loop.
+
+        Subclasses (OpenAI-compatible / basic-auth) override this to inject
+        a custom ``httpx.AsyncClient``. Cache, prune, and ``aclose`` live
+        in :meth:`_get_client` / :meth:`aclose` so every subclass shares
+        the per-loop lifetime rules.
+        """
+        import openai
+
+        return openai.AsyncOpenAI(
+            api_key=self.api_key,
+            organization=self.organization_id,
+            base_url=self.base_url,
+        )
+
     def _get_client(self):
         import asyncio
 
@@ -438,13 +486,20 @@ class OpenAIProvider(AbstractLLMProvider):
 
         # Prune entries whose loop has closed. ``id()`` can be recycled so
         # identity via the held ref is what we check here, not the key.
+        # These entries should already have been ``aclose()``d before the
+        # loop died; dropping here is last-resort bookkeeping only.
         dead_keys = [
             key
             for key, (loop, _client) in self._clients_by_loop.items()
             if loop is not None and loop.is_closed()
         ]
+        dropped_clients = []
         for key in dead_keys:
-            self._clients_by_loop.pop(key, None)
+            entry = self._clients_by_loop.pop(key, None)
+            if entry is not None:
+                dropped_clients.append(entry[1])
+        if self._client is not None and any(c is self._client for c in dropped_clients):
+            self._client = None
 
         loop_key = id(current_loop) if current_loop is not None else 0
         entry = self._clients_by_loop.get(loop_key)
@@ -452,16 +507,50 @@ class OpenAIProvider(AbstractLLMProvider):
             self._client = entry[1]
             return self._client
 
-        import openai
-
-        client = openai.AsyncOpenAI(
-            api_key=self.api_key,
-            organization=self.organization_id,
-            base_url=self.base_url,
-        )
+        client = self._create_async_client()
         self._clients_by_loop[loop_key] = (current_loop, client)
         self._client = client
         return client
+
+    async def aclose(self) -> None:
+        """Close ``AsyncOpenAI`` / httpx clients bound to this event loop.
+
+        Clients cached for *other still-live* loops (nested ``qm.run()``
+        from a ``@tool()`` body) are left open. After this returns the
+        current-loop cache slot is empty so the next call rebuilds.
+
+        Must run while the creating loop is still alive — typically from
+        ``FlowRunner._run_executor``'s ``finally`` before ``asyncio.run()``
+        calls ``shutdown_asyncgens()``.
+        """
+        import asyncio
+
+        try:
+            current = asyncio.get_running_loop()
+        except RuntimeError:
+            current = None
+
+        remaining: dict[int, tuple[Any, Any]] = {}
+        to_close: list[Any] = []
+        dropped_dead: list[Any] = []
+        for key, (loop, client) in self._clients_by_loop.items():
+            if loop is not None and loop is not current and not loop.is_closed():
+                remaining[key] = (loop, client)
+                continue
+            if loop is not None and loop.is_closed():
+                # Too late to await close() on a dead loop. Drop.
+                dropped_dead.append(client)
+                continue
+            to_close.append(client)
+
+        self._clients_by_loop = remaining
+        if self._client is not None and (
+            any(c is self._client for c in to_close) or any(c is self._client for c in dropped_dead)
+        ):
+            self._client = None
+
+        for client in to_close:
+            await _aclose_http_client(client)
 
     def _handle_api_error(self, e: Exception) -> NoReturn:
         """Translate OpenAI SDK exceptions to quartermaster-providers exceptions."""
@@ -615,6 +704,13 @@ class OpenAIProvider(AbstractLLMProvider):
         # hand-splice ``extra_body`` for the common case. Explicit caller
         # values in ``extra_body.chat_template_kwargs.enable_thinking``
         # win — we never overwrite.
+        #
+        # Official OpenAI only injects the *on* case. Mapping
+        # ``thinking_enabled=False`` → ``enable_thinking=false`` lives on
+        # :class:`OpenAICompatibleProvider` (vLLM / Ollama / LM Studio)
+        # because Qwen3.6-style templates default thinking ON, while
+        # attaching extra_body to every ChatGPT ``thinking_level=off``
+        # request would be wrong.
         if config.thinking_enabled:
             current = params.get("extra_body") or {}
             ctk = current.get("chat_template_kwargs") or {}
@@ -673,9 +769,16 @@ class OpenAIProvider(AbstractLLMProvider):
                     # Some OpenAI-compatible reasoning models leave content
                     # empty and place the answer in a ``reasoning`` field.
                     content = _extract_reasoning_text(choice.message)
+                usage = None
+                if response.usage:
+                    usage = TokenUsage(
+                        input_tokens=response.usage.prompt_tokens,
+                        output_tokens=response.usage.completion_tokens,
+                    )
                 return TokenResponse(
                     content=content,
                     stop_reason=choice.finish_reason,
+                    usage=usage,
                 )
         except (AuthenticationError, RateLimitError, ProviderError):
             raise
@@ -727,6 +830,10 @@ class OpenAIProvider(AbstractLLMProvider):
                         yield TokenResponse(
                             content="",
                             stop_reason="usage",
+                            usage=TokenUsage(
+                                input_tokens=chunk.usage.prompt_tokens,
+                                output_tokens=chunk.usage.completion_tokens,
+                            ),
                         )
                     if should_cancel():
                         # Close the openai AsyncStream (→ httpx response)

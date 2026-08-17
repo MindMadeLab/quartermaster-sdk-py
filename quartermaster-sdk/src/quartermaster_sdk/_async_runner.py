@@ -453,7 +453,7 @@ class _ARunCallable:
             trace_events,
             duration_seconds=fr.duration_seconds or elapsed,
         )
-        yield DoneChunk(result=result)
+        yield DoneChunk(result=result, usage=result.usage)
 
 
 #: Publicly exported async runner.  ``await qm.arun(graph, input)`` runs
