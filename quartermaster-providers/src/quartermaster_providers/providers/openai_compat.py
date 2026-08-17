@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from quartermaster_providers.config import LLMConfig
 from quartermaster_providers.providers.openai import OpenAIProvider
 
 
@@ -122,6 +123,39 @@ class OpenAICompatibleProvider(OpenAIProvider):
             return sorted([m.id for m in models.data])
         except Exception:
             return []
+
+    def _build_params(
+        self,
+        config: LLMConfig,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        response_format: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build request parameters, then map thinking off for vLLM templates.
+
+        Qwen3.6 (and similar chat templates) on vLLM enable thinking by
+        default. Top-level ``enable_thinking`` is ignored; the working
+        switch is ``extra_body.chat_template_kwargs.enable_thinking``.
+
+        ``thinking_level="off"`` arrives here as ``thinking_enabled=False``.
+        We inject ``enable_thinking=false`` so the template actually turns
+        thinking off. Official :class:`OpenAIProvider` does **not** do this
+        — attaching ``extra_body`` to every default ChatGPT request would
+        be wrong.
+
+        Explicit caller ``extra_body.chat_template_kwargs.enable_thinking``
+        still wins and is never overwritten. Nested dicts are copied so
+        the caller's ``extra_body`` is not mutated.
+        """
+        params = super()._build_params(config, messages, tools, response_format)
+        if not config.thinking_enabled:
+            current = params.get("extra_body") or {}
+            ctk = current.get("chat_template_kwargs") or {}
+            if "enable_thinking" not in ctk:
+                ctk = {**ctk, "enable_thinking": False}
+                current = {**current, "chat_template_kwargs": ctk}
+                params["extra_body"] = current
+        return params
 
     def estimate_token_count(self, text: str, model: str) -> int:
         """Rough estimation — tiktoken may not work for custom models."""

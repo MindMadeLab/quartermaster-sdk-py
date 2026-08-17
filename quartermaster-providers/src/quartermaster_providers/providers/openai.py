@@ -615,6 +615,13 @@ class OpenAIProvider(AbstractLLMProvider):
         # hand-splice ``extra_body`` for the common case. Explicit caller
         # values in ``extra_body.chat_template_kwargs.enable_thinking``
         # win — we never overwrite.
+        #
+        # Official OpenAI only injects the *on* case. Mapping
+        # ``thinking_enabled=False`` → ``enable_thinking=false`` lives on
+        # :class:`OpenAICompatibleProvider` (vLLM / Ollama / LM Studio)
+        # because Qwen3.6-style templates default thinking ON, while
+        # attaching extra_body to every ChatGPT ``thinking_level=off``
+        # request would be wrong.
         if config.thinking_enabled:
             current = params.get("extra_body") or {}
             ctk = current.get("chat_template_kwargs") or {}
