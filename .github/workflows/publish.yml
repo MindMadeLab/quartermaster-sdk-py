@@ -162,6 +162,15 @@ jobs:
             fi
           done
 
+      # Workspace lockfile is not a published artifact, but it must match
+      # the bumped pyproject versions or `uv sync` on develop/master reports
+      # every member as 0.x.y-stale (uv.lock was last truthful at v0.2.1).
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Refresh uv.lock
+        run: uv lock
+
       - name: Commit and tag
         run: |
           NEW_VERSION="${{ steps.bump.outputs.new_version }}"
